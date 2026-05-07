@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
+import TactilePressable from './motion/TactilePressable';
+import { motionDurations } from '../utils/motion';
 
 export type AppTabId = 'Shifts' | 'Calendar' | 'Flights' | 'TravelDoc';
 
@@ -118,7 +120,14 @@ function AppTab({
   }, [focused, opacity, scale, translateY]);
 
   return (
-    <TouchableOpacity onPress={onPress} style={styles.tab} activeOpacity={0.7}>
+    <TactilePressable
+      onPress={onPress}
+      animatedStyle={styles.tab}
+      depth={3}
+      pressedScale={0.94}
+      haptic="selection"
+      accessibilityRole="button"
+    >
       <Animated.View style={{ transform: [{ scale }, { translateY }], alignItems: 'center' }}>
         <MaterialIcons name={icon} size={22} color={focused ? activeColor : inactiveColor} />
       </Animated.View>
@@ -132,7 +141,7 @@ function AppTab({
         {label}
       </Animated.Text>
       {focused && <View style={[styles.indicator, { backgroundColor: activeColor }]} />}
-    </TouchableOpacity>
+    </TactilePressable>
   );
 }
 
@@ -153,12 +162,60 @@ function OperationsTab({
   index: number;
   onPress: () => void;
 }) {
+  const scan = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!focused) {
+      scan.stopAnimation();
+      scan.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(scan, {
+          toValue: 1,
+          duration: 1300,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(scan, {
+          toValue: 0,
+          duration: motionDurations.quick,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [focused, scan]);
+
+  const scanTranslateX = scan.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-52, 86],
+  });
+
   return (
-    <TouchableOpacity
+    <TactilePressable
       onPress={onPress}
-      style={[styles.opsTab, focused && styles.opsTabActive]}
-      activeOpacity={0.72}
+      animatedStyle={[styles.opsTab, focused && styles.opsTabActive]}
+      depth={5}
+      pressedScale={0.955}
+      haptic="selection"
+      accessibilityRole="button"
     >
+      {focused && (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.opsScan,
+            {
+              backgroundColor: activeColor,
+              transform: [{ translateX: scanTranslateX }, { skewX: '-18deg' }],
+            },
+          ]}
+        />
+      )}
       <View style={[styles.opsIndexPill, focused && { backgroundColor: 'rgba(45,212,191,0.18)', borderColor: activeColor }]}>
         <Text style={[styles.opsIndex, { color: focused ? activeColor : inactiveColor }]}>
           {String(index + 1).padStart(2, '0')}
@@ -174,7 +231,7 @@ function OperationsTab({
         </Text>
       </View>
       {focused && <View style={[styles.opsActiveRail, { backgroundColor: activeColor }]} />}
-    </TouchableOpacity>
+    </TactilePressable>
   );
 }
 
@@ -334,6 +391,13 @@ const styles = StyleSheet.create({
   opsTabActive: {
     borderColor: 'rgba(45,212,191,0.50)',
     backgroundColor: 'rgba(13,148,136,0.18)',
+  },
+  opsScan: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 38,
+    opacity: 0.16,
   },
   opsIndexPill: {
     alignSelf: 'flex-start',
