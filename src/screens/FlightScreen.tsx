@@ -405,13 +405,14 @@ interface FlightRowProps {
   onUnpin: () => void;
   inboundArrivals: Record<string, number>;
   colors: ThemeColors;
+  isOperations: boolean;
   s: ReturnType<typeof makeStyles>;
   smPool: StaffMonitorFlight[];
   locale: string;
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin, onUnpin, inboundArrivals, colors, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin, onUnpin, inboundArrivals, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
@@ -556,7 +557,7 @@ function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin,
       onToggle={() => isPinned ? onUnpin() : onPin(item)}
     >
       <TouchableOpacity
-        style={[s.card, isPinned && s.cardPinned, { marginBottom: 0 }]}
+        style={[s.card, isPinned && s.cardPinned, { marginBottom: 0 }, isOperations && { borderLeftColor: color }]}
         activeOpacity={0.88}
         onPress={() => { openFlightradar24Flight(flightNumber).catch(() => {}); }}
         accessibilityRole="link"
@@ -564,7 +565,7 @@ function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin,
       >
         {isPinned && <View style={s.pinBanner}><Text style={s.pinBannerText}>{t('flightPinned')}</Text></View>}
         {/* Header */}
-        <View style={[s.cardHeader, { backgroundColor: color }]}>
+        <View style={[s.cardHeader, { backgroundColor: isOperations ? 'rgba(2,8,12,0.72)' : color }]}>
           <View style={s.headerLeft}>
             <LogoPill iataCode={iataCode} airlineName={airline} color={color} />
             <View>
@@ -968,7 +969,7 @@ async function schedulePinnedNotifications(
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function FlightScreen() {
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const { t, locale } = useLanguage();
   const {
     airport,
@@ -978,7 +979,8 @@ export default function FlightScreen() {
     activeProfileId,
     setSelectedAirlines: persistSelectedAirlines,
   } = useAirport();
-  const s = useMemo(() => makeStyles(colors), [colors]);
+  const isOperations = mode === 'operations';
+  const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('departures');
@@ -1602,12 +1604,13 @@ export default function FlightScreen() {
       onUnpin={unpinFlight}
       inboundArrivals={inboundArrivals}
       colors={colors}
+      isOperations={isOperations}
       s={s}
       smPool={activeTab === 'departures' ? staffMonitorDeps : staffMonitorArrs}
       locale={locale}
       t={t}
     />
-  ), [activeTab, userShift, s, pinnedFlightId, pinFlight, unpinFlight, inboundArrivals, colors, staffMonitorDeps, staffMonitorArrs, locale, t]);
+  ), [activeTab, userShift, s, pinnedFlightId, pinFlight, unpinFlight, inboundArrivals, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');
@@ -1962,7 +1965,7 @@ export default function FlightScreen() {
   );
 }
 
-function makeStyles(c: ThemeColors) {
+function makeStyles(c: ThemeColors, isOperations = false) {
   const filterOptionActiveShadow = Platform.OS === 'android'
     ? {}
     : {
@@ -1971,43 +1974,47 @@ function makeStyles(c: ThemeColors) {
       shadowOpacity: c.isDark ? 0.25 : 0.16,
       shadowRadius: 7,
     };
+  const operationPanel = isOperations ? 'rgba(2,8,12,0.68)' : c.card;
+  const operationPanelStrong = isOperations ? 'rgba(7,20,20,0.94)' : c.cardSecondary;
+  const operationBorder = isOperations ? 'rgba(45,212,191,0.30)' : c.glassBorder;
+  const operationBorderSoft = isOperations ? 'rgba(45,212,191,0.18)' : c.border;
 
   return StyleSheet.create({
-    pageHeader: { backgroundColor: c.card, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border, flexDirection: 'row', alignItems: 'center' },
-    notifBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: c.cardSecondary, justifyContent: 'center', alignItems: 'center' },
+    pageHeader: { backgroundColor: isOperations ? 'rgba(2,8,12,0.90)' : c.card, paddingHorizontal: 16, paddingVertical: isOperations ? 16 : 14, borderBottomWidth: 1, borderBottomColor: operationBorderSoft, flexDirection: 'row', alignItems: 'center' },
+    notifBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     notifBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
     notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
     notifBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
-    pageTitle: { fontSize: 22, fontWeight: 'bold', color: c.primaryDark },
-    pageSub: { fontSize: 13, color: c.textSub, marginTop: 2 },
-    controlsRow: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
-    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.glassBorder },
+    pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
+    pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
+    controlsRow: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
+    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
     sourceBadgeText: { fontSize: 11, fontWeight: '800', color: c.primaryDark },
-    segment: { flex: 1, flexDirection: 'row', backgroundColor: c.bg, borderRadius: 8, padding: 3 },
-    segBtn: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: 6 },
-    segBtnActive: { backgroundColor: c.card, borderWidth: 1, borderColor: c.primaryLight },
-    segBtnText: { fontSize: 12, fontWeight: '500', color: c.textSub },
-    segBtnTextActive: { color: c.primary, fontWeight: '700' },
-    card: { backgroundColor: c.card, borderRadius: 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: c.isDark ? 0 : 3, borderWidth: c.isDark ? 1 : 0, borderColor: c.glassBorder },
+    segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
+    segBtn: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: isOperations ? 11 : 6 },
+    segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },
+    segBtnText: { fontSize: 12, fontWeight: '600', color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
+    segBtnTextActive: { color: isOperations ? c.primaryDark : c.primary, fontWeight: '800' },
+    card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
     cardShift: { borderWidth: 1.5, borderColor: '#F59E0B' },
     shiftBanner: { backgroundColor: '#F59E0B', paddingVertical: 5, paddingHorizontal: 12 },
     shiftBannerText: { color: '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
     cardPinned: { borderWidth: 2, borderColor: '#F59E0B' },
-    pinBanner: { backgroundColor: '#F59E0B', paddingVertical: 5, paddingHorizontal: 12 },
-    pinBannerText: { color: '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
-    statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, marginTop: 8, alignSelf: 'flex-end' },
-    statusText: { fontSize: 10, fontWeight: '700' },
-    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14 },
+    pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : '#F59E0B', paddingVertical: 5, paddingHorizontal: 12, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
+    pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
+    statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: isOperations ? 10 : 20, marginTop: 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
+    statusText: { fontSize: 10, fontWeight: '800', letterSpacing: isOperations ? 0.6 : 0 },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 12 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    headerFlightNum: { color: '#fff', fontWeight: '900', fontSize: 15, lineHeight: 18 },
-    headerAirlineName: { color: 'rgba(255,255,255,0.8)', fontSize: 10 },
-    headerTime: { color: '#fff', fontWeight: '900', fontSize: 18, lineHeight: 20, textAlign: 'right' },
-    headerDest: { color: 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
-    cardBody: { flexDirection: 'column', paddingVertical: 10, paddingHorizontal: 14, backgroundColor: c.card },
+    headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
+    headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
+    headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 19 : 18, lineHeight: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
+    headerDest: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
+    cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 12 : 10, paddingHorizontal: 14, backgroundColor: operationPanel },
     bodyInfo: { fontSize: 11, color: c.textSub },
     bodyTime: { fontWeight: '700', color: c.text },
     opsRow: { flexDirection: 'row', gap: 8 },
-    opsBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.primaryLight, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+    opsBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 12 : 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     opsIcon: { fontSize: 16 },
     opsLabel: { fontSize: 10, fontWeight: '600', color: c.textSub, letterSpacing: 0.5 },
     opsTime: { fontSize: 13, fontWeight: '800', color: c.primaryDark },
@@ -2023,9 +2030,9 @@ function makeStyles(c: ThemeColors) {
       width: 22,
       height: 22,
       borderRadius: 11,
-      backgroundColor: c.card,
+      backgroundColor: isOperations ? '#071414' : c.card,
       borderWidth: 1.5,
-      borderColor: c.primaryLight,
+      borderColor: isOperations ? operationBorder : c.primaryLight,
       justifyContent: 'center',
       alignItems: 'center',
       shadowColor: c.isDark ? '#000' : c.primary,
@@ -2037,7 +2044,7 @@ function makeStyles(c: ThemeColors) {
     arrivalProgressPlaneIcon: { transform: [{ rotate: '90deg' }] },
     pinBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
-    filterBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: c.cardSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 8 },
+    filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     filterBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
     alertOverlay: { flex: 1, backgroundColor: 'rgba(2,6,23,0.55)', justifyContent: 'center', alignItems: 'center', padding: 24 },
@@ -2059,9 +2066,9 @@ function makeStyles(c: ThemeColors) {
     alertMessage: { fontSize: 17, lineHeight: 24, color: c.textSub, marginBottom: 16 },
     alertBtn: { alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: c.primary },
     alertBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
-    filterSheet: { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 36 },
-    filterSheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: c.border, alignSelf: 'center', marginBottom: 16 },
-    filterSheetTitle: { fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 16, textAlign: 'center' },
+    filterSheet: { backgroundColor: isOperations ? '#071414' : c.card, borderTopLeftRadius: isOperations ? 28 : 24, borderTopRightRadius: isOperations ? 28 : 24, padding: 20, paddingBottom: 36, borderTopWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    filterSheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: isOperations ? 'rgba(45,212,191,0.34)' : c.border, alignSelf: 'center', marginBottom: 16 },
+    filterSheetTitle: { fontSize: 16, fontWeight: '800', color: isOperations ? c.primaryDark : c.text, marginBottom: 16, textAlign: 'center', letterSpacing: isOperations ? 0.8 : 0 },
     notifSheetSub: { fontSize: 13, color: c.textSub, textAlign: 'center', marginTop: -8, marginBottom: 16 },
     notifRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
     notifRowTextWrap: { flex: 1 },
@@ -2088,8 +2095,8 @@ function makeStyles(c: ThemeColors) {
       borderWidth: 1,
     },
     filterBrandDot: { width: 10, height: 10, borderRadius: 5 },
-    smFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: 10, backgroundColor: c.card },
-    smPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.primaryLight, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+    smFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: isOperations ? 12 : 10, backgroundColor: operationPanel, borderTopWidth: isOperations ? 1 : 0, borderTopColor: operationBorderSoft },
+    smPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 10 : 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     smPillText: { fontSize: 11, fontWeight: '700', color: c.primaryDark },
   });
 }

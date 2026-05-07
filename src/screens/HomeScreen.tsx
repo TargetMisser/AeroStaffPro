@@ -55,7 +55,7 @@ window.runTesseract = async function(base64JsonStr) {
 };
 </script></body></html>`;
 
-function PinnedFlightCardComponent({ item, colors }: { item: any; colors: any }) {
+function PinnedFlightCardComponent({ item, colors, isOperations = false }: { item: any; colors: ThemeColors; isOperations?: boolean }) {
   const { t, locale } = useLanguage();
   const tab = item._pinTab || 'departures';
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
@@ -76,48 +76,57 @@ function PinnedFlightCardComponent({ item, colors }: { item: any; colors: any })
   const ops = getAirlineOps(airline);
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
+  const headerBg = isOperations ? 'rgba(2,8,12,0.72)' : airlineColor;
+  const headerText = isOperations ? colors.primaryDark : '#fff';
+  const headerMuted = isOperations ? 'rgba(204,251,241,0.62)' : 'rgba(255,255,255,0.7)';
+  const panelBg = isOperations ? 'rgba(2,8,12,0.62)' : colors.card;
+  const operationBorder = isOperations ? 'rgba(45,212,191,0.32)' : colors.border;
 
   return (
     <View style={{
       marginHorizontal: 16, marginTop: 16,
-      borderRadius: 16, overflow: 'hidden',
-      backgroundColor: colors.card,
-      shadowColor: colors.isDark ? '#000000' : colors.primary, shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
-      borderWidth: colors.isDark ? 1 : 0, borderColor: colors.border,
+      borderRadius: isOperations ? 20 : 16, overflow: 'hidden',
+      backgroundColor: panelBg,
+      shadowColor: colors.isDark ? '#000000' : colors.primary, shadowOpacity: isOperations ? 0 : 0.15, shadowRadius: 12, elevation: isOperations ? 0 : 6,
+      borderWidth: 1, borderColor: isOperations ? operationBorder : colors.isDark ? colors.border : 'transparent',
+      borderLeftWidth: isOperations ? 4 : 1,
+      borderLeftColor: isOperations ? airlineColor : colors.isDark ? colors.border : 'transparent',
     }}>
       {/* Compact header: airline color bar + flight info */}
       <View style={{
-        backgroundColor: airlineColor,
+        backgroundColor: headerBg,
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
         paddingVertical: 12, paddingHorizontal: 16,
+        borderBottomWidth: isOperations ? 1 : 0,
+        borderBottomColor: isOperations ? 'rgba(45,212,191,0.20)' : 'transparent',
       }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
-            <Text style={{ color: '#fff', fontWeight: '900', fontSize: 13 }}>{flightNumber}</Text>
+          <View style={{ backgroundColor: isOperations ? colors.primaryLight : 'rgba(255,255,255,0.2)', borderRadius: isOperations ? 10 : 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' }}>
+            <Text style={{ color: headerText, fontWeight: '900', fontSize: 13 }}>{flightNumber}</Text>
           </View>
           <View>
-            <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>{airline}</Text>
-            <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10 }}>{tab === 'arrivals' ? t('homeArrival') : t('homeDeparture')}</Text>
+            <Text style={{ color: headerText, fontWeight: '700', fontSize: 12 }}>{airline}</Text>
+            <Text style={{ color: headerMuted, fontSize: 10, letterSpacing: isOperations ? 0.8 : 0 }}>{tab === 'arrivals' ? t('homeArrival') : t('homeDeparture')}</Text>
           </View>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: '#fff', fontWeight: '900', fontSize: 22 }}>{depTime}</Text>
-          <Text style={{ color: 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '600' }}>{dest}</Text>
+          <Text style={{ color: headerText, fontWeight: '900', fontSize: 22 }}>{depTime}</Text>
+          <Text style={{ color: isOperations ? colors.textSub : 'rgba(255,255,255,0.8)', fontSize: 11, fontWeight: '700' }}>{dest}</Text>
         </View>
       </View>
 
       {/* Body */}
-      <View style={{ padding: 12 }}>
+      <View style={{ padding: 12, backgroundColor: panelBg }}>
         {tab === 'departures' ? (
           <View style={{ flexDirection: 'row', gap: 8 }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primaryLight, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primaryLight, borderRadius: isOperations ? 12 : 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' }}>
               <MaterialIcons name="desktop-windows" size={15} color={colors.primary} />
               <View>
                 <Text style={{ fontSize: 9, fontWeight: '600', color: colors.textSub, letterSpacing: 0.3 }}>CHECK-IN</Text>
                 <Text style={{ fontSize: 13, fontWeight: '800', color: colors.primaryDark }}>{fmt(ops.checkInOpen)} – {fmt(ops.checkInClose)}</Text>
               </View>
             </View>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primaryLight, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 }}>
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.primaryLight, borderRadius: isOperations ? 12 : 10, paddingHorizontal: 10, paddingVertical: 8, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' }}>
               <MaterialIcons name="meeting-room" size={15} color={colors.primary} />
               <View>
                 <Text style={{ fontSize: 9, fontWeight: '600', color: colors.textSub, letterSpacing: 0.3 }}>GATE</Text>
@@ -149,8 +158,9 @@ function PinnedFlightCardComponent({ item, colors }: { item: any; colors: any })
 const PinnedFlightCard = React.memo(PinnedFlightCardComponent);
 
 export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const { t, months, locale, weatherMap } = useLanguage();
+  const isOperations = mode === 'operations';
   const [timelineKey, setTimelineKey] = React.useState(0);
   React.useEffect(() => { if (isFocused) setTimelineKey(k => k + 1); }, [isFocused]);
   const HOME_SHIFT_TITLES = { work: 'Lavoro', rest: 'Riposo' };
@@ -461,7 +471,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const isRest = shiftEvent?.title?.includes('Riposo');
   const isWork = shiftEvent?.title?.includes('Lavoro');
   const isNextShift = isWork && shiftKind === 'next';
-  const s = useMemo(() => makeStyles(colors), [colors]);
+  const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 96 }}>
@@ -496,7 +506,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       </View>
 
       {/* Pinned flight */}
-      {pinnedFlight && <PinnedFlightCard item={pinnedFlight} colors={colors} />}
+      {pinnedFlight && <PinnedFlightCard item={pinnedFlight} colors={colors} isOperations={isOperations} />}
 
       {/* Turno Attuale */}
       <Text style={s.sectionTitle}>{isNextShift ? t('homeNextShift') : t('homeCurrentShift')}</Text>
@@ -548,27 +558,30 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   );
 }
 
-function makeStyles(c: ThemeColors) {
+function makeStyles(c: ThemeColors, isOperations = false) {
+  const operationPanel = isOperations ? 'rgba(2,8,12,0.64)' : c.card;
+  const operationBorder = isOperations ? 'rgba(45,212,191,0.30)' : c.glassBorder;
+  const operationShadow = isOperations ? 0 : undefined;
   return StyleSheet.create({
     hiddenWV: { height: 1, width: 1, opacity: 0, position: 'absolute', top: -100 },
     topRow: { flexDirection: 'row', gap: 12, padding: 16, paddingBottom: 8 },
-    weatherCard: { flex: 1, backgroundColor: c.card, borderRadius: 18, padding: 16, alignItems: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.12, shadowRadius: 12, elevation: 4, borderWidth: 1, borderColor: c.glassBorder },
+    weatherCard: { flex: 1, backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, padding: 16, alignItems: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: operationShadow ?? 0.12, shadowRadius: 12, elevation: isOperations ? 0 : 4, borderWidth: 1, borderColor: operationBorder },
     weatherIcon: { marginBottom: 4 },
-    weatherTemp: { fontSize: 28, fontWeight: '700', color: c.primaryDark },
-    weatherDesc: { fontSize: 11, color: c.textSub, textAlign: 'center', marginTop: 2 },
-    dateCard: { width: 90, backgroundColor: c.primaryDark, borderRadius: 18, padding: 14, alignItems: 'center', justifyContent: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.30, shadowRadius: 12, elevation: 6 },
-    dateToday: { fontSize: 10, color: 'rgba(255,255,255,0.6)', letterSpacing: 1.5, fontWeight: '700' },
-    dateNum: { fontSize: 36, fontWeight: '700', color: '#fff', lineHeight: 40 },
-    dateMonth: { fontSize: 12, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
-    sectionTitle: { fontSize: 13, fontWeight: '700', color: c.textSub, letterSpacing: 0.5, marginHorizontal: 16, marginTop: 16, marginBottom: 8 },
-    shiftCard: { backgroundColor: c.card, borderRadius: 18, marginHorizontal: 16, padding: 16, flexDirection: 'row', gap: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.10, shadowRadius: 12, elevation: 4, minHeight: 90, borderWidth: 1, borderColor: c.glassBorder },
-    shiftStrip: { width: 4, borderRadius: 2, backgroundColor: c.primary, marginRight: 2 },
+    weatherTemp: { fontSize: isOperations ? 30 : 28, fontWeight: '800', color: c.primaryDark },
+    weatherDesc: { fontSize: 11, color: c.textSub, textAlign: 'center', marginTop: 2, letterSpacing: isOperations ? 0.4 : 0 },
+    dateCard: { width: isOperations ? 96 : 90, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryDark, borderRadius: isOperations ? 20 : 18, padding: 14, alignItems: 'center', justifyContent: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.30, shadowRadius: 12, elevation: isOperations ? 0 : 6, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    dateToday: { fontSize: 10, color: isOperations ? 'rgba(153,246,228,0.72)' : 'rgba(255,255,255,0.6)', letterSpacing: 1.7, fontWeight: '800' },
+    dateNum: { fontSize: 36, fontWeight: '800', color: isOperations ? c.primaryDark : '#fff', lineHeight: 40 },
+    dateMonth: { fontSize: 12, color: isOperations ? c.textSub : 'rgba(255,255,255,0.7)', marginTop: 2 },
+    sectionTitle: { fontSize: 12, fontWeight: '800', color: isOperations ? 'rgba(153,246,228,0.66)' : c.textSub, letterSpacing: isOperations ? 1.6 : 0.5, marginHorizontal: 16, marginTop: 16, marginBottom: 8, textTransform: 'uppercase' },
+    shiftCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: 16, padding: isOperations ? 18 : 16, flexDirection: 'row', gap: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.10, shadowRadius: 12, elevation: isOperations ? 0 : 4, minHeight: isOperations ? 104 : 90, borderWidth: 1, borderColor: operationBorder },
+    shiftStrip: { width: isOperations ? 5 : 4, borderRadius: 999, backgroundColor: c.primary, marginRight: 2 },
     shiftBadgeRow: { flexDirection: 'row', marginBottom: 8 },
-    inProgressBadge: { backgroundColor: '#D1FAE5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
-    inProgressText: { fontSize: 10, fontWeight: '700', color: '#059669' },
-    shiftTitle: { fontSize: 17, fontWeight: '700', color: c.primaryDark, marginBottom: 4 },
-    shiftTime: { fontSize: 22, fontWeight: '700', color: c.primary, marginBottom: 4 },
-    timelineCard: { backgroundColor: c.card, borderRadius: 18, marginHorizontal: 16, marginTop: 12, padding: 16, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.08, shadowRadius: 10, elevation: 3, borderWidth: 1, borderColor: c.glassBorder },
+    inProgressBadge: { backgroundColor: isOperations ? 'rgba(45,212,191,0.14)' : '#D1FAE5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' },
+    inProgressText: { fontSize: 10, fontWeight: '800', color: isOperations ? c.primaryDark : '#059669', letterSpacing: isOperations ? 1 : 0 },
+    shiftTitle: { fontSize: isOperations ? 18 : 17, fontWeight: '800', color: isOperations ? c.text : c.primaryDark, marginBottom: 4 },
+    shiftTime: { fontSize: isOperations ? 28 : 22, fontWeight: '900', color: isOperations ? c.primaryDark : c.primary, marginBottom: 4, fontVariant: ['tabular-nums'] },
+    timelineCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: 16, marginTop: 12, padding: 16, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 10, elevation: isOperations ? 0 : 3, borderWidth: 1, borderColor: operationBorder },
     restRow: { flexDirection: 'row', alignItems: 'center' },
     restIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#10b98122', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     restText: { fontSize: 18, fontWeight: '700', color: '#10b981' },
