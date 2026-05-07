@@ -3,7 +3,7 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
 import TactilePressable from './motion/TactilePressable';
-import { motionDurations } from '../utils/motion';
+import { motionDurations, useReducedMotionPreference } from '../utils/motion';
 
 export type AppTabId = 'Shifts' | 'Calendar' | 'Flights' | 'TravelDoc';
 
@@ -127,6 +127,7 @@ function AppTab({
       pressedScale={0.94}
       haptic="selection"
       accessibilityRole="button"
+      accessibilityState={{ selected: focused }}
     >
       <Animated.View style={{ transform: [{ scale }, { translateY }], alignItems: 'center' }}>
         <MaterialIcons name={icon} size={22} color={focused ? activeColor : inactiveColor} />
@@ -163,9 +164,10 @@ function OperationsTab({
   onPress: () => void;
 }) {
   const scan = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotionPreference();
 
   useEffect(() => {
-    if (!focused) {
+    if (!focused || reducedMotion) {
       scan.stopAnimation();
       scan.setValue(0);
       return;
@@ -188,7 +190,7 @@ function OperationsTab({
     );
     loop.start();
     return () => loop.stop();
-  }, [focused, scan]);
+  }, [focused, reducedMotion, scan]);
 
   const scanTranslateX = scan.interpolate({
     inputRange: [0, 1],
@@ -198,11 +200,13 @@ function OperationsTab({
   return (
     <TactilePressable
       onPress={onPress}
+      style={styles.opsTabPressable}
       animatedStyle={[styles.opsTab, focused && styles.opsTabActive]}
       depth={5}
       pressedScale={0.955}
       haptic="selection"
       accessibilityRole="button"
+      accessibilityState={{ selected: focused }}
     >
       {focused && (
         <Animated.View
@@ -375,6 +379,9 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: 6,
+  },
+  opsTabPressable: {
+    flex: 1,
   },
   opsTab: {
     flex: 1,
