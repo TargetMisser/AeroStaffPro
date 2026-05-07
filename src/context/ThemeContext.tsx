@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'operations';
 
 export type ThemeColors = {
   // Sfondi
@@ -84,6 +84,31 @@ const DARK: ThemeColors = {
   isDark:         true,
 };
 
+// ─── Tema Operations Board ───────────────────────────────────────────────────
+const OPERATIONS: ThemeColors = {
+  bg:             '#0B1114',
+  card:           '#111A1F',
+  cardSecondary:  '#19262D',
+  text:           '#EAF4F4',
+  textSub:        '#A7BAC2',
+  textMuted:      'rgba(141,163,173,0.72)',
+  primary:        '#2DD4BF',
+  primaryDark:    '#99F6E4',
+  primaryLight:   'rgba(45,212,191,0.18)',
+  glass:          '#111A1F',
+  glassBorder:    'rgba(45,212,191,0.24)',
+  glassStrong:    '#19262D',
+  border:         'rgba(141,163,173,0.24)',
+  appBar:         'rgba(6,17,18,0.96)',
+  tabBar:         '#071414',
+  tabIconActive:  '#2DD4BF',
+  tabIconInactive:'rgba(204,251,241,0.58)',
+  tabLabelActive: '#2DD4BF',
+  pillActive:     'rgba(45,212,191,0.18)',
+  statusBar:      'light-content',
+  isDark:         true,
+};
+
 // ─── Context ──────────────────────────────────────────────────────────────────
 type ThemeContextValue = {
   mode:      ThemeMode;
@@ -109,7 +134,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Carica preferenza salvata
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(v => {
-      if (v === 'light' || v === 'dark') {
+      if (v === 'light' || v === 'dark' || v === 'operations') {
         setModeState(v);
       } else if (v === 'weather') {
         AsyncStorage.setItem(STORAGE_KEY, 'light').catch(() => {});
@@ -123,7 +148,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     await AsyncStorage.setItem(STORAGE_KEY, m);
   }, []);
 
-  const colors: ThemeColors = mode === 'dark' ? DARK : LIGHT;
+  const colors: ThemeColors = mode === 'operations'
+    ? OPERATIONS
+    : mode === 'dark'
+      ? DARK
+      : LIGHT;
   const isLoading = !ready;
 
   return (

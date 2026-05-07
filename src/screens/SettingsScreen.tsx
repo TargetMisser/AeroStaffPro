@@ -85,6 +85,14 @@ const THEME_OPTIONS: ThemeOption[] = [
     previewBg: '#0F172A',
     previewAccent: '#FF9A42',
   },
+  {
+    id: 'operations',
+    label: 'Operations Board',
+    sublabel: 'Tema control room con UI piu tecnica',
+    icon: 'dashboard',
+    previewBg: '#0B1114',
+    previewAccent: '#2DD4BF',
+  },
 ];
 
 function ThemeCard({ option, selected, onSelect, activeLabel }: {
@@ -208,8 +216,16 @@ export default function SettingsScreen() {
 
   const translatedOptions = THEME_OPTIONS.map(opt => ({
     ...opt,
-    label: opt.id === 'light' ? t('themeLight') : t('themeDark'),
-    sublabel: opt.id === 'light' ? t('themeLightSub') : t('themeDarkSub'),
+    label: opt.id === 'light'
+      ? t('themeLight')
+      : opt.id === 'dark'
+        ? t('themeDark')
+        : t('themeOperations'),
+    sublabel: opt.id === 'light'
+      ? t('themeLightSub')
+      : opt.id === 'dark'
+        ? t('themeDarkSub')
+        : t('themeOperationsSub'),
   }));
   const [airLabsInput, setAirLabsInput] = useState('');
   const [providerPreference, setProviderPreference] = useState<FlightProviderPreference>('auto');

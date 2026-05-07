@@ -5,7 +5,7 @@ const it = {
   // Navigation
   tabHome: 'Home', tabShifts: 'Turni', tabFlights: 'Voli', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Blocco Note', overlayPhonebook: 'Rubrica', overlayPasswords: 'Password',
-  overlayManuals: 'Manuali DCS', overlaySettings: 'Impostazioni',
+  overlayManuals: 'Manuali DCS', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Impostazioni',
   // Common
   cancel: 'Annulla', save: 'Salva', delete: 'Elimina', remove: 'Rimuovi', error: 'Errore',
   confirm: 'Conferma', ok: 'OK', add: 'Aggiungi', yes: 'Sì', no: 'No',
@@ -37,6 +37,7 @@ const it = {
   sectionTheme: 'TEMA',
   themeLight: 'Chiaro', themeLightSub: 'Tema standard, sfondo bianco',
   themeDark: 'Scuro', themeDarkSub: 'Ideale di notte, riduce affaticamento',
+  themeOperations: 'Operations Board', themeOperationsSub: 'Tema control room con UI piu tecnica',
   themeActive: 'Attivo', themeLoading: 'Caricamento tema…',
   sectionAccount: 'PROFILI',
   airportBase: 'Aeroporto base',
@@ -227,6 +228,8 @@ const it = {
   drawerPasswordSub: 'Credenziali salvate',
   drawerManualsTitle: 'Manuali DCS',
   drawerManualsSub: 'Libreria documenti',
+  drawerArionTitle: 'Arion Inbox',
+  drawerArionSub: 'Messaggi operativi',
   drawerSettingsTitle: 'Impostazioni',
   drawerSettingsSub: 'Preferenze app',
   // ShiftTimeline
@@ -248,7 +251,7 @@ const en: typeof it = {
   // Navigation
   tabHome: 'Home', tabShifts: 'Shifts', tabFlights: 'Flights', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Notepad', overlayPhonebook: 'Phonebook', overlayPasswords: 'Password',
-  overlayManuals: 'DCS Manuals', overlaySettings: 'Settings',
+  overlayManuals: 'DCS Manuals', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Settings',
   // Common
   cancel: 'Cancel', save: 'Save', delete: 'Delete', remove: 'Remove', error: 'Error',
   confirm: 'Confirm', ok: 'OK', add: 'Add', yes: 'Yes', no: 'No',
@@ -280,6 +283,7 @@ const en: typeof it = {
   sectionTheme: 'THEME',
   themeLight: 'Light', themeLightSub: 'Standard theme, white background',
   themeDark: 'Dark', themeDarkSub: 'Ideal at night, reduces eye strain',
+  themeOperations: 'Operations Board', themeOperationsSub: 'Control-room theme with a more technical UI',
   themeActive: 'Active', themeLoading: 'Loading theme…',
   sectionAccount: 'PROFILES',
   airportBase: 'Home airport',
@@ -470,6 +474,8 @@ const en: typeof it = {
   drawerPasswordSub: 'Saved credentials',
   drawerManualsTitle: 'DCS Manuals',
   drawerManualsSub: 'Document library',
+  drawerArionTitle: 'Arion Inbox',
+  drawerArionSub: 'Operational messages',
   drawerSettingsTitle: 'Settings',
   drawerSettingsSub: 'App preferences',
   // ShiftTimeline

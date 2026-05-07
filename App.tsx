@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, StatusBar, PanResponder, Animated, Dimensions, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, PanResponder, Animated, Dimensions, BackHandler } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -16,9 +16,11 @@ import ManualsScreen from './src/screens/ManualsScreen';
 import PhonebookScreen from './src/screens/PhonebookScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PasswordScreen from './src/screens/PasswordScreen';
+import ArionInboxScreen from './src/screens/ArionInboxScreen';
+import DesignLabScreen from './src/screens/DesignLabScreen';
 import DrawerMenu from './src/components/DrawerMenu';
+import AppTabBar, { type AppTabBarItem, type AppTabId } from './src/components/AppTabBar';
 import ProfileSwitcherModal from './src/components/ProfileSwitcherModal';
-import FrostedSurface from './src/components/FrostedSurface';
 import {
   installGlobalCrashHandler,
   markRuntimeStartupCompleted,
@@ -30,10 +32,10 @@ import { useAirport } from './src/context/AirportContext';
 
 installGlobalCrashHandler();
 
-type Tab = 'Shifts' | 'Calendar' | 'Flights' | 'TravelDoc';
-type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'Settings' | null;
+type Tab = AppTabId;
+type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'Settings' | 'DesignLab' | null;
 
-const TABS: { id: Tab; icon: keyof typeof MaterialIcons.glyphMap; label: string }[] = [
+const TABS: AppTabBarItem[] = [
   { id: 'Shifts',    icon: 'home',           label: 'Home'     },
   { id: 'Calendar', icon: 'table-rows',      label: 'Turni'    },
   { id: 'Flights',  icon: 'flight-takeoff',  label: 'Voli'     },
@@ -45,50 +47,14 @@ const OVERLAY_TITLES: Record<NonNullable<OverlayScreen>, string> = {
   Phonebook: 'Rubrica',
   Passwords: 'Password',
   Manuals:   'Manuali DCS',
+  ArionInbox: 'Arion Inbox',
   Settings:  'Impostazioni',
+  DesignLab: 'Design Lab',
 };
-
-// ─── Animated glassmorphic tab ───────────────────────────────────────────────
-function GlassTab({ icon, label, focused, activeColor, inactiveColor, onPress }: {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  label: string;
-  focused: boolean;
-  activeColor: string;
-  inactiveColor: string;
-  onPress: () => void;
-}) {
-  const scale = useRef(new Animated.Value(focused ? 1.15 : 1)).current;
-  const translateY = useRef(new Animated.Value(focused ? -4 : 0)).current;
-  const opacity = useRef(new Animated.Value(focused ? 1 : 0.78)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: focused ? 1.15 : 1, useNativeDriver: true, tension: 200, friction: 15 }),
-      Animated.spring(translateY, { toValue: focused ? -4 : 0, useNativeDriver: true, tension: 200, friction: 15 }),
-      Animated.timing(opacity, { toValue: focused ? 1 : 0.74, duration: 150, useNativeDriver: true }),
-    ]).start();
-  }, [focused]);
-
-  return (
-    <TouchableOpacity onPress={onPress} style={styles.glassTab} activeOpacity={0.7}>
-      <Animated.View style={{ transform: [{ scale }, { translateY }], alignItems: 'center' }}>
-        <MaterialIcons name={icon} size={22} color={focused ? activeColor : inactiveColor} />
-      </Animated.View>
-      <Animated.Text style={[
-        styles.glassLabel,
-        { color: focused ? activeColor : inactiveColor, opacity, transform: [{ translateY }] },
-        focused && { fontWeight: '700' },
-      ]}>
-        {label}
-      </Animated.Text>
-      {focused && <View style={[styles.glassIndicator, { backgroundColor: activeColor }]} />}
-    </TouchableOpacity>
-  );
-}
 
 // ─── Inner app (inside ThemeProvider) ────────────────────────────────────────
 function AppInner() {
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const { t } = useLanguage();
   const { profileInitials } = useAirport();
   const [activeTab, setActiveTab]   = useState<Tab>('Shifts');
@@ -102,7 +68,8 @@ function AppInner() {
   };
   const overlayTitles: Record<NonNullable<OverlayScreen>, string> = {
     Notepad: t('overlayNotepad'), Phonebook: t('overlayPhonebook'),
-    Passwords: t('overlayPasswords'), Manuals: t('overlayManuals'), Settings: t('overlaySettings'),
+    Passwords: t('overlayPasswords'), Manuals: t('overlayManuals'), ArionInbox: t('overlayArionInbox'), Settings: t('overlaySettings'),
+    DesignLab: 'Design Lab',
   };
 
   const handleDrawerSelect = (id: string) => setOverlay(id as OverlayScreen);
@@ -184,7 +151,9 @@ function AppInner() {
     if (overlay === 'Phonebook') return <PhonebookScreen />;
     if (overlay === 'Passwords') return <PasswordScreen />;
     if (overlay === 'Manuals')   return <ManualsScreen />;
+    if (overlay === 'ArionInbox') return <ArionInboxScreen />;
     if (overlay === 'Settings')  return <SettingsScreen />;
+    if (overlay === 'DesignLab' && __DEV__) return <DesignLabScreen />;
     return null;
   };
 
@@ -199,7 +168,12 @@ function AppInner() {
 
 
   const appBarTitle = overlay ? overlayTitles[overlay] : 'AeroStaff Pro';
-  const tabInactiveColor = colors.isDark ? 'rgba(235,239,245,0.78)' : colors.tabIconInactive;
+  const surfaceVariant = mode === 'operations' ? 'operations' : 'solid';
+  const tabInactiveColor = mode === 'operations'
+    ? colors.tabIconInactive
+    : colors.isDark
+      ? 'rgba(235,239,245,0.78)'
+      : colors.tabIconInactive;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: StatusBar.currentHeight || 48 }]}>
@@ -254,36 +228,18 @@ function AppInner() {
       {/* Bottom Nav — Glassmorphic Floating Pill (hidden on overlay screens) */}
       {!overlay && (
         <View style={styles.tabBarWrapper} {...swipePan.panHandlers}>
-          <FrostedSurface
-            style={styles.tabBarBlur}
-            blurIntensity={90}
-            blurTint={colors.isDark ? 'dark' : 'light'}
-            baseColor={colors.isDark ? 'rgba(8,11,16,0.84)' : 'rgba(248,250,255,0.88)'}
-            gradientColors={colors.isDark
-              ? ['rgba(255,255,255,0.05)', 'rgba(9,11,15,0.66)']
-              : ['rgba(255,255,255,0.55)', 'rgba(255,244,230,0.34)']}
-            overlayColor={colors.isDark ? 'rgba(0,0,0,0.40)' : 'rgba(255,255,255,0.10)'}
-          >
-            <View style={styles.tabBarRow}>
-              {TABS.map(tab => {
-                const active = activeTab === tab.id;
-                return (
-                  <GlassTab
-                    key={tab.id}
-                    icon={tab.icon}
-                    label={tabLabels[tab.id]}
-                    focused={active}
-                    activeColor={colors.tabIconActive}
-                    inactiveColor={tabInactiveColor}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      goToTab(TABS.findIndex(t => t.id === tab.id));
-                    }}
-                  />
-                );
-              })}
-            </View>
-          </FrostedSurface>
+          <AppTabBar
+            tabs={TABS.map(tab => ({ ...tab, label: tabLabels[tab.id] }))}
+            activeTab={activeTab}
+            activeColor={colors.tabIconActive}
+            inactiveColor={tabInactiveColor}
+            isDark={colors.isDark}
+            variant={surfaceVariant}
+            onPress={(_, index) => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              goToTab(index);
+            }}
+          />
         </View>
       )}
 
@@ -292,6 +248,7 @@ function AppInner() {
         visible={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onSelect={handleDrawerSelect}
+        surfaceVariant={surfaceVariant}
       />
       <ProfileSwitcherModal
         visible={profileModalOpen}
@@ -352,43 +309,5 @@ const styles = StyleSheet.create({
     bottom: 16,
     left: 16,
     right: 16,
-  },
-  tabBarBlur: {
-    height: 66,
-    borderRadius: 33,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.28)',
-    shadowColor: '#000',
-    shadowOpacity: 0.24,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 12,
-  },
-  tabBarRow: {
-    flex: 1,
-    flexDirection: 'row',
-    height: 66,
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  glassTab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 68,
-    height: 56,
-  },
-  glassLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    marginTop: 3,
-    letterSpacing: 0.3,
-  },
-  glassIndicator: {
-    position: 'absolute',
-    bottom: 4,
-    width: 18,
-    height: 3,
-    borderRadius: 999,
   },
 });

@@ -1,32 +1,25 @@
 import { version } from '../../package.json';
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  Animated, Modal, StyleSheet, Text, TouchableOpacity, View,
+  Animated, Modal, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
 import { Easing } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
-import AeroStaffLogo from './AeroStaffLogo';
-import FrostedSurface from './FrostedSurface';
+import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-
-type DrawerItem = {
-  id: string;
-  icon: keyof typeof MaterialIcons.glyphMap;
-  label: string;
-  sublabel: string;
-};
+import DrawerMenuPanel, {
+  DRAWER_WIDTH,
+  type DrawerItem,
+  type DrawerMenuSurfaceVariant,
+} from './DrawerMenuPanel';
 
 interface Props {
   visible: boolean;
   onClose: () => void;
   onSelect: (id: string) => void;
+  surfaceVariant?: DrawerMenuSurfaceVariant;
 }
 
-const DRAWER_WIDTH = 285;
-
-export default function DrawerMenu({ visible, onClose, onSelect }: Props) {
+export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant = 'app' }: Props) {
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const ITEMS: DrawerItem[] = [
@@ -34,9 +27,11 @@ export default function DrawerMenu({ visible, onClose, onSelect }: Props) {
     { id: 'Phonebook', icon: 'contacts',   label: t('drawerPhonebookTitle'), sublabel: t('drawerPhonebookSub') },
     { id: 'Passwords', icon: 'lock',       label: t('drawerPasswordTitle'),  sublabel: t('drawerPasswordSub') },
     { id: 'Manuals',   icon: 'menu-book',  label: t('drawerManualsTitle'),   sublabel: 'Easyjet, Wizz, Ryanair…' },
+    { id: 'ArionInbox', icon: 'inbox',      label: t('drawerArionTitle'),     sublabel: t('drawerArionSub') },
     { id: 'Settings',  icon: 'settings',   label: t('drawerSettingsTitle'),  sublabel: t('drawerSettingsSub') },
+    ...(__DEV__ ? [{ id: 'DesignLab', icon: 'auto-awesome' as const, label: 'Design Lab', sublabel: 'Direzioni visuali dev-only' }] : []),
   ];
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(surfaceVariant), [surfaceVariant]);
   const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(false);
@@ -89,65 +84,23 @@ export default function DrawerMenu({ visible, onClose, onSelect }: Props) {
 
         {/* Drawer */}
         <Animated.View style={[styles.drawerWrapper, { transform: [{ translateX: slideAnim }] }]}>
-          <FrostedSurface
-            style={styles.blurFill}
-            blurIntensity={colors.isDark ? 72 : 58}
-            blurTint={colors.isDark ? 'dark' : 'light'}
-            baseColor={colors.isDark ? 'rgba(8,12,18,0.86)' : 'rgba(248,250,255,0.90)'}
-            gradientColors={colors.isDark
-              ? ['rgba(255,255,255,0.05)', 'rgba(8,12,18,0.72)']
-              : ['rgba(255,255,255,0.60)', 'rgba(255,244,236,0.40)']}
-            overlayColor={colors.isDark ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.10)'}
-          >
-            {/* Orange gradient header */}
-            <LinearGradient
-              colors={['#C2410C', '#F97316', '#FB923C']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.headerGradient}
-            >
-              <AeroStaffLogo variant="large" monochrome />
-              <TouchableOpacity onPress={onClose} style={styles.closeIconBtn}>
-                <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
-            </LinearGradient>
-
-            {/* Section label */}
-            <Text style={styles.sectionLabel}>STRUMENTI</Text>
-
-            {/* Menu items */}
-            <View style={styles.items}>
-              {ITEMS.map(item => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.item}
-                  onPress={() => { onSelect(item.id); onClose(); }}
-                  activeOpacity={0.7}
-                >
-                  <View style={styles.itemIcon}>
-                    <MaterialIcons name={item.icon} size={22} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.itemLabel}>{item.label}</Text>
-                    <Text style={styles.itemSub}>{item.sublabel}</Text>
-                  </View>
-                  <MaterialIcons name="chevron-right" size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Divider */}
-            <View style={styles.divider} />
-
-            <Text style={styles.version}>AeroStaff Pro · v{version}</Text>
-          </FrostedSurface>
+          <DrawerMenuPanel
+            colors={colors}
+            items={ITEMS}
+            versionLabel={`AeroStaff Pro · v${version}`}
+            surfaceVariant={surfaceVariant}
+            onClose={onClose}
+            onSelect={onSelect}
+          />
         </Animated.View>
       </View>
     </Modal>
   );
 }
 
-function makeStyles(c: ThemeColors) {
+function makeStyles(surfaceVariant: DrawerMenuSurfaceVariant) {
+  const warmShadow = surfaceVariant === 'operations' ? '#14B8A6' : '#F97316';
+
   return StyleSheet.create({
     root: { flex: 1, flexDirection: 'row' },
     overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,5,0,0.55)' },
@@ -156,44 +109,11 @@ function makeStyles(c: ThemeColors) {
       height: '100%',
       overflow: 'hidden',
       // Subtle warm glow shadow
-      shadowColor: '#F97316',
+      shadowColor: warmShadow,
       shadowOffset: { width: 6, height: 0 },
       shadowOpacity: 0.12,
       shadowRadius: 24,
       elevation: 20,
     },
-    blurFill: {
-      ...StyleSheet.absoluteFillObject,
-    },
-    headerGradient: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 18,
-      paddingTop: 56,
-      paddingBottom: 22,
-    },
-    closeIconBtn: { padding: 6 },
-    sectionLabel: {
-      fontSize: 10, fontWeight: '700',
-      color: c.isDark ? 'rgba(229,233,240,0.72)' : c.textMuted,
-      letterSpacing: 1.4, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
-    },
-    items: { paddingHorizontal: 10 },
-    item: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
-      paddingVertical: 13, paddingHorizontal: 10,
-      borderRadius: 16, marginBottom: 2,
-      backgroundColor: c.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.62)',
-    },
-    itemIcon: {
-      width: 42, height: 42, borderRadius: 14,
-      backgroundColor: c.primaryLight,
-      justifyContent: 'center', alignItems: 'center',
-    },
-    itemLabel: { fontSize: 14, fontWeight: '600', color: c.text },
-    itemSub:   { fontSize: 11, color: c.isDark ? 'rgba(229,233,240,0.68)' : c.textMuted, marginTop: 1 },
-    divider:   { height: 1, backgroundColor: c.border, marginHorizontal: 18, marginTop: 16 },
-    version:   { fontSize: 11, color: c.isDark ? 'rgba(229,233,240,0.62)' : c.textMuted, textAlign: 'center', paddingTop: 14 },
   });
 }
