@@ -5,6 +5,7 @@ import {
   Animated, PanResponder, NativeModules, Platform, Switch, Linking,
 } from 'react-native';
 import { Easing } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Calendar from 'expo-calendar';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -282,6 +283,31 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function mixHexColor(hex: string, target: string, amount: number): string {
+  const parse = (value: string) => {
+    const raw = value.trim().replace('#', '');
+    const normalized = raw.length === 3
+      ? raw.split('').map(ch => ch + ch).join('')
+      : raw;
+    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null;
+    const int = parseInt(normalized, 16);
+    return {
+      r: (int >> 16) & 255,
+      g: (int >> 8) & 255,
+      b: int & 255,
+    };
+  };
+  const base = parse(hex);
+  const mix = parse(target);
+  if (!base || !mix) return hex;
+  const clampAmount = clamp(amount, 0, 1);
+  const toHex = (value: number) => Math.round(value).toString(16).padStart(2, '0');
+  const r = base.r + (mix.r - base.r) * clampAmount;
+  const g = base.g + (mix.g - base.g) * clampAmount;
+  const b = base.b + (mix.b - base.b) * clampAmount;
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
 // Handler: mostra notifiche anche con app aperta (wrapped for Expo Go compat)
 try { Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -455,6 +481,10 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
     return ciOverlap || gateOverlap;
   })();
   const color = getAirlineColor(airline);
+  const brandAccent = isOperations ? mixHexColor(color, '#FFFFFF', 0.34) : color;
+  const airlineTint = hexToRgba(brandAccent, isOperations ? 0.20 : 0.14);
+  const airlineTintStrong = hexToRgba(brandAccent, isOperations ? 0.42 : 0.22);
+  const airlineBorder = hexToRgba(brandAccent, isOperations ? 0.62 : 0.36);
   const ops = activeTab === 'departures' && ts ? getAirlineOps(airline) : null;
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
@@ -577,7 +607,16 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
         onToggle={() => isPinned ? onUnpin() : onPin(item)}
       >
         <TactilePressable
-          animatedStyle={[s.card, isPinned && s.cardPinned, { marginBottom: 0 }, isOperations && { borderLeftColor: color }]}
+          animatedStyle={[
+            s.card,
+            isPinned && s.cardPinned,
+            { marginBottom: 0 },
+            isOperations && {
+              borderLeftColor: brandAccent,
+              borderColor: airlineBorder,
+              shadowColor: brandAccent,
+            },
+          ]}
           depth={isOperations ? 6 : 4}
           pressedScale={0.982}
           haptic={false}
@@ -587,12 +626,20 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
         >
         {isPinned && <View style={s.pinBanner}><Text style={s.pinBannerText}>{t('flightPinned')}</Text></View>}
         {/* Header */}
-        <View style={[s.cardHeader, { backgroundColor: isOperations ? 'rgba(2,8,12,0.72)' : color }]}>
+        <LinearGradient
+          colors={isOperations
+            ? [airlineTintStrong, 'rgba(2,8,12,0.86)', airlineTint]
+            : [color, hexToRgba(color, 0.84)]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={[s.cardHeader, { borderBottomColor: airlineBorder }]}
+        >
+          <View style={[s.airlineBrandRail, { backgroundColor: brandAccent }]} />
           <View style={s.headerLeft}>
             <LogoPill iataCode={iataCode} airlineName={airline} color={color} />
             <View>
-              <Text style={s.headerFlightNum}>{flightNumber}</Text>
-              <Text style={s.headerAirlineName}>{airline}</Text>
+              <Text style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
+              <Text style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>
             </View>
           </View>
           <ValueChangeFlash
@@ -603,7 +650,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             <Text style={s.headerTime}>{time}</Text>
             <Text style={s.headerDest}>{originDest}</Text>
           </ValueChangeFlash>
-        </View>
+        </LinearGradient>
         {/* Body */}
         <View style={s.cardBody}>
           {activeTab === 'departures' && ops ? (
@@ -711,26 +758,42 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
           )}
         </View>
         {/* StaffMonitor footer — inside card so border-radius applies */}
-        <View style={s.smFooter}>
-          <ValueChangeFlash valueKey={standLabel} enabled={isOperations} style={s.smPill}>
-            <MaterialIcons name="local-parking" size={11} color={colors.primary} />
-            <Text style={s.smPillText}>Stand {standLabel}</Text>
+        <View style={[s.smFooter, isOperations && { borderTopColor: airlineBorder }]}>
+          <ValueChangeFlash
+            valueKey={standLabel}
+            enabled={isOperations}
+            style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
+          >
+            <MaterialIcons name="local-parking" size={11} color={isOperations ? brandAccent : colors.primary} />
+            <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>Stand {standLabel}</Text>
           </ValueChangeFlash>
           {activeTab === 'departures' ? (
             <>
-              <ValueChangeFlash valueKey={checkinLabel} enabled={isOperations} style={s.smPill}>
-                <MaterialIcons name="desktop-windows" size={11} color={colors.primary} />
-                <Text style={s.smPillText}>{t('flightCheckin')} {checkinLabel}</Text>
+              <ValueChangeFlash
+                valueKey={checkinLabel}
+                enabled={isOperations}
+                style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
+              >
+                <MaterialIcons name="desktop-windows" size={11} color={isOperations ? brandAccent : colors.primary} />
+                <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>{t('flightCheckin')} {checkinLabel}</Text>
               </ValueChangeFlash>
-              <ValueChangeFlash valueKey={gateLabel} enabled={isOperations} style={s.smPill}>
-                <MaterialIcons name="meeting-room" size={11} color={colors.primary} />
-                <Text style={s.smPillText}>{t('flightGate')} {gateLabel}</Text>
+              <ValueChangeFlash
+                valueKey={gateLabel}
+                enabled={isOperations}
+                style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
+              >
+                <MaterialIcons name="meeting-room" size={11} color={isOperations ? brandAccent : colors.primary} />
+                <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>{t('flightGate')} {gateLabel}</Text>
               </ValueChangeFlash>
             </>
           ) : (
-            <ValueChangeFlash valueKey={beltLabel} enabled={isOperations} style={s.smPill}>
-              <MaterialIcons name="luggage" size={11} color={colors.primary} />
-              <Text style={s.smPillText}>{t('flightBelt')} {beltLabel}</Text>
+            <ValueChangeFlash
+              valueKey={beltLabel}
+              enabled={isOperations}
+              style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
+            >
+              <MaterialIcons name="luggage" size={11} color={isOperations ? brandAccent : colors.primary} />
+              <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>{t('flightBelt')} {beltLabel}</Text>
             </ValueChangeFlash>
           )}
         </View>
@@ -2021,6 +2084,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: isOperations ? 10 : 20, marginTop: 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
     statusText: { fontSize: 10, fontWeight: '800', letterSpacing: isOperations ? 0.6 : 0 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 12 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
+    airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
     headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
