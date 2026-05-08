@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -295,13 +295,35 @@ function AppInner() {
   );
 }
 
+function ThemeBootScreen() {
+  return (
+    <View style={styles.bootRoot}>
+      <StatusBar barStyle="light-content" backgroundColor="#0B1114" />
+      <View style={styles.bootMark}>
+        <MaterialIcons name="flight-takeoff" size={28} color="#2DD4BF" />
+      </View>
+      <ActivityIndicator color="#2DD4BF" />
+    </View>
+  );
+}
+
+function ThemedAppGate() {
+  const { isLoading } = useAppTheme();
+
+  if (isLoading) {
+    return <ThemeBootScreen />;
+  }
+
+  return <AppInner />;
+}
+
 // ─── Root export con ThemeProvider ───────────────────────────────────────────
 export default function App() {
   return (
     <ThemeProvider>
       <AirportProvider>
         <LanguageProvider>
-          <AppInner />
+          <ThemedAppGate />
         </LanguageProvider>
       </AirportProvider>
     </ThemeProvider>
@@ -312,6 +334,23 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     paddingTop: 0,
+  },
+  bootRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 18,
+    backgroundColor: '#0B1114',
+  },
+  bootMark: {
+    width: 68,
+    height: 68,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(45, 212, 191, 0.34)',
+    backgroundColor: 'rgba(45, 212, 191, 0.12)',
   },
   appBar: {
     flexDirection: 'row',
