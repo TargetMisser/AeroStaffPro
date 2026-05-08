@@ -1,11 +1,11 @@
 import { version } from '../../package.json';
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  Animated, Modal, StyleSheet, TouchableOpacity, View,
+  Animated, Easing, Modal, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
-import { Easing } from 'react-native';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { motionDurations, motionEasing, motionSpring } from '../utils/motion';
 import DrawerMenuPanel, {
   DRAWER_WIDTH,
   type DrawerItem,
@@ -42,15 +42,13 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
       Animated.parallel([
         Animated.spring(slideAnim, {
           toValue: 0,
-          damping: 24,
-          stiffness: 185,
-          mass: 0.95,
-          useNativeDriver: false,
+          ...motionSpring.panel,
+          useNativeDriver: true,
         }),
         Animated.timing(fadeAnim,  {
           toValue: 1,
-          duration: 280,
-          easing: Easing.out(Easing.quad),
+          duration: motionDurations.normal,
+          easing: motionEasing.board,
           useNativeDriver: true,
         }),
       ]).start();
@@ -58,13 +56,13 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
       Animated.parallel([
         Animated.timing(slideAnim, {
           toValue: -DRAWER_WIDTH,
-          duration: 260,
-          easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: false,
+          duration: motionDurations.normal,
+          easing: motionEasing.exit,
+          useNativeDriver: true,
         }),
         Animated.timing(fadeAnim,  {
           toValue: 0,
-          duration: 220,
+          duration: motionDurations.quick,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
