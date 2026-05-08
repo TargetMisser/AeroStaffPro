@@ -1,9 +1,8 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
 import TactilePressable from './motion/TactilePressable';
-import { motionDurations, useReducedMotionPreference } from '../utils/motion';
 
 export type AppTabId = 'Shifts' | 'Calendar' | 'Flights' | 'TravelDoc';
 
@@ -163,63 +162,17 @@ function OperationsTab({
   index: number;
   onPress: () => void;
 }) {
-  const scan = useRef(new Animated.Value(0)).current;
-  const reducedMotion = useReducedMotionPreference();
-
-  useEffect(() => {
-    if (!focused || reducedMotion) {
-      scan.stopAnimation();
-      scan.setValue(0);
-      return;
-    }
-
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(scan, {
-          toValue: 1,
-          duration: 1300,
-          easing: Easing.inOut(Easing.quad),
-          useNativeDriver: true,
-        }),
-        Animated.timing(scan, {
-          toValue: 0,
-          duration: motionDurations.quick,
-          useNativeDriver: true,
-        }),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [focused, reducedMotion, scan]);
-
-  const scanTranslateX = scan.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-52, 86],
-  });
-
   return (
     <TactilePressable
       onPress={onPress}
       style={styles.opsTabPressable}
       animatedStyle={[styles.opsTab, focused && styles.opsTabActive]}
-      depth={5}
-      pressedScale={0.955}
+      depth={0}
+      pressedScale={0.985}
       haptic="selection"
       accessibilityRole="button"
       accessibilityState={{ selected: focused }}
     >
-      {focused && (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.opsScan,
-            {
-              backgroundColor: activeColor,
-              transform: [{ translateX: scanTranslateX }, { skewX: '-18deg' }],
-            },
-          ]}
-        />
-      )}
       <View style={[styles.opsIndexPill, focused && { backgroundColor: 'rgba(45,212,191,0.18)', borderColor: activeColor }]}>
         <Text style={[styles.opsIndex, { color: focused ? activeColor : inactiveColor }]}>
           {String(index + 1).padStart(2, '0')}
@@ -382,6 +335,7 @@ const styles = StyleSheet.create({
   },
   opsTabPressable: {
     flex: 1,
+    minHeight: 52,
   },
   opsTab: {
     flex: 1,
@@ -398,13 +352,6 @@ const styles = StyleSheet.create({
   opsTabActive: {
     borderColor: 'rgba(45,212,191,0.50)',
     backgroundColor: 'rgba(13,148,136,0.18)',
-  },
-  opsScan: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 38,
-    opacity: 0.16,
   },
   opsIndexPill: {
     alignSelf: 'flex-start',
