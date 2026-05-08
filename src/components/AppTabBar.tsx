@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
@@ -22,6 +22,7 @@ type AppTabBarProps = {
   isDark: boolean;
   onPress: (tabId: AppTabId, index: number) => void;
   variant?: AppTabBarVariant;
+  navigationProgress?: Animated.AnimatedInterpolation<number>;
 };
 
 type SurfaceConfig = {
@@ -91,12 +92,23 @@ function getSurfaceConfig(variant: AppTabBarVariant, isDark: boolean): SurfaceCo
   };
 }
 
+function createFocusAmount(navigationProgress: Animated.AnimatedInterpolation<number>, index: number) {
+  const focusAmount = navigationProgress.interpolate({
+    inputRange: [index - 1, index, index + 1],
+    outputRange: [0, 1, 0],
+    extrapolate: 'clamp',
+  });
+  return focusAmount;
+}
+
 function AppTab({
   icon,
   label,
   focused,
   activeColor,
   inactiveColor,
+  index,
+  navigationProgress,
   onPress,
 }: {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -104,23 +116,32 @@ function AppTab({
   focused: boolean;
   activeColor: string;
   inactiveColor: string;
+  index: number;
+  navigationProgress: Animated.AnimatedInterpolation<number>;
   onPress: () => void;
 }) {
-  const scale = useRef(new Animated.Value(focused ? 1.15 : 1)).current;
-  const translateY = useRef(new Animated.Value(focused ? -4 : 0)).current;
-  const opacity = useRef(new Animated.Value(focused ? 1 : 0.78)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scale, { toValue: focused ? 1.15 : 1, useNativeDriver: true, tension: 200, friction: 15 }),
-      Animated.spring(translateY, { toValue: focused ? -4 : 0, useNativeDriver: true, tension: 200, friction: 15 }),
-      Animated.timing(opacity, { toValue: focused ? 1 : 0.74, duration: 150, useNativeDriver: true }),
-    ]).start();
-  }, [focused, opacity, scale, translateY]);
+  const focusAmount = createFocusAmount(navigationProgress, index);
+  const progressScale = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.98, 1.14],
+  });
+  const progressTranslateY = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [2, -6],
+  });
+  const progressOpacity = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.62, 1],
+  });
+  const indicatorScale = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.35, 1],
+  });
 
   return (
     <TactilePressable
       onPress={onPress}
+      style={styles.tabPressable}
       animatedStyle={styles.tab}
       depth={3}
       pressedScale={0.94}
@@ -128,19 +149,28 @@ function AppTab({
       accessibilityRole="button"
       accessibilityState={{ selected: focused }}
     >
-      <Animated.View style={{ transform: [{ scale }, { translateY }], alignItems: 'center' }}>
+      <Animated.View style={{ transform: [{ scale: progressScale }, { translateY: progressTranslateY }], alignItems: 'center' }}>
         <MaterialIcons name={icon} size={22} color={focused ? activeColor : inactiveColor} />
       </Animated.View>
       <Animated.Text
         style={[
           styles.label,
-          { color: focused ? activeColor : inactiveColor, opacity, transform: [{ translateY }] },
+          { color: focused ? activeColor : inactiveColor, opacity: progressOpacity, transform: [{ translateY: progressTranslateY }] },
           focused && { fontWeight: '700' },
         ]}
       >
         {label}
       </Animated.Text>
-      {focused && <View style={[styles.indicator, { backgroundColor: activeColor }]} />}
+      <Animated.View
+        style={[
+          styles.indicator,
+          {
+            backgroundColor: activeColor,
+            opacity: focusAmount,
+            transform: [{ scaleX: indicatorScale }],
+          },
+        ]}
+      />
     </TactilePressable>
   );
 }
@@ -152,6 +182,7 @@ function OperationsTab({
   activeColor,
   inactiveColor,
   index,
+  navigationProgress,
   onPress,
 }: {
   icon: keyof typeof MaterialIcons.glyphMap;
@@ -160,8 +191,23 @@ function OperationsTab({
   activeColor: string;
   inactiveColor: string;
   index: number;
+  navigationProgress: Animated.AnimatedInterpolation<number>;
   onPress: () => void;
 }) {
+  const focusAmount = createFocusAmount(navigationProgress, index);
+  const lift = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -4],
+  });
+  const scale = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.98, 1.05],
+  });
+  const glowOpacity = focusAmount.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.16],
+  });
+
   return (
     <TactilePressable
       onPress={onPress}
@@ -173,12 +219,16 @@ function OperationsTab({
       accessibilityRole="button"
       accessibilityState={{ selected: focused }}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.opsTabGlow, { backgroundColor: activeColor, opacity: glowOpacity }]}
+      />
       <View style={[styles.opsIndexPill, focused && { backgroundColor: 'rgba(45,212,191,0.18)', borderColor: activeColor }]}>
         <Text style={[styles.opsIndex, { color: focused ? activeColor : inactiveColor }]}>
           {String(index + 1).padStart(2, '0')}
         </Text>
       </View>
-      <View style={styles.opsIconBlock}>
+      <Animated.View style={[styles.opsIconBlock, { transform: [{ translateY: lift }, { scale }] }]}>
         <MaterialIcons name={icon} size={20} color={focused ? activeColor : inactiveColor} />
         <Text
           numberOfLines={1}
@@ -186,8 +236,8 @@ function OperationsTab({
         >
           {label.toUpperCase()}
         </Text>
-      </View>
-      {focused && <View style={[styles.opsActiveRail, { backgroundColor: activeColor }]} />}
+      </Animated.View>
+      <Animated.View style={[styles.opsActiveRail, { backgroundColor: activeColor, opacity: focusAmount }]} />
     </TactilePressable>
   );
 }
@@ -200,9 +250,42 @@ export default function AppTabBar({
   isDark,
   onPress,
   variant = 'app',
+  navigationProgress,
 }: AppTabBarProps) {
   const surface = getSurfaceConfig(variant, isDark);
   const isOperations = variant === 'operations';
+  const activeIndex = Math.max(0, tabs.findIndex(tab => tab.id === activeTab));
+  const fallbackProgress = useRef(new Animated.Value(activeIndex)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
+  const tabCount = Math.max(tabs.length, 1);
+  const progress = navigationProgress ?? fallbackProgress.interpolate({
+    inputRange: [0, tabCount - 1],
+    outputRange: [0, tabCount - 1],
+    extrapolate: 'clamp',
+  });
+
+  useEffect(() => {
+    Animated.spring(fallbackProgress, {
+      toValue: activeIndex,
+      tension: 170,
+      friction: 18,
+      useNativeDriver: true,
+    }).start();
+  }, [activeIndex, fallbackProgress]);
+
+  const regularSlotWidth = trackWidth > 0 ? trackWidth / tabCount : 0;
+  const opsGap = 6;
+  const opsSlotWidth = trackWidth > 0 ? (trackWidth - opsGap * (tabCount - 1)) / tabCount : 0;
+  const detentTranslateX = progress.interpolate({
+    inputRange: tabs.map((_, index) => index),
+    outputRange: tabs.map((_, index) => index * regularSlotWidth),
+    extrapolate: 'clamp',
+  });
+  const opsDetentTranslateX = progress.interpolate({
+    inputRange: tabs.map((_, index) => index),
+    outputRange: tabs.map((_, index) => index * (opsSlotWidth + opsGap)),
+    extrapolate: 'clamp',
+  });
 
   return (
     <FrostedSurface
@@ -226,7 +309,22 @@ export default function AppTabBar({
             <Text style={styles.opsKicker}>NAV SYS</Text>
             <View style={[styles.opsLiveDot, { backgroundColor: activeColor }]} />
           </View>
-          <View style={styles.opsRow}>
+          <View
+            style={styles.opsRow}
+            onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
+          >
+            {opsSlotWidth > 0 && (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.opsDetentSelector,
+                  {
+                    width: opsSlotWidth,
+                    transform: [{ translateX: opsDetentTranslateX }],
+                  },
+                ]}
+              />
+            )}
             {tabs.map((tab, index) => (
               <OperationsTab
                 key={tab.id}
@@ -236,13 +334,31 @@ export default function AppTabBar({
                 activeColor={activeColor}
                 inactiveColor={inactiveColor}
                 index={index}
+                navigationProgress={progress}
                 onPress={() => onPress(tab.id, index)}
               />
             ))}
           </View>
         </View>
       ) : (
-        <View style={styles.row}>
+        <View
+          style={styles.row}
+          onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
+        >
+          {regularSlotWidth > 0 && (
+            <Animated.View
+              pointerEvents="none"
+              style={[
+                styles.detentSelector,
+                {
+                  width: Math.max(52, regularSlotWidth - 10),
+                  transform: [{ translateX: detentTranslateX }],
+                },
+              ]}
+            >
+              <View style={[styles.detentGlow, { backgroundColor: activeColor }]} />
+            </Animated.View>
+          )}
           {tabs.map((tab, index) => (
             <AppTab
               key={tab.id}
@@ -251,6 +367,8 @@ export default function AppTabBar({
               focused={activeTab === tab.id}
               activeColor={activeColor}
               inactiveColor={inactiveColor}
+              index={index}
+              navigationProgress={progress}
               onPress={() => onPress(tab.id, index)}
             />
           ))}
@@ -283,13 +401,39 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     height: 66,
-    justifyContent: 'space-around',
     alignItems: 'center',
+    position: 'relative',
+    paddingHorizontal: 5,
+  },
+  detentSelector: {
+    position: 'absolute',
+    left: 5,
+    top: 7,
+    bottom: 7,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,191,0.22)',
+    backgroundColor: 'rgba(45,212,191,0.10)',
+    overflow: 'hidden',
+  },
+  detentGlow: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 5,
+    height: 3,
+    borderRadius: 999,
+    opacity: 0.72,
+  },
+  tabPressable: {
+    flex: 1,
+    height: 56,
+    zIndex: 1,
   },
   tab: {
     alignItems: 'center',
     justifyContent: 'center',
-    width: 68,
+    width: '100%',
     height: 56,
   },
   label: {
@@ -332,10 +476,22 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     gap: 6,
+    position: 'relative',
+  },
+  opsDetentSelector: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(45,212,191,0.42)',
+    backgroundColor: 'rgba(13,148,136,0.18)',
   },
   opsTabPressable: {
     flex: 1,
     minHeight: 52,
+    zIndex: 1,
   },
   opsTab: {
     flex: 1,
@@ -348,6 +504,10 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     justifyContent: 'space-between',
     overflow: 'hidden',
+  },
+  opsTabGlow: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.12,
   },
   opsTabActive: {
     borderColor: 'rgba(45,212,191,0.50)',

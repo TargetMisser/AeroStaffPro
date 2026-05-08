@@ -114,6 +114,11 @@ function AppInner() {
   const activeIdxRef = useRef(0);
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
+  const navigationProgress = useMemo(() => offsetX.interpolate({
+    inputRange: TABS.map((_, i) => -i * SCREEN_W).reverse(),
+    outputRange: TABS.map((_, i) => i).reverse(),
+    extrapolate: 'clamp',
+  }), [offsetX, SCREEN_W]);
 
   const setTabIndex = (newIdx: number) => {
     activeIdxRef.current = newIdx;
@@ -271,6 +276,7 @@ function AppInner() {
             inactiveColor={tabInactiveColor}
             isDark={colors.isDark}
             variant={surfaceVariant}
+            navigationProgress={navigationProgress}
             onPress={(_, index) => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               goToTab(index);
