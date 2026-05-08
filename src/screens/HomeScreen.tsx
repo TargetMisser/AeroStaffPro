@@ -12,6 +12,7 @@ import * as Calendar from 'expo-calendar';
 import * as Location from 'expo-location';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import BoardReveal from '../components/motion/BoardReveal';
 import ShiftTimeline from '../components/ShiftTimeline';
 
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
@@ -482,64 +483,74 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
 
       {/* Top cards row: Weather + Date */}
       <View style={s.topRow}>
-        <View style={s.weatherCard}>
-          {weather ? (
-            <>
-              <MaterialCommunityIcons
-                name={weather.iconName as keyof typeof MaterialCommunityIcons.glyphMap}
-                size={28}
-                color={colors.primaryDark}
-                style={s.weatherIcon}
-              />
-              <Text style={s.weatherTemp}>{weather.temp}°</Text>
-              <Text style={s.weatherDesc}>{t('homeWeatherLocal')} • {weather.text}</Text>
-            </>
-          ) : (
-            <ActivityIndicator color={colors.primary} />
-          )}
-        </View>
-        <View style={s.dateCard}>
-          <Text style={s.dateToday}>{t('homeToday')}</Text>
-          <Text style={s.dateNum}>{today.getDate()}</Text>
-          <Text style={s.dateMonth}>{months[today.getMonth()]}</Text>
-        </View>
+        <BoardReveal index={0} enabled={isOperations} style={{ flex: 1 }}>
+          <View style={s.weatherCard}>
+            {weather ? (
+              <>
+                <MaterialCommunityIcons
+                  name={weather.iconName as keyof typeof MaterialCommunityIcons.glyphMap}
+                  size={28}
+                  color={colors.primaryDark}
+                  style={s.weatherIcon}
+                />
+                <Text style={s.weatherTemp}>{weather.temp}°</Text>
+                <Text style={s.weatherDesc}>{t('homeWeatherLocal')} • {weather.text}</Text>
+              </>
+            ) : (
+              <ActivityIndicator color={colors.primary} />
+            )}
+          </View>
+        </BoardReveal>
+        <BoardReveal index={1} enabled={isOperations}>
+          <View style={s.dateCard}>
+            <Text style={s.dateToday}>{t('homeToday')}</Text>
+            <Text style={s.dateNum}>{today.getDate()}</Text>
+            <Text style={s.dateMonth}>{months[today.getMonth()]}</Text>
+          </View>
+        </BoardReveal>
       </View>
 
       {/* Pinned flight */}
-      {pinnedFlight && <PinnedFlightCard item={pinnedFlight} colors={colors} isOperations={isOperations} />}
+      {pinnedFlight && (
+        <BoardReveal index={2} enabled={isOperations}>
+          <PinnedFlightCard item={pinnedFlight} colors={colors} isOperations={isOperations} />
+        </BoardReveal>
+      )}
 
       {/* Turno Attuale */}
       <Text style={s.sectionTitle}>{isNextShift ? t('homeNextShift') : t('homeCurrentShift')}</Text>
 
-      <View style={s.shiftCard}>
-        {loadingShift ? (
-          <ActivityIndicator color={colors.primary} />
-        ) : isWork ? (
-          <>
-            <View style={s.shiftStrip} />
-            <View style={{ flex: 1 }}>
-              <View style={s.shiftBadgeRow}>
-                <View style={s.inProgressBadge}>
-                  <Text style={s.inProgressText}>{isNextShift ? t('homeNextShiftBadge') : t('homeInProgress')}</Text>
+      <BoardReveal index={pinnedFlight ? 3 : 2} enabled={isOperations}>
+        <View style={s.shiftCard}>
+          {loadingShift ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : isWork ? (
+            <>
+              <View style={s.shiftStrip} />
+              <View style={{ flex: 1 }}>
+                <View style={s.shiftBadgeRow}>
+                  <View style={s.inProgressBadge}>
+                    <Text style={s.inProgressText}>{isNextShift ? t('homeNextShiftBadge') : t('homeInProgress')}</Text>
+                  </View>
                 </View>
+                <Text style={s.shiftTitle}>{isNextShift ? t('homeNextShift') : t('homeShiftWork')}</Text>
+                <Text style={s.shiftTime}>
+                  {new Date(shiftEvent.startDate).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})} – {new Date(shiftEvent.endDate).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})}
+                </Text>
               </View>
-              <Text style={s.shiftTitle}>{isNextShift ? t('homeNextShift') : t('homeShiftWork')}</Text>
-              <Text style={s.shiftTime}>
-                {new Date(shiftEvent.startDate).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})} – {new Date(shiftEvent.endDate).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})}
-              </Text>
+            </>
+          ) : isRest ? (
+            <View style={s.restRow}>
+              <View style={s.restIconWrap}>
+                <MaterialIcons name="hotel" size={22} color="#10b981" />
+              </View>
+              <Text style={s.restText}>{t('homeRestDay')}</Text>
             </View>
-          </>
-        ) : isRest ? (
-          <View style={s.restRow}>
-            <View style={s.restIconWrap}>
-              <MaterialIcons name="hotel" size={22} color="#10b981" />
-            </View>
-            <Text style={s.restText}>{t('homeRestDay')}</Text>
-          </View>
-        ) : (
-          <Text style={s.emptyShift}>{t('homeNoShift')}</Text>
-        )}
-      </View>
+          ) : (
+            <Text style={s.emptyShift}>{t('homeNoShift')}</Text>
+          )}
+        </View>
+      </BoardReveal>
 
       {/* Timeline voli nel turno — inline */}
       {shiftEvent && isWork && (
