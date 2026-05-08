@@ -163,6 +163,18 @@ function pruneExpiredFlights(items: any[], tsField: string, nowSeconds = Date.no
   });
 }
 
+function compareFlightsChronologically(tsField: 'arrival' | 'departure') {
+  return (left: any, right: any): number => {
+    const leftTs = left.flight?.time?.scheduled?.[tsField] ?? Number.MAX_SAFE_INTEGER;
+    const rightTs = right.flight?.time?.scheduled?.[tsField] ?? Number.MAX_SAFE_INTEGER;
+    if (leftTs !== rightTs) return leftTs - rightTs;
+
+    const leftNumber = left.flight?.identification?.number?.default ?? '';
+    const rightNumber = right.flight?.identification?.number?.default ?? '';
+    return leftNumber.localeCompare(rightNumber);
+  };
+}
+
 function sameAirlineKeys(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
@@ -1579,11 +1591,10 @@ export default function FlightScreen() {
 
   const currentData = (() => {
     const source = activeTab === 'arrivals' ? allArrivalsFull : allDeparturesFull;
+    const timeField = activeTab === 'arrivals' ? 'arrival' : 'departure';
     const seen = new Set<string>();
     return source.filter(item => {
-      const ts = activeTab === 'arrivals'
-        ? item.flight?.time?.scheduled?.arrival
-        : item.flight?.time?.scheduled?.departure;
+      const ts = item.flight?.time?.scheduled?.[timeField];
       if (!ts || !isSameDay(new Date(ts * 1000), selectedDate)) return false;
       const dedupeKey = `${item.flight?.identification?.number?.default ?? ''}_${ts}`;
       if (seen.has(dedupeKey)) return false;
@@ -1591,7 +1602,7 @@ export default function FlightScreen() {
       if (selectedAirlines.length === 0) return true;
       const name = (item.flight?.airline?.name || '').toLowerCase();
       return selectedAirlines.some(key => name.includes(key));
-    });
+    }).sort(compareFlightsChronologically(timeField));
   })();
 
   const renderFlight = useCallback(({ item, index }: { item: any; index: number }) => (
