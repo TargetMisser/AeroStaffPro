@@ -9,6 +9,8 @@ import * as Calendar from 'expo-calendar';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
+import BoardReveal from '../components/motion/BoardReveal';
+import TactilePressable from '../components/motion/TactilePressable';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
@@ -23,6 +25,7 @@ import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
+import { triggerMotionHaptic } from '../utils/motion';
 import {
   appendNotificationDebugEvent,
   buildNotificationData,
@@ -371,6 +374,7 @@ function SwipeableFlightCardComponent({
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }).start(() => {
+          triggerMotionHaptic(isPinned ? 'light' : 'medium').catch(() => {});
           onToggleRef.current();
           animateBack();
         });
@@ -398,6 +402,7 @@ const SwipeableFlightCard = React.memo(SwipeableFlightCardComponent);
 // ─── FlightRow ────────────────────────────────────────────────────────────────
 interface FlightRowProps {
   item: any;
+  index: number;
   activeTab: 'arrivals' | 'departures';
   userShift: { start: number; end: number } | null;
   pinnedFlightId: string | null;
@@ -412,7 +417,7 @@ interface FlightRowProps {
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin, onUnpin, inboundArrivals, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId, onPin, onUnpin, inboundArrivals, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
@@ -552,17 +557,20 @@ function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin,
   }, []);
 
   return (
-    <SwipeableFlightCard
-      isPinned={isPinned}
-      onToggle={() => isPinned ? onUnpin() : onPin(item)}
-    >
-      <TouchableOpacity
-        style={[s.card, isPinned && s.cardPinned, { marginBottom: 0 }, isOperations && { borderLeftColor: color }]}
-        activeOpacity={0.88}
-        onPress={() => { openFlightradar24Flight(flightNumber).catch(() => {}); }}
-        accessibilityRole="link"
-        accessibilityLabel={`Apri ${flightNumber} su Flightradar24`}
+    <BoardReveal index={index} enabled={isOperations}>
+      <SwipeableFlightCard
+        isPinned={isPinned}
+        onToggle={() => isPinned ? onUnpin() : onPin(item)}
       >
+        <TactilePressable
+          animatedStyle={[s.card, isPinned && s.cardPinned, { marginBottom: 0 }, isOperations && { borderLeftColor: color }]}
+          depth={isOperations ? 6 : 4}
+          pressedScale={0.982}
+          haptic={false}
+          onPress={() => { openFlightradar24Flight(flightNumber).catch(() => {}); }}
+          accessibilityRole="link"
+          accessibilityLabel={`Apri ${flightNumber} su Flightradar24`}
+        >
         {isPinned && <View style={s.pinBanner}><Text style={s.pinBannerText}>{t('flightPinned')}</Text></View>}
         {/* Header */}
         <View style={[s.cardHeader, { backgroundColor: isOperations ? 'rgba(2,8,12,0.72)' : color }]}>
@@ -723,8 +731,9 @@ function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin,
             </View>
           )}
         </View>
-      </TouchableOpacity>
-    </SwipeableFlightCard>
+        </TactilePressable>
+      </SwipeableFlightCard>
+    </BoardReveal>
   );
 }
 
@@ -1594,9 +1603,10 @@ export default function FlightScreen() {
     });
   })();
 
-  const renderFlight = useCallback(({ item }: { item: any }) => (
+  const renderFlight = useCallback(({ item, index }: { item: any; index: number }) => (
     <FlightRow
       item={item}
+      index={index}
       activeTab={activeTab}
       userShift={userShift}
       pinnedFlightId={pinnedFlightId}
