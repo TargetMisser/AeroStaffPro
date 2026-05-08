@@ -10,6 +10,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import BoardReveal from '../components/motion/BoardReveal';
+import CockpitFlightProgress from '../components/motion/CockpitFlightProgress';
 import TactilePressable from '../components/motion/TactilePressable';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
@@ -646,46 +647,15 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             <Text style={s.bodyInfo}>{`Da: ${originDest}`}</Text>
           )}
           {arrivalProgress && (
-            <View style={s.arrivalProgressSection}>
-              <View style={s.arrivalProgressMetaRow}>
-                <View style={s.arrivalProgressEndpoint}>
-                  <MaterialIcons name="flight-takeoff" size={14} color={arrivalProgress.departureColor} />
-                  <Text style={s.arrivalProgressTime}>{fmtTs(arrivalProgress.startTs)}</Text>
-                </View>
-                <View style={s.arrivalProgressEndpoint}>
-                  <MaterialIcons name="flight-land" size={14} color={arrivalProgress.arrivalColor} />
-                  <Text style={s.arrivalProgressTime}>{fmtTs(arrivalProgress.endTs)}</Text>
-                </View>
-              </View>
-              <View style={s.arrivalProgressTrackWrap}>
-                <View style={s.arrivalProgressTrack}>
-                  <View
-                    style={[
-                      s.arrivalProgressFill,
-                      {
-                        width: `${Math.max(0, Math.min(100, arrivalProgress.progress * 100))}%`,
-                        backgroundColor: arrivalProgress.arrivalColor,
-                      },
-                    ]}
-                  />
-                </View>
-                <View
-                  style={[
-                    s.arrivalProgressPlaneWrap,
-                    { left: `${clamp(arrivalProgress.progress, 0.04, 0.96) * 100}%` },
-                  ]}
-                >
-                  <View style={s.arrivalProgressPlaneBadge}>
-                    <MaterialIcons
-                      name="flight"
-                      size={14}
-                      color={arrivalProgress.planeColor}
-                      style={s.arrivalProgressPlaneIcon}
-                    />
-                  </View>
-                </View>
-              </View>
-            </View>
+            <CockpitFlightProgress
+              progress={arrivalProgress.progress}
+              startLabel={fmtTs(arrivalProgress.startTs)}
+              endLabel={fmtTs(arrivalProgress.endTs)}
+              departureColor={arrivalProgress.departureColor}
+              arrivalColor={arrivalProgress.arrivalColor}
+              planeColor={arrivalProgress.planeColor}
+              isOperations={isOperations}
+            />
           )}
           {/* Status pill — own row, right-aligned */}
           {activeTab === 'arrivals' && ts ? (() => {
@@ -2028,30 +1998,6 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     opsIcon: { fontSize: 16 },
     opsLabel: { fontSize: 10, fontWeight: '600', color: c.textSub, letterSpacing: 0.5 },
     opsTime: { fontSize: 13, fontWeight: '800', color: c.primaryDark },
-    arrivalProgressSection: { marginTop: 12 },
-    arrivalProgressMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-    arrivalProgressEndpoint: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    arrivalProgressTime: { fontSize: 11, fontWeight: '800', color: c.text },
-    arrivalProgressTrackWrap: { position: 'relative', justifyContent: 'center', height: 28 },
-    arrivalProgressTrack: { height: 4, borderRadius: 999, backgroundColor: c.border, overflow: 'hidden' },
-    arrivalProgressFill: { height: '100%', borderRadius: 999 },
-    arrivalProgressPlaneWrap: { position: 'absolute', top: 0, marginLeft: -11 },
-    arrivalProgressPlaneBadge: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: isOperations ? '#071414' : c.card,
-      borderWidth: 1.5,
-      borderColor: isOperations ? operationBorder : c.primaryLight,
-      justifyContent: 'center',
-      alignItems: 'center',
-      shadowColor: c.isDark ? '#000' : c.primary,
-      shadowOpacity: c.isDark ? 0.2 : 0.16,
-      shadowRadius: 4,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 3,
-    },
-    arrivalProgressPlaneIcon: { transform: [{ rotate: '90deg' }] },
     pinBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
     filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
