@@ -1,6 +1,6 @@
 import type { AirportInfo } from '../airportSettings';
 
-export type FlightScheduleProviderId = 'airlabs' | 'fr24' | 'staffMonitor' | 'cache';
+export type FlightScheduleProviderId = 'airlabs' | 'fr24Api' | 'fr24Public' | 'staffMonitor' | 'cache';
 
 export type FlightScheduleProviderStatus = {
   provider: FlightScheduleProviderId;
@@ -16,6 +16,7 @@ export type FlightScheduleProviderContext = {
   airportCode: string;
   airport: AirportInfo;
   airLabsApiKey?: string | null;
+  fr24ApiKey?: string | null;
   signal?: AbortSignal;
   now?: Date;
 };

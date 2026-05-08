@@ -1,5 +1,5 @@
 import { airLabsProvider } from './airLabsProvider';
-import { fr24Provider } from './fr24Provider';
+import { fr24ApiProvider, fr24PublicProvider } from './fr24Provider';
 import { staffMonitorProvider } from './staffMonitorProvider';
 import type { FlightProviderPreference } from '../flightProviderSettings';
 import type {
@@ -19,20 +19,28 @@ export type {
 const DEFAULT_PROVIDERS: FlightScheduleProvider[] = [
   airLabsProvider,
   staffMonitorProvider,
-  fr24Provider,
+  fr24ApiProvider,
+  fr24PublicProvider,
 ];
 
 const PROVIDERS_BY_ID = {
   airlabs: airLabsProvider,
   staffMonitor: staffMonitorProvider,
-  fr24: fr24Provider,
-} satisfies Record<Exclude<FlightProviderPreference, 'auto'>, FlightScheduleProvider>;
+} satisfies Record<Exclude<FlightProviderPreference, 'auto' | 'fr24'>, FlightScheduleProvider>;
 
 export function getFlightScheduleProviders(
   preference: FlightProviderPreference = 'auto',
 ): FlightScheduleProvider[] {
   if (preference === 'auto') {
     return DEFAULT_PROVIDERS;
+  }
+
+  if (preference === 'fr24') {
+    return [
+      fr24ApiProvider,
+      fr24PublicProvider,
+      ...DEFAULT_PROVIDERS.filter(provider => provider.id !== fr24ApiProvider.id && provider.id !== fr24PublicProvider.id),
+    ];
   }
 
   const preferred = PROVIDERS_BY_ID[preference];

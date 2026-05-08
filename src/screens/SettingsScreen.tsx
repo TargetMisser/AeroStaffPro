@@ -22,11 +22,15 @@ import ProfileSwitcherModal from '../components/ProfileSwitcherModal';
 import { exportBackup, importBackup } from '../utils/backupManager';
 import {
   clearAirLabsApiKey,
+  clearFr24ApiKey,
   getAirLabsApiKey,
+  getFr24ApiKey,
   getFlightProviderSettingsState,
   saveFlightProviderPreference,
   saveAirLabsApiKey,
+  saveFr24ApiKey,
   type AirLabsKeyState,
+  type Fr24KeyState,
   type FlightProviderPreference,
 } from '../utils/flightProviderSettings';
 import {
@@ -228,15 +232,19 @@ export default function SettingsScreen() {
         : t('themeOperationsSub'),
   }));
   const [airLabsInput, setAirLabsInput] = useState('');
+  const [fr24Input, setFr24Input] = useState('');
   const [providerPreference, setProviderPreference] = useState<FlightProviderPreference>('auto');
   const [airLabsConfigured, setAirLabsConfigured] = useState(false);
+  const [fr24Configured, setFr24Configured] = useState(false);
   const [airLabsStatus, setAirLabsStatus] = useState(t('airLabsKeyNotConfigured'));
+  const [fr24Status, setFr24Status] = useState(t('fr24KeyNotConfigured'));
   const [providerSummary, setProviderSummary] = useState(t('flightProviderAuto'));
   const [providerDebug, setProviderDebug] = useState<FlightProviderDiagnosticsSnapshot | null>(null);
   const [staffMonitorDebug, setStaffMonitorDebug] = useState('');
   const [notificationDebug, setNotificationDebug] = useState<NotificationDebugSnapshot | null>(null);
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const [savingAirLabs, setSavingAirLabs] = useState(false);
+  const [savingFr24, setSavingFr24] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
@@ -284,14 +292,26 @@ export default function SettingsScreen() {
     return `${sourceLabel}${state.masked ? ` · ${state.masked}` : ''}`;
   }, [t]);
 
+  const formatFr24Status = useCallback((state: Fr24KeyState) => {
+    if (!state.configured) {
+      return t('fr24KeyNotConfigured');
+    }
+
+    const sourceLabel = state.source === 'device' ? t('airLabsKeyDevice') : t('airLabsKeyBuild');
+    return `${sourceLabel}${state.masked ? ` · ${state.masked}` : ''}`;
+  }, [t]);
+
   const refreshProviderSettings = useCallback(async () => {
     const state = await getFlightProviderSettingsState();
     const airLabsLabel = formatAirLabsStatus(state.airLabs);
+    const fr24Label = formatFr24Status(state.fr24);
     setProviderPreference(state.preference);
     setAirLabsConfigured(state.airLabs.configured);
+    setFr24Configured(state.fr24.configured);
     setAirLabsStatus(airLabsLabel);
-    setProviderSummary(`${providerPreferenceLabel(state.preference)} · ${airLabsLabel}`);
-  }, [formatAirLabsStatus, providerPreferenceLabel]);
+    setFr24Status(fr24Label);
+    setProviderSummary(`${providerPreferenceLabel(state.preference)} · AirLabs: ${airLabsLabel} · FR24: ${fr24Label}`);
+  }, [formatAirLabsStatus, formatFr24Status, providerPreferenceLabel]);
 
   const refreshProviderDebug = useCallback(async () => {
     const snapshot = await getCachedFlightProviderDiagnostics(airportCode);
@@ -416,12 +436,14 @@ export default function SettingsScreen() {
       refreshNotificationDebug(),
     ]);
     setAirLabsInput(await getAirLabsApiKey() ?? '');
+    setFr24Input(await getFr24ApiKey() ?? '');
     setProviderModalOpen(true);
   };
 
   const closeProviderModal = () => {
     setProviderModalOpen(false);
     setAirLabsInput('');
+    setFr24Input('');
   };
 
   const chooseProviderPreference = async (preference: FlightProviderPreference) => {
@@ -492,6 +514,40 @@ export default function SettingsScreen() {
       });
     } finally {
       setSavingAirLabs(false);
+    }
+  };
+
+  const saveFr24Key = async () => {
+    setSavingFr24(true);
+    try {
+      await saveFr24ApiKey(fr24Input);
+      await refreshProviderSettings();
+      setFr24Input(await getFr24ApiKey() ?? '');
+    } catch {
+      showDialog({
+        title: t('error'),
+        message: t('fr24KeyErrorMsg'),
+        tone: 'error',
+      });
+    } finally {
+      setSavingFr24(false);
+    }
+  };
+
+  const removeFr24Key = async () => {
+    setSavingFr24(true);
+    try {
+      await clearFr24ApiKey();
+      await refreshProviderSettings();
+      setFr24Input('');
+    } catch {
+      showDialog({
+        title: t('error'),
+        message: t('fr24KeyErrorMsg'),
+        tone: 'error',
+      });
+    } finally {
+      setSavingFr24(false);
     }
   };
 
@@ -852,7 +908,7 @@ export default function SettingsScreen() {
                   id: 'fr24',
                   icon: 'public',
                   title: t('flightProviderFr24'),
-                  sub: t('flightProviderFr24Sub'),
+                  sub: fr24Configured ? t('flightProviderFr24Sub') : t('flightProviderFr24NeedsKey'),
                 },
               ] as Array<{
                 id: FlightProviderPreference;
@@ -861,7 +917,8 @@ export default function SettingsScreen() {
                 sub: string;
               }>).map(option => {
                 const selected = providerPreference === option.id;
-                const warn = option.id === 'airlabs' && !airLabsConfigured;
+                const warn = (option.id === 'airlabs' && !airLabsConfigured)
+                  || (option.id === 'fr24' && !fr24Configured);
                 return (
                   <TouchableOpacity
                     key={option.id}
@@ -943,6 +1000,60 @@ export default function SettingsScreen() {
                   activeOpacity={0.85}
                 >
                   {savingAirLabs
+                    ? <ActivityIndicator size={16} color="#fff" />
+                    : <Text style={[styles.modalBtnTxt, { color: '#fff' }]}>{t('save')}</Text>}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <View style={[styles.providerKeyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.providerKeyTop}>
+                <View style={[styles.providerOptionIcon, { backgroundColor: colors.primaryLight }]}>
+                  <MaterialIcons name="public" size={20} color={colors.primary} />
+                </View>
+                <View style={styles.providerOptionText}>
+                  <Text style={[styles.providerOptionTitle, { color: colors.text }]}>
+                    {t('fr24Key')}
+                  </Text>
+                  <Text style={[styles.providerOptionSub, { color: colors.textMuted }]}>
+                    {fr24Status}
+                  </Text>
+                </View>
+              </View>
+
+              <Text style={[styles.modalCopy, { color: colors.textMuted }]}>
+                {t('fr24ModalCopy')}
+              </Text>
+              <Text style={[styles.modalLabel, { color: colors.textMuted }]}>
+                {t('fr24ModalLabel')}
+              </Text>
+              <TextInput
+                value={fr24Input}
+                onChangeText={setFr24Input}
+                placeholder="API token"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+                style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.bg }]}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: '#DC2626' }, savingFr24 && { opacity: 0.6 }]}
+                  onPress={removeFr24Key}
+                  disabled={savingFr24}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.modalBtnTxt, { color: '#fff' }]}>{t('remove')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: colors.primary }, savingFr24 && { opacity: 0.6 }]}
+                  onPress={saveFr24Key}
+                  disabled={savingFr24}
+                  activeOpacity={0.85}
+                >
+                  {savingFr24
                     ? <ActivityIndicator size={16} color="#fff" />
                     : <Text style={[styles.modalBtnTxt, { color: '#fff' }]}>{t('save')}</Text>}
                 </TouchableOpacity>

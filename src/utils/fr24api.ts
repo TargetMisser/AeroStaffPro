@@ -14,7 +14,7 @@ import {
   type FlightScheduleProviderId,
   type FlightScheduleProviderStatus,
 } from './flightProviders';
-import { getAirLabsApiKey, getFlightProviderPreference } from './flightProviderSettings';
+import { getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
 
 const FETCH_TIMEOUT = 15000; // AirLabs live + route prediction can take a little longer on mobile networks.
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
@@ -135,11 +135,13 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
   let payload: Awaited<ReturnType<typeof fetchFlightScheduleFromProviders>>;
   try {
     const airLabsApiKey = await getAirLabsApiKey();
+    const fr24ApiKey = await getFr24ApiKey();
     const providerPreference = await getFlightProviderPreference();
     payload = await fetchFlightScheduleFromProviders({
       airportCode,
       airport,
       airLabsApiKey,
+      fr24ApiKey,
       signal: controller.signal,
     }, getFlightScheduleProviders(providerPreference));
     await saveCachedSchedule({
