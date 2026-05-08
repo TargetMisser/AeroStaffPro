@@ -952,15 +952,25 @@ export default function SettingsScreen() {
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
               {t('flightProviderKeysTitle')}
             </Text>
+            <Text style={[styles.providerSectionHelp, { color: colors.textMuted }]}>
+              {t('flightProviderKeysSub')}
+            </Text>
             <View style={[styles.providerKeyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.providerKeyTop}>
                 <View style={[styles.providerOptionIcon, { backgroundColor: colors.primaryLight }]}>
                   <MaterialIcons name="key" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.providerOptionText}>
-                  <Text style={[styles.providerOptionTitle, { color: colors.text }]}>
-                    {t('airLabsKey')}
-                  </Text>
+                  <View style={styles.providerKeyTitleRow}>
+                    <Text style={[styles.providerOptionTitle, { color: colors.text }]}>
+                      {t('airLabsKey')}
+                    </Text>
+                    <View style={[styles.providerKeyBadge, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.providerKeyBadgeText, { color: colors.primaryDark }]}>
+                        {t('flightProviderSchedulesBadge')}
+                      </Text>
+                    </View>
+                  </View>
                   <Text style={[styles.providerOptionSub, { color: colors.textMuted }]}>
                     {airLabsStatus}
                   </Text>
@@ -1012,9 +1022,16 @@ export default function SettingsScreen() {
                   <MaterialIcons name="public" size={20} color={colors.primary} />
                 </View>
                 <View style={styles.providerOptionText}>
-                  <Text style={[styles.providerOptionTitle, { color: colors.text }]}>
-                    {t('fr24Key')}
-                  </Text>
+                  <View style={styles.providerKeyTitleRow}>
+                    <Text style={[styles.providerOptionTitle, { color: colors.text }]}>
+                      {t('fr24Key')}
+                    </Text>
+                    <View style={[styles.providerKeyBadge, { backgroundColor: colors.primaryLight }]}>
+                      <Text style={[styles.providerKeyBadgeText, { color: colors.primaryDark }]}>
+                        {t('flightProviderLiveBadge')}
+                      </Text>
+                    </View>
+                  </View>
                   <Text style={[styles.providerOptionSub, { color: colors.textMuted }]}>
                     {fr24Status}
                   </Text>
@@ -1406,6 +1423,7 @@ const styles = StyleSheet.create({
   providerSubtitle: { fontSize: 13, lineHeight: 18, marginTop: 2 },
   providerContent: { padding: 16, paddingBottom: 42 },
   providerOptions: { gap: 10, marginBottom: 22 },
+  providerSectionHelp: { fontSize: 12, lineHeight: 17, marginTop: -2, marginBottom: 12, paddingHorizontal: 4 },
   providerOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1431,6 +1449,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   providerKeyTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  providerKeyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  providerKeyBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  providerKeyBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
   providerLinkGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   providerLinkBtn: {
     flexDirection: 'row',
