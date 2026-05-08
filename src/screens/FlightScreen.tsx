@@ -3,9 +3,11 @@ import {
   View, Text, StyleSheet, ActivityIndicator, Modal, ScrollView,
   FlatList, TouchableOpacity, RefreshControl, Image,
   Animated, PanResponder, NativeModules, Platform, Switch, Linking,
+  AccessibilityActionEvent,
 } from 'react-native';
 import { Easing } from 'react-native';
 import * as Calendar from 'expo-calendar';
+import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -328,15 +330,18 @@ const SWIPE_MAX_TRANSLATE = 96;
 const SWIPE_DRAG_RESISTANCE = 0.82;
 
 function SwipeableFlightCardComponent({
-  children, isPinned, onToggle,
+  children, isPinned, onToggle, t,
 }: {
   children: React.ReactNode;
   isPinned: boolean;
   onToggle: () => void;
+  t: (key: TranslationKey) => string;
 }) {
   const translateX = useRef(new Animated.Value(0)).current;
   const onToggleRef = useRef(onToggle);
   onToggleRef.current = onToggle;
+  const hasTriggeredHaptic = useRef(false);
+
   const dragScale = useMemo(() => translateX.interpolate({
     inputRange: [-SWIPE_MAX_TRANSLATE, 0],
     outputRange: [0.985, 1],
@@ -362,8 +367,16 @@ function SwipeableFlightCardComponent({
         ? Math.max(g.dx * SWIPE_DRAG_RESISTANCE, -SWIPE_MAX_TRANSLATE)
         : g.dx * 0.08;
       translateX.setValue(nextTranslate);
+
+      if (g.dx < -SWIPE_THRESHOLD && !hasTriggeredHaptic.current) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        hasTriggeredHaptic.current = true;
+      } else if (g.dx >= -SWIPE_THRESHOLD && hasTriggeredHaptic.current) {
+        hasTriggeredHaptic.current = false;
+      }
     },
     onPanResponderRelease: (_, g) => {
+      hasTriggeredHaptic.current = false;
       if (g.dx < -SWIPE_THRESHOLD || g.vx < -SWIPE_TRIGGER_VELOCITY) {
         Animated.timing(translateX, {
           toValue: -SWIPE_MAX_TRANSLATE,
@@ -371,6 +384,7 @@ function SwipeableFlightCardComponent({
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }).start(() => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
           onToggleRef.current();
           animateBack();
         });
@@ -383,9 +397,26 @@ function SwipeableFlightCardComponent({
     },
   }), [animateBack, translateX]);
 
+  const accessibilityActions = useMemo(() => [
+    { name: 'toggle_pin', label: isPinned ? t('flightAccessibilityUnpin') : t('flightAccessibilityPin') },
+  ], [isPinned, t]);
+
+  const onAccessibilityAction = useCallback((event: AccessibilityActionEvent) => {
+    if (event.nativeEvent.actionName === 'toggle_pin') {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      onToggleRef.current();
+    }
+  }, []);
+
   return (
     <View style={{ marginBottom: 10 }}>
-      <Animated.View style={{ transform: [{ translateX }, { scale: dragScale }] }} {...panResponder.panHandlers}>
+      <Animated.View
+        style={{ transform: [{ translateX }, { scale: dragScale }] }}
+        {...panResponder.panHandlers}
+        accessibilityActions={accessibilityActions}
+        onAccessibilityAction={onAccessibilityAction}
+        accessibilityHint={isPinned ? t('flightAccessibilityUnpinHint') : t('flightAccessibilityPinHint')}
+      >
         {children}
       </Animated.View>
     </View>
@@ -554,6 +585,7 @@ function FlightRowComponent({ item, activeTab, userShift, pinnedFlightId, onPin,
     <SwipeableFlightCard
       isPinned={isPinned}
       onToggle={() => isPinned ? onUnpin() : onPin(item)}
+      t={t}
     >
       <TouchableOpacity
         style={[s.card, isPinned && s.cardPinned, { marginBottom: 0 }]}
@@ -1622,7 +1654,10 @@ export default function FlightScreen() {
         </View>
         <TouchableOpacity
           style={[s.filterBtn, !allSelected && s.filterBtnActive]}
-          onPress={() => setFilterMenuVisible(true)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setFilterMenuVisible(true);
+          }}
           activeOpacity={0.8}
           accessibilityLabel={t('flightFilterTitle')}
           accessibilityRole="button"
@@ -1631,7 +1666,10 @@ export default function FlightScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.notifBtn, notifsEnabled && s.notifBtnActive]}
-          onPress={() => setNotifSettingsVisible(true)}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+            setNotifSettingsVisible(true);
+          }}
           activeOpacity={0.8}
           accessible
           accessibilityLabel={t('flightNotifSettingsTitle')}
@@ -1655,7 +1693,16 @@ export default function FlightScreen() {
         {/* Arrivi / Partenze */}
         <View style={s.segment}>
           {(['arrivals', 'departures'] as const).map(tab => (
-            <TouchableOpacity key={tab} style={[s.segBtn, activeTab === tab && s.segBtnActive]} onPress={() => setActiveTab(tab)}>
+            <TouchableOpacity
+              key={tab}
+              style={[s.segBtn, activeTab === tab && s.segBtnActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setActiveTab(tab);
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeTab === tab }}
+            >
               <Text style={[s.segBtnText, activeTab === tab && s.segBtnTextActive]}>{tab === 'arrivals' ? t('flightArrivals') : t('flightDepartures')}</Text>
             </TouchableOpacity>
           ))}
@@ -1663,7 +1710,16 @@ export default function FlightScreen() {
         {/* Oggi / Domani */}
         <View style={s.segment}>
           {(['today', 'tomorrow'] as const).map(d => (
-            <TouchableOpacity key={d} style={[s.segBtn, activeDay === d && s.segBtnActive]} onPress={() => setActiveDay(d)}>
+            <TouchableOpacity
+              key={d}
+              style={[s.segBtn, activeDay === d && s.segBtnActive]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+                setActiveDay(d);
+              }}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: activeDay === d }}
+            >
               <Text style={[s.segBtnText, activeDay === d && s.segBtnTextActive]}>{d === 'today' ? t('flightToday') : t('flightTomorrow')}</Text>
             </TouchableOpacity>
           ))}
