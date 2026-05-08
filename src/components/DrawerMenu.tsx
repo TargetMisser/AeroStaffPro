@@ -43,7 +43,7 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
         Animated.spring(slideAnim, {
           toValue: 0,
           ...motionSpring.panel,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(fadeAnim,  {
           toValue: 1,
@@ -58,7 +58,7 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
           toValue: -DRAWER_WIDTH,
           duration: motionDurations.normal,
           easing: motionEasing.exit,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(fadeAnim,  {
           toValue: 0,
@@ -81,7 +81,7 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
         </Animated.View>
 
         {/* Drawer */}
-        <Animated.View style={[styles.drawerWrapper, { transform: [{ translateX: slideAnim }] }]}>
+        <Animated.View style={[styles.drawerWrapper, { left: slideAnim }]}>
           <DrawerMenuPanel
             colors={colors}
             items={ITEMS}
@@ -100,9 +100,12 @@ function makeStyles(surfaceVariant: DrawerMenuSurfaceVariant) {
   const warmShadow = surfaceVariant === 'operations' ? '#14B8A6' : '#F97316';
 
   return StyleSheet.create({
-    root: { flex: 1, flexDirection: 'row' },
+    root: { flex: 1 },
     overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,5,0,0.55)' },
     drawerWrapper: {
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
       width: DRAWER_WIDTH,
       height: '100%',
       overflow: 'hidden',
