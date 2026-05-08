@@ -44,6 +44,11 @@ const TABS: AppTabBarItem[] = [
   { id: 'TravelDoc',icon: 'description',     label: 'TravelDoc'},
 ];
 
+const FOOTER_SWIPE_START_DISTANCE = 12;
+const FOOTER_SWIPE_DIRECTION_BIAS = 1.25;
+const FOOTER_SWIPE_SWITCH_DISTANCE_RATIO = 0.14;
+const FOOTER_SWIPE_SWITCH_VELOCITY = 0.5;
+
 const OVERLAY_TITLES: Record<NonNullable<OverlayScreen>, string> = {
   Notepad:   'Blocco Note',
   Phonebook: 'Rubrica',
@@ -133,7 +138,8 @@ function AppInner() {
 
   const swipePan = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) =>
-      Math.abs(g.dx) > 30 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      Math.abs(g.dx) > FOOTER_SWIPE_START_DISTANCE &&
+      Math.abs(g.dx) > Math.abs(g.dy) * FOOTER_SWIPE_DIRECTION_BIAS,
     onPanResponderMove: (_, g) => {
       if (overlayRef.current) return;
       const idx = activeIdxRef.current;
@@ -145,13 +151,15 @@ function AppInner() {
     onPanResponderRelease: (_, g) => {
       if (overlayRef.current) return;
       const idx = activeIdxRef.current;
-      const threshold = SCREEN_W * 0.25;
+      const threshold = SCREEN_W * FOOTER_SWIPE_SWITCH_DISTANCE_RATIO;
+      const shouldMoveNext = g.dx < -threshold || g.vx < -FOOTER_SWIPE_SWITCH_VELOCITY;
+      const shouldMovePrevious = g.dx > threshold || g.vx > FOOTER_SWIPE_SWITCH_VELOCITY;
 
-      if (g.dx < -threshold && idx < TABS.length - 1) {
+      if (shouldMoveNext && idx < TABS.length - 1) {
         Animated.timing(offsetX, {
           toValue: -(idx + 1) * SCREEN_W, duration: 150, useNativeDriver: true,
         }).start(() => goToTab(idx + 1, false));
-      } else if (g.dx > threshold && idx > 0) {
+      } else if (shouldMovePrevious && idx > 0) {
         Animated.timing(offsetX, {
           toValue: -(idx - 1) * SCREEN_W, duration: 150, useNativeDriver: true,
         }).start(() => goToTab(idx - 1, false));
