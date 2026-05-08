@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, StatusBar, PanResponder, Animated, Dimensions, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -21,6 +21,7 @@ import DesignLabScreen from './src/screens/DesignLabScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import AppTabBar, { type AppTabBarItem, type AppTabId } from './src/components/AppTabBar';
 import ProfileSwitcherModal from './src/components/ProfileSwitcherModal';
+import TactilePressable from './src/components/motion/TactilePressable';
 import {
   installGlobalCrashHandler,
   markRuntimeStartupCompleted,
@@ -29,6 +30,7 @@ import { autoScheduleNotifications } from './src/utils/autoNotifications';
 import { checkForUpdate, wasUpdateSeen, markUpdateSeen, type UpdateInfo } from './src/utils/updateChecker';
 import UpdateModal from './src/components/UpdateModal';
 import { useAirport } from './src/context/AirportContext';
+import { motionSpring } from './src/utils/motion';
 
 installGlobalCrashHandler();
 
@@ -108,10 +110,25 @@ function AppInner() {
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
 
-  const goToTab = (newIdx: number) => {
+  const setTabIndex = (newIdx: number) => {
     activeIdxRef.current = newIdx;
-    offsetX.setValue(-newIdx * SCREEN_W);
     setActiveTab(TABS[newIdx].id);
+  };
+
+  const goToTab = (newIdx: number, animated = true) => {
+    setTabIndex(newIdx);
+    const targetOffset = -newIdx * SCREEN_W;
+
+    if (!animated) {
+      offsetX.setValue(targetOffset);
+      return;
+    }
+
+    Animated.spring(offsetX, {
+      toValue: targetOffset,
+      ...motionSpring.panel,
+      useNativeDriver: true,
+    }).start();
   };
 
   const swipePan = useMemo(() => PanResponder.create({
@@ -133,11 +150,11 @@ function AppInner() {
       if (g.dx < -threshold && idx < TABS.length - 1) {
         Animated.timing(offsetX, {
           toValue: -(idx + 1) * SCREEN_W, duration: 150, useNativeDriver: true,
-        }).start(() => goToTab(idx + 1));
+        }).start(() => goToTab(idx + 1, false));
       } else if (g.dx > threshold && idx > 0) {
         Animated.timing(offsetX, {
           toValue: -(idx - 1) * SCREEN_W, duration: 150, useNativeDriver: true,
-        }).start(() => goToTab(idx - 1));
+        }).start(() => goToTab(idx - 1, false));
       } else {
         Animated.spring(offsetX, {
           toValue: -idx * SCREEN_W, useNativeDriver: true, tension: 120, friction: 10,
@@ -169,6 +186,7 @@ function AppInner() {
 
   const appBarTitle = overlay ? overlayTitles[overlay] : 'AeroStaff Pro';
   const surfaceVariant = mode === 'operations' ? 'operations' : 'solid';
+  const isOperations = mode === 'operations';
   const tabInactiveColor = mode === 'operations'
     ? colors.tabIconInactive
     : colors.isDark
@@ -189,28 +207,38 @@ function AppInner() {
         style={[styles.appBar, { borderBottomColor: colors.glassBorder }]}
       >
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.appBar }]} />
+        {isOperations && (
+          <LinearGradient
+            colors={['rgba(45,212,191,0.18)', 'rgba(2,8,12,0.00)', 'rgba(45,212,191,0.08)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+        )}
         {overlay ? (
-          <TouchableOpacity onPress={handleBack} style={styles.iconBtn}>
+          <TactilePressable onPress={handleBack} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection">
             <MaterialIcons name="arrow-back" size={22} color={colors.primaryDark} />
-          </TouchableOpacity>
+          </TactilePressable>
         ) : (
-          <TouchableOpacity onPress={() => setDrawerOpen(true)} style={styles.iconBtn}>
+          <TactilePressable onPress={() => setDrawerOpen(true)} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection">
             <MaterialIcons name="menu" size={24} color={colors.primaryDark} />
-          </TouchableOpacity>
+          </TactilePressable>
         )}
         <View style={styles.titleRow}>
           <Text style={[styles.appBarTitle, { color: colors.text }]}>{appBarTitle}</Text>
         </View>
-        <TouchableOpacity onPress={() => setProfileModalOpen(true)} activeOpacity={0.85}>
+        <TactilePressable onPress={() => setProfileModalOpen(true)} depth={3} pressedScale={0.94} haptic="selection">
           <LinearGradient
             colors={[colors.primaryLight, colors.primary]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.avatar}
+            style={[styles.avatar, isOperations && styles.avatarOperations]}
           >
             <Text style={styles.avatarText}>{profileInitials}</Text>
           </LinearGradient>
-        </TouchableOpacity>
+        </TactilePressable>
+        {isOperations && <View style={styles.appBarRail} pointerEvents="none" />}
       </ExpoBlurView>
 
       {/* Screen Content */}
@@ -301,7 +329,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
     overflow: 'hidden',
   },
+  avatarOperations: {
+    borderWidth: 1,
+    borderColor: 'rgba(153,246,228,0.42)',
+    shadowColor: '#2DD4BF',
+    shadowOpacity: 0.24,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 8,
+  },
   avatarText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  appBarRail: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 1,
+    backgroundColor: 'rgba(45,212,191,0.34)',
+  },
   content: { flex: 1 },
   // ─── Glassmorphic floating tab bar ───
   tabBarWrapper: {

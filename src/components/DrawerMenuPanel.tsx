@@ -1,10 +1,12 @@
 import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type ThemeColors } from '../context/ThemeContext';
 import AeroStaffLogo from './AeroStaffLogo';
 import FrostedSurface from './FrostedSurface';
+import BoardReveal from './motion/BoardReveal';
+import TactilePressable from './motion/TactilePressable';
 
 export type DrawerItem = {
   id: string;
@@ -134,9 +136,9 @@ export default function DrawerMenuPanel({
               <Text style={styles.opsTitle}>Operations</Text>
             </View>
           </View>
-          <TouchableOpacity onPress={onClose} style={styles.opsClose}>
+          <TactilePressable onPress={onClose} animatedStyle={styles.opsClose} depth={2} pressedScale={0.94} haptic="selection">
             <MaterialIcons name="close" size={18} color="rgba(204,251,241,0.72)" />
-          </TouchableOpacity>
+          </TactilePressable>
         </View>
       ) : (
         <LinearGradient
@@ -146,9 +148,9 @@ export default function DrawerMenuPanel({
           style={styles.headerGradient}
         >
           <AeroStaffLogo variant="large" monochrome />
-          <TouchableOpacity onPress={onClose} style={styles.closeIconBtn}>
+          <TactilePressable onPress={onClose} animatedStyle={styles.closeIconBtn} depth={2} pressedScale={0.94} haptic="selection">
             <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.72)" />
-          </TouchableOpacity>
+          </TactilePressable>
         </LinearGradient>
       )}
 
@@ -159,24 +161,33 @@ export default function DrawerMenuPanel({
 
       <View style={styles.items}>
         {items.map((item, index) => (
-          <TouchableOpacity
+          <BoardReveal
             key={item.id}
-            style={styles.item}
-            onPress={() => { onSelect(item.id); onClose(); }}
-            activeOpacity={0.7}
+            index={index}
+            enabled
           >
-            {surface.isOperations && (
-              <Text style={styles.itemIndex}>{String(index + 1).padStart(2, '0')}</Text>
-            )}
-            <View style={styles.itemIcon}>
-              <MaterialIcons name={item.icon} size={22} color={surface.accentColor} />
-            </View>
-            <View style={styles.itemCopy}>
-              <Text style={styles.itemLabel}>{item.label}</Text>
-              <Text style={styles.itemSub}>{item.sublabel}</Text>
-            </View>
-            <MaterialIcons name="chevron-right" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
+            <TactilePressable
+              animatedStyle={styles.item}
+              depth={surface.isOperations ? 4 : 3}
+              pressedScale={0.975}
+              haptic="selection"
+              onPress={() => { onSelect(item.id); onClose(); }}
+              accessibilityRole="button"
+              accessibilityLabel={item.label}
+            >
+              {surface.isOperations && (
+                <Text style={styles.itemIndex}>{String(index + 1).padStart(2, '0')}</Text>
+              )}
+              <View style={styles.itemIcon}>
+                <MaterialIcons name={item.icon} size={22} color={surface.accentColor} />
+              </View>
+              <View style={styles.itemCopy}>
+                <Text style={styles.itemLabel}>{item.label}</Text>
+                <Text style={styles.itemSub}>{item.sublabel}</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={18} color={colors.textMuted} />
+            </TactilePressable>
+          </BoardReveal>
         ))}
       </View>
 

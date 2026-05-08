@@ -50,6 +50,7 @@ build_error_detail.txt
 config_err.txt
 err.txt
 test_cli.js
+storybook-preview.log
 
 # generated native folders
 /ios
