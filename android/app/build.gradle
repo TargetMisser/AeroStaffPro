@@ -105,8 +105,8 @@ android {
         applicationId 'com.aerostaffpro.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 56
-        versionName "2.6.50"
+        versionCode 57
+        versionName "2.6.51"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
     }
