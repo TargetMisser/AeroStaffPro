@@ -389,7 +389,7 @@ function SwipeableFlightCardComponent({
   }), [animateBack, translateX]);
 
   return (
-    <View style={{ marginBottom: 10 }}>
+    <View style={{ marginBottom: 18 }}>
       <Animated.View style={{ transform: [{ translateX }, { scale: dragScale }] }} {...panResponder.panHandlers}>
         {children}
       </Animated.View>
@@ -1673,7 +1673,11 @@ export default function FlightScreen() {
           data={currentData}
           keyExtractor={(item, i) => item.flight?.identification?.id || String(i)}
           renderItem={renderFlight}
-          contentContainerStyle={{ padding: 16, paddingBottom: 96 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 18,
+            paddingBottom: isOperations ? 176 : 120,
+          }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(); }} tintColor={colors.primary} />}
           ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 40, color: '#9CA3AF', fontSize: 15 }}>{t('flightNoFlights')}</Text>}
           showsVerticalScrollIndicator={false}
@@ -1968,7 +1972,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
     controlsRow: { flexDirection: 'row', gap: 8, padding: 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
-    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
+    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: 10, marginBottom: 8, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
     sourceBadgeText: { fontSize: 11, fontWeight: '800', color: c.primaryDark },
     segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     segBtn: { flex: 1, paddingVertical: 7, alignItems: 'center', borderRadius: isOperations ? 11 : 6 },
