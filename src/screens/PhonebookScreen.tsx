@@ -421,7 +421,7 @@ export default function PhonebookScreen() {
           autoCorrect={false}
         />
         {!!search && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Chiudi / Close" accessible>
             <MaterialIcons name="close" size={18} color={colors.textSub} />
           </TouchableOpacity>
         )}
