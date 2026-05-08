@@ -12,6 +12,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import BoardReveal from '../components/motion/BoardReveal';
 import CockpitFlightProgress from '../components/motion/CockpitFlightProgress';
 import TactilePressable from '../components/motion/TactilePressable';
+import ValueChangeFlash from '../components/motion/ValueChangeFlash';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
@@ -582,23 +583,35 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
               <Text style={s.headerAirlineName}>{airline}</Text>
             </View>
           </View>
-          <View>
+          <ValueChangeFlash
+            valueKey={`${time}|${originDest}`}
+            enabled={isOperations}
+            style={s.headerMetaFlash}
+          >
             <Text style={s.headerTime}>{time}</Text>
             <Text style={s.headerDest}>{originDest}</Text>
-          </View>
+          </ValueChangeFlash>
         </View>
         {/* Body */}
         <View style={s.cardBody}>
           {activeTab === 'departures' && ops ? (
             <View style={s.opsRow}>
-              <Animated.View style={[s.opsBadge, checkinPulseStyle]}>
+              <ValueChangeFlash
+                valueKey={`${fmt(ops.checkInOpen)}|${fmt(ops.checkInClose)}`}
+                enabled={isOperations}
+                style={[s.opsBadge, checkinPulseStyle]}
+              >
                 <MaterialIcons name="desktop-windows" size={16} color={colors.primary} />
                 <View>
                   <Text style={s.opsLabel}>{t('flightCheckin')}</Text>
                   <Text style={s.opsTime}>{fmt(ops.checkInOpen)} – {fmt(ops.checkInClose)}</Text>
                 </View>
-              </Animated.View>
-              <Animated.View style={[s.opsBadge, gatePulseStyle]}>
+              </ValueChangeFlash>
+              <ValueChangeFlash
+                valueKey={`${gateOpenFromInbound ? fmtTs(gateOpenFromInbound) : fmt(ops.gateOpen)}|${fmt(ops.gateClose)}`}
+                enabled={isOperations}
+                style={[s.opsBadge, gatePulseStyle]}
+              >
                 <MaterialIcons name="meeting-room" size={16} color={colors.primary} />
                 <View>
                   <Text style={s.opsLabel}>{t('flightGate')}</Text>
@@ -606,7 +619,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
                     {gateOpenFromInbound ? fmtTs(gateOpenFromInbound) : fmt(ops.gateOpen)} – {fmt(ops.gateClose)}
                   </Text>
                 </View>
-              </Animated.View>
+              </ValueChangeFlash>
             </View>
           ) : activeTab === 'arrivals' && ts ? (() => {
             const realDep = item.flight?.time?.real?.departure;
@@ -625,7 +638,11 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
 
             return (
               <View style={s.opsRow}>
-                <View style={s.opsBadge}>
+                <ValueChangeFlash
+                  valueKey={departed ? fmtTs(realDep) : '--:--'}
+                  enabled={isOperations}
+                  style={s.opsBadge}
+                >
                   <MaterialIcons name="flight-takeoff" size={16} color={departed ? colors.primary : '#6B7280'} />
                   <View>
                     <Text style={s.opsLabel}>{t('flightDeparted')}</Text>
@@ -633,14 +650,18 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
                       {departed ? fmtTs(realDep) : '--:--'}
                     </Text>
                   </View>
-                </View>
-                <View style={s.opsBadge}>
+                </ValueChangeFlash>
+                <ValueChangeFlash
+                  valueKey={`${landLabel}|${fmtTs(bestArr)}`}
+                  enabled={isOperations}
+                  style={s.opsBadge}
+                >
                   <MaterialIcons name="flight-land" size={16} color={landColor} />
                   <View>
                     <Text style={[s.opsLabel, { color: landColor }]}>{landLabel}</Text>
                     <Text style={[s.opsTime, { color: landColor }]}>{fmtTs(bestArr)}</Text>
                   </View>
-                </View>
+                </ValueChangeFlash>
               </View>
             );
           })() : (
@@ -667,38 +688,38 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             const dText = isLanded ? 'Atterrato' : dMin > 0 ? `+${dMin} min` : 'In orario';
             const dColor = isLanded ? '#10B981' : dMin > 20 ? '#EF4444' : dMin > 5 ? '#F59E0B' : '#10B981';
             return (
-              <View style={[s.statusPill, { backgroundColor: dColor + '22' }]}>
+              <ValueChangeFlash valueKey={dText} enabled={isOperations} style={[s.statusPill, { backgroundColor: dColor + '22' }]}>
                 <Text style={[s.statusText, { color: dColor }]}>{dText}</Text>
-              </View>
+              </ValueChangeFlash>
             );
           })() : (
-            <View style={[s.statusPill, { backgroundColor: statusColor + '22' }]}>
+            <ValueChangeFlash valueKey={statusText} enabled={isOperations} style={[s.statusPill, { backgroundColor: statusColor + '22' }]}>
               <Text style={[s.statusText, { color: statusColor }]}>{statusText}</Text>
-            </View>
+            </ValueChangeFlash>
           )}
         </View>
         {/* StaffMonitor footer — inside card so border-radius applies */}
         <View style={s.smFooter}>
-          <View style={s.smPill}>
+          <ValueChangeFlash valueKey={standLabel} enabled={isOperations} style={s.smPill}>
             <MaterialIcons name="local-parking" size={11} color={colors.primary} />
             <Text style={s.smPillText}>Stand {standLabel}</Text>
-          </View>
+          </ValueChangeFlash>
           {activeTab === 'departures' ? (
             <>
-              <View style={s.smPill}>
+              <ValueChangeFlash valueKey={checkinLabel} enabled={isOperations} style={s.smPill}>
                 <MaterialIcons name="desktop-windows" size={11} color={colors.primary} />
                 <Text style={s.smPillText}>{t('flightCheckin')} {checkinLabel}</Text>
-              </View>
-              <View style={s.smPill}>
+              </ValueChangeFlash>
+              <ValueChangeFlash valueKey={gateLabel} enabled={isOperations} style={s.smPill}>
                 <MaterialIcons name="meeting-room" size={11} color={colors.primary} />
                 <Text style={s.smPillText}>{t('flightGate')} {gateLabel}</Text>
-              </View>
+              </ValueChangeFlash>
             </>
           ) : (
-            <View style={s.smPill}>
+            <ValueChangeFlash valueKey={beltLabel} enabled={isOperations} style={s.smPill}>
               <MaterialIcons name="luggage" size={11} color={colors.primary} />
               <Text style={s.smPillText}>{t('flightBelt')} {beltLabel}</Text>
-            </View>
+            </ValueChangeFlash>
           )}
         </View>
         </TactilePressable>
@@ -1992,6 +2013,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
     headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
+    headerMetaFlash: { alignItems: 'flex-end', borderRadius: 12, marginRight: -8, paddingHorizontal: 8, paddingVertical: 4 },
     headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 19 : 18, lineHeight: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
     headerDest: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
     cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 12 : 10, paddingHorizontal: 14, backgroundColor: operationPanel },
