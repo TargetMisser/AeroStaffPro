@@ -1282,6 +1282,18 @@ export default function SettingsScreen() {
                   </View>
 
                   <Text style={[styles.modalLabel, { color: colors.textMuted }]}>
+                    {t('notificationDebugPendingList')}
+                  </Text>
+                  <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>
+                    {notificationDebug.pendingRequests.length > 0
+                      ? notificationDebug.pendingRequests
+                        .slice(0, 8)
+                        .map(item => `${item.kind}/${item.type} · ${item.flightNumber}\n${item.trigger}\n${item.dedupeKey}`)
+                        .join('\n\n')
+                      : t('notificationDebugNoPending')}
+                  </Text>
+
+                  <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
                     {t('notificationDebugDuplicateList')}
                   </Text>
                   <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>

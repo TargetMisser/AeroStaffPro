@@ -4,7 +4,7 @@ import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines } from '../utils/airportSettings';
-import { getBestDepartureTs } from '../utils/flightTimes';
+import { getFlightBestTs } from '../utils/flightScheduleAdapter';
 import { ShiftWidget } from './ShiftWidget';
 import { getStoredWidgetThemeProps } from './widgetTheme';
 
@@ -190,7 +190,7 @@ async function fetchFreshWidgetData(): Promise<WidgetData> {
 
     const wFlights: WidgetFlight[] = filteredDeps
       .filter(item => {
-        const ts = getBestDepartureTs(item);
+        const ts = getFlightBestTs(item, 'departure');
         if (ts == null) return false;
         const airline = item.flight?.airline?.name || '';
         const ops = getAirlineOps(airline);
@@ -199,7 +199,7 @@ async function fetchFreshWidgetData(): Promise<WidgetData> {
         return (ciO <= activeShift.end && ciC >= activeShift.start) || (gO <= activeShift.end && gC >= activeShift.start);
       })
       .map(item => {
-        const ts = getBestDepartureTs(item)!;
+        const ts = getFlightBestTs(item, 'departure')!;
         const airline = item.flight?.airline?.name || 'Sconosciuta';
         const ops = getAirlineOps(airline);
         const fn = item.flight?.identification?.number?.default || 'N/A';

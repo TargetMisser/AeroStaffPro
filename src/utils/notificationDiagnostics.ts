@@ -42,6 +42,17 @@ export type NotificationDuplicateGroup = {
   titles: string[];
 };
 
+export type NotificationPendingRequest = {
+  identifier: string;
+  kind: 'shift' | 'pinned';
+  type: string;
+  flightNumber: string;
+  dedupeKey: string;
+  title: string;
+  body: string;
+  trigger: string;
+};
+
 export type NotificationDebugSnapshot = {
   enabled: boolean;
   savedShiftIds: number;
@@ -51,6 +62,7 @@ export type NotificationDebugSnapshot = {
   pendingShift: number;
   pendingPinned: number;
   possibleDuplicates: NotificationDuplicateGroup[];
+  pendingRequests: NotificationPendingRequest[];
   lastScheduleDay: string | null;
   lastEvents: NotificationDebugEvent[];
 };
@@ -116,6 +128,44 @@ function buildDuplicateKey(request: Notifications.NotificationRequest, kind: 'sh
   return `${kind}:${type}:${flightNumber}:${ts}`;
 }
 
+function summarizeTrigger(trigger: unknown): string {
+  if (!trigger || typeof trigger !== 'object') {
+    return 'n/d';
+  }
+
+  const raw = trigger as Record<string, unknown>;
+  const type = safeString(raw.type) ?? 'trigger';
+  const seconds = safeNumber(raw.seconds);
+  const date = raw.date;
+  if (seconds !== null) {
+    return `${type} +${Math.round(seconds)}s`;
+  }
+  if (typeof date === 'number' && Number.isFinite(date)) {
+    return `${type} ${new Date(date).toLocaleString('it-IT')}`;
+  }
+  if (date instanceof Date) {
+    return `${type} ${date.toLocaleString('it-IT')}`;
+  }
+  return type;
+}
+
+function buildPendingRequest(
+  request: Notifications.NotificationRequest,
+  kind: 'shift' | 'pinned',
+): NotificationPendingRequest {
+  const data = getData(request);
+  return {
+    identifier: request.identifier,
+    kind,
+    type: safeString(data.type) ?? 'unknown',
+    flightNumber: safeString(data.flightNumber) ?? 'shift',
+    dedupeKey: buildDuplicateKey(request, kind),
+    title: safeString(request.content?.title) ?? '',
+    body: safeString(request.content?.body) ?? '',
+    trigger: summarizeTrigger(request.trigger),
+  };
+}
+
 async function readStringArray(key: string): Promise<string[]> {
   try {
     const raw = await AsyncStorage.getItem(key);
@@ -138,6 +188,36 @@ async function cancelIds(ids: string[]): Promise<number> {
     } catch {}
   }
   return cancelled;
+}
+
+let notificationScheduleTail: Promise<void> = Promise.resolve();
+
+export async function runNotificationScheduleExclusive<T>(
+  source: NotificationDebugSource,
+  label: string,
+  work: () => Promise<T>,
+): Promise<T> {
+  const previous = notificationScheduleTail;
+  let release!: () => void;
+  notificationScheduleTail = new Promise<void>(resolve => {
+    release = resolve;
+  });
+
+  await previous.catch(() => {});
+
+  try {
+    return await work();
+  } catch (error) {
+    await appendNotificationDebugEvent({
+      source,
+      type: 'scheduler_error',
+      message: `Notification scheduler failed: ${label}`,
+      meta: { error: error instanceof Error ? error.message : String(error) },
+    });
+    throw error;
+  } finally {
+    release();
+  }
 }
 
 export async function appendNotificationDebugEvent(event: Omit<NotificationDebugEvent, 'at'>) {
@@ -220,6 +300,52 @@ export async function cancelAeroStaffScheduledNotifications(scope: NotificationC
   return cancelled;
 }
 
+export async function dedupeAeroStaffScheduledNotifications(scope: {
+  includeShift?: boolean;
+  includePinned?: boolean;
+  reason: string;
+  source: NotificationDebugSource;
+}): Promise<number> {
+  const pending = await Notifications.getAllScheduledNotificationsAsync().catch(() => []);
+  const candidates = getAeroStaffRequests(pending).filter(item =>
+    (item.kind === 'shift' && scope.includeShift !== false)
+    || (item.kind === 'pinned' && scope.includePinned !== false),
+  );
+  const groups = new Map<string, Array<{ request: Notifications.NotificationRequest; kind: 'shift' | 'pinned' }>>();
+
+  for (const item of candidates) {
+    const key = buildDuplicateKey(item.request, item.kind);
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+
+  const duplicateIds: string[] = [];
+  for (const group of groups.values()) {
+    if (group.length <= 1) continue;
+    const [, ...duplicates] = group;
+    duplicateIds.push(...duplicates.map(item => item.request.identifier));
+  }
+
+  const cancelled = await cancelIds(duplicateIds);
+  if (cancelled > 0) {
+    await appendNotificationDebugEvent({
+      source: scope.source,
+      type: 'dedupe',
+      message: `Removed duplicate scheduled notifications: ${scope.reason}`,
+      cancelled,
+      pending: pending.length,
+      meta: {
+        duplicateGroups: Array.from(groups.entries())
+          .filter(([, group]) => group.length > 1)
+          .map(([key, group]) => ({ key, count: group.length })),
+      },
+    });
+  }
+
+  return cancelled;
+}
+
 export async function getNotificationDebugSnapshot(): Promise<NotificationDebugSnapshot> {
   const [
     enabledRaw,
@@ -270,6 +396,9 @@ export async function getNotificationDebugSnapshot(): Promise<NotificationDebugS
         count: value.count,
         titles: Array.from(value.titles).slice(0, 3),
       })),
+    pendingRequests: aeroStaff
+      .map(item => buildPendingRequest(item.request, item.kind))
+      .slice(0, 20),
     lastScheduleDay,
     lastEvents,
   };

@@ -27,23 +27,32 @@ import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
+import {
+  compareFlightsChronologically,
+  mergeFlightLists,
+  pruneExpiredFlights,
+} from '../utils/flightScheduleAdapter';
+import {
+  loadFlightScreenCache,
+  saveFlightScreenCache,
+} from '../utils/flightScreenCache';
 import { triggerMotionHaptic } from '../utils/motion';
 import {
   appendNotificationDebugEvent,
   buildNotificationData,
   cancelAeroStaffScheduledNotifications,
+  dedupeAeroStaffScheduledNotifications,
   NOTIF_ENABLED_KEY,
   NOTIF_IDS_KEY,
   NOTIF_SETTINGS_KEY,
   PINNED_NOTIF_IDS_KEY,
+  runNotificationScheduleExclusive,
 } from '../utils/notificationDiagnostics';
 
 const WearDataSender = Platform.OS === 'android' ? NativeModules.WearDataSender : null;
 
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const FLIGHT_FILTER_KEY = 'aerostaff_flight_filter_v1';
-const FLIGHTS_CACHE_KEY = 'aerostaff_flights_cache_v2';
-const FLIGHTS_RETENTION_SECONDS = 60 * 60;
 const MIN_NOTIF_MINUTES = 1;
 const MAX_NOTIF_MINUTES = 90;
 type FlightAlertTone = 'success' | 'warning' | 'info';
@@ -134,45 +143,6 @@ function shouldNotifyAirline(
     return false;
   }
   return selectedAirlines.some(key => airline.includes(normalizeAirlineKey(key)));
-}
-
-function flightKey(item: any, tsField: string): string {
-  // Use flight number + scheduled time as a stable key.
-  // Avoid using identification.id: FR24 sometimes omits it, which would cause
-  // the same flight to be stored under two different keys (one per fetch).
-  const fn = item.flight?.identification?.number?.default ?? '';
-  const ts = item.flight?.time?.scheduled?.[tsField] ?? '';
-  return `${fn}_${ts}`;
-}
-
-function mergeFlights(cached: any[], fresh: any[], tsField: string): any[] {
-  const map = new Map<string, any>();
-  for (const item of cached) map.set(flightKey(item, tsField), item);
-  for (const item of fresh) map.set(flightKey(item, tsField), item);
-  return Array.from(map.values());
-}
-
-function pruneExpiredFlights(items: any[], tsField: string, nowSeconds = Date.now() / 1000): any[] {
-  const cutoff = nowSeconds - FLIGHTS_RETENTION_SECONDS;
-  return items.filter(item => {
-    const ts = item.flight?.time?.real?.[tsField]
-      || item.flight?.time?.estimated?.[tsField]
-      || item.flight?.time?.scheduled?.[tsField];
-    if (!ts) return true;
-    return ts >= cutoff;
-  });
-}
-
-function compareFlightsChronologically(tsField: 'arrival' | 'departure') {
-  return (left: any, right: any): number => {
-    const leftTs = left.flight?.time?.scheduled?.[tsField] ?? Number.MAX_SAFE_INTEGER;
-    const rightTs = right.flight?.time?.scheduled?.[tsField] ?? Number.MAX_SAFE_INTEGER;
-    if (leftTs !== rightTs) return leftTs - rightTs;
-
-    const leftNumber = left.flight?.identification?.number?.default ?? '';
-    const rightNumber = right.flight?.identification?.number?.default ?? '';
-    return leftNumber.localeCompare(rightNumber);
-  };
 }
 
 function sameAirlineKeys(left: string[], right: string[]): boolean {
@@ -823,10 +793,11 @@ async function scheduleShiftNotifications(
   settings: FlightNotificationSettings,
   selectedAirlines: string[],
 ): Promise<number> {
-  await cancelPreviousNotifications('flight shift reschedule', false);
-  const now = Date.now() / 1000;
-  const newIds: string[] = [];
-  const canNotify = (item: any) => shouldNotifyAirline(item, settings, selectedAirlines);
+  return runNotificationScheduleExclusive('flights', 'shift notification schedule', async () => {
+    await cancelPreviousNotifications('flight shift reschedule', false);
+    const now = Date.now() / 1000;
+    const newIds: string[] = [];
+    const canNotify = (item: any) => shouldNotifyAirline(item, settings, selectedAirlines);
 
   if (settings.includeArrivals) {
     for (const item of shiftArrivals) {
@@ -921,20 +892,27 @@ async function scheduleShiftNotifications(
     }
   }
 
-  await AsyncStorage.setItem(NOTIF_IDS_KEY, JSON.stringify(newIds));
-  await appendNotificationDebugEvent({
-    source: 'flights',
-    type: 'schedule',
-    message: 'Flight tab scheduled shift notifications.',
-    scheduled: newIds.length,
-    meta: {
-      arrivals: shiftArrivals.length,
-      departures: shiftDepartures.length,
-      selectedAirlines: selectedAirlines.length,
-      settings,
-    },
+    await AsyncStorage.setItem(NOTIF_IDS_KEY, JSON.stringify(newIds));
+    await dedupeAeroStaffScheduledNotifications({
+      includeShift: true,
+      includePinned: false,
+      reason: 'flight shift schedule complete',
+      source: 'flights',
+    });
+    await appendNotificationDebugEvent({
+      source: 'flights',
+      type: 'schedule',
+      message: 'Flight tab scheduled shift notifications.',
+      scheduled: newIds.length,
+      meta: {
+        arrivals: shiftArrivals.length,
+        departures: shiftDepartures.length,
+        selectedAirlines: selectedAirlines.length,
+        settings,
+      },
+    });
+    return newIds.length;
   });
-  return newIds.length;
 }
 
 async function cancelPinnedNotifications(reason = 'pinned flight reschedule', logEmpty = false) {
@@ -953,9 +931,10 @@ async function schedulePinnedNotifications(
   locale: string,
   settings: FlightNotificationSettings,
 ): Promise<void> {
-  await cancelPinnedNotifications('pinned flight reschedule', false);
-  const now = Date.now() / 1000;
-  const ids: string[] = [];
+  return runNotificationScheduleExclusive('pinned', 'pinned flight notification schedule', async () => {
+    await cancelPinnedNotifications('pinned flight reschedule', false);
+    const now = Date.now() / 1000;
+    const ids: string[] = [];
 
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
@@ -1029,15 +1008,22 @@ async function schedulePinnedNotifications(
     }
   }
 
-  if (ids.length > 0) {
-    await AsyncStorage.setItem(PINNED_NOTIF_IDS_KEY, JSON.stringify(ids));
-  }
-  await appendNotificationDebugEvent({
-    source: 'pinned',
-    type: 'schedule',
-    message: 'Flight tab scheduled pinned-flight notifications.',
-    scheduled: ids.length,
-    meta: { flightNumber, tab, sticky: settings.sticky },
+    if (ids.length > 0) {
+      await AsyncStorage.setItem(PINNED_NOTIF_IDS_KEY, JSON.stringify(ids));
+    }
+    await dedupeAeroStaffScheduledNotifications({
+      includeShift: false,
+      includePinned: true,
+      reason: 'pinned flight schedule complete',
+      source: 'pinned',
+    });
+    await appendNotificationDebugEvent({
+      source: 'pinned',
+      type: 'schedule',
+      message: 'Flight tab scheduled pinned-flight notifications.',
+      scheduled: ids.length,
+      meta: { flightNumber, tab, sticky: settings.sticky },
+    });
   });
 }
 
@@ -1107,25 +1093,24 @@ export default function FlightScreen() {
         setNotifSettings(next);
       } catch {}
     });
-    // Carica voli accumulati oggi così sono visibili prima del primo fetch
-    const today = new Date().toISOString().split('T')[0];
-    AsyncStorage.getItem(FLIGHTS_CACHE_KEY).then(raw => {
-      if (!raw) return;
-      try {
-        const cache = JSON.parse(raw);
-        if (cache.date === today) {
-          setAllArrivalsFull(cache.arrivals ?? []);
-          setAllDeparturesFull(cache.departures ?? []);
-          if (cache.sourceLabel && cache.fetchedAt) {
-            setFlightDataSource({
-              sourceLabel: cache.sourceLabel,
-              fetchedAt: cache.fetchedAt,
-            });
-          }
-        }
-      } catch {}
-    });
   }, []);
+
+  // Carica voli recenti per aeroporto così oggi/domani restano visibili anche prima del fetch.
+  useEffect(() => {
+    let active = true;
+    loadFlightScreenCache(airportCode).then(cache => {
+      if (!active || !cache) return;
+      setAllArrivalsFull(cache.arrivals);
+      setAllDeparturesFull(cache.departures);
+      setFlightDataSource({
+        sourceLabel: cache.sourceLabel,
+        fetchedAt: cache.fetchedAt,
+      });
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [airportCode]);
 
   // Carica lista compagnie per aeroporto + selezione salvata
   useEffect(() => {
@@ -1198,18 +1183,15 @@ export default function FlightScreen() {
         applySelectedAirlines(nextAirportAirlines);
       }
       // Accumula voli: fonde i dati freschi con quelli in cache e conserva solo
-      // i voli non più vecchi di 1 ora dall'orario schedulato.
+      // i voli non più vecchi di 1 ora dall'orario migliore disponibile.
       let cachedArrs: any[] = [], cachedDeps: any[] = [];
       try {
-        const raw = await AsyncStorage.getItem(FLIGHTS_CACHE_KEY);
-        if (raw) {
-          const cache = JSON.parse(raw);
-          cachedArrs = Array.isArray(cache.arrivals) ? cache.arrivals : [];
-          cachedDeps = Array.isArray(cache.departures) ? cache.departures : [];
-        }
+        const cache = await loadFlightScreenCache(airportCode);
+        cachedArrs = cache?.arrivals ?? [];
+        cachedDeps = cache?.departures ?? [];
       } catch {}
-      const mergedArrs = pruneExpiredFlights(mergeFlights(cachedArrs, allArrivals, 'arrival'), 'arrival');
-      const mergedDeps = pruneExpiredFlights(mergeFlights(cachedDeps, allDepartures, 'departure'), 'departure');
+      const mergedArrs = pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival');
+      const mergedDeps = pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure');
       const sourceState: FlightDataSourceState = {
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
@@ -1217,14 +1199,13 @@ export default function FlightScreen() {
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);
       setFlightDataSource(sourceState);
-      AsyncStorage.setItem(FLIGHTS_CACHE_KEY, JSON.stringify({
-        date: new Date().toISOString().split('T')[0],
+      saveFlightScreenCache({
         airportCode,
         arrivals: mergedArrs,
         departures: mergedDeps,
         sourceLabel: sourceState.sourceLabel,
         fetchedAt: sourceState.fetchedAt,
-      })).catch(() => {});
+      }).catch(() => {});
 
       // Build inbound arrival map: registration → best known arrival timestamp
       const inboundMap: Record<string, number> = {};

@@ -9,8 +9,14 @@
     "web": "expo start --web",
     "storybook": "cross-env EXPO_PUBLIC_STORYBOOK_ENABLED=true expo start --clear",
     "typecheck": "tsc --noEmit",
+    "test:flight-helpers": "node scripts/test-flight-helpers.cjs",
+    "test:smoke": "node scripts/smoke-test.cjs",
+    "test": "npm run test:flight-helpers && npm run test:smoke",
     "check:env": "bash ./scripts/check-env.sh",
-    "release:apk": "bash ./scripts/release-apk.sh"
+    "release:check": "node scripts/release-check.cjs",
+    "release:apk": "bash ./scripts/release-apk.sh",
+    "version:bump": "node scripts/bump-version.cjs",
+    "github:branches:audit": "node scripts/github-branch-audit.cjs"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",

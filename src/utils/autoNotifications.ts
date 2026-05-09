@@ -13,9 +13,11 @@ import {
   appendNotificationDebugEvent,
   buildNotificationData,
   cancelAeroStaffScheduledNotifications,
+  dedupeAeroStaffScheduledNotifications,
   LAST_SCHEDULE_KEY,
   NOTIF_ENABLED_KEY,
   NOTIF_IDS_KEY,
+  runNotificationScheduleExclusive,
 } from './notificationDiagnostics';
 
 const FLIGHT_FILTER_STORAGE_KEY = 'aerostaff_flight_filter_v1';
@@ -58,7 +60,8 @@ function parseSelectedAirlines(raw: string | null): string[] {
  * Called once on app startup. Skips if already scheduled today.
  */
 export async function autoScheduleNotifications(): Promise<number> {
-  try {
+  return runNotificationScheduleExclusive('auto', 'startup notification schedule', async () => {
+    try {
     // Dismiss ongoing shift notification if shift has ended
     await syncShiftOngoingExpiry();
 
@@ -370,6 +373,12 @@ export async function autoScheduleNotifications(): Promise<number> {
     }
 
     await AsyncStorage.setItem(NOTIF_IDS_KEY, JSON.stringify(newIds));
+    await dedupeAeroStaffScheduledNotifications({
+      includeShift: true,
+      includePinned: false,
+      reason: 'auto startup schedule complete',
+      source: 'auto',
+    });
     await AsyncStorage.setItem(LAST_SCHEDULE_KEY, todayKey);
     await appendNotificationDebugEvent({
       source: 'auto',
@@ -382,15 +391,16 @@ export async function autoScheduleNotifications(): Promise<number> {
         todayKey,
       },
     });
-    return newIds.length;
-  } catch (e) {
-    await appendNotificationDebugEvent({
-      source: 'auto',
-      type: 'error',
-      message: 'Startup scheduler failed.',
-      meta: { error: e instanceof Error ? e.message : String(e) },
-    });
-    if (__DEV__) console.error('autoScheduleNotifications error:', e);
-    return 0;
-  }
+      return newIds.length;
+    } catch (e) {
+      await appendNotificationDebugEvent({
+        source: 'auto',
+        type: 'error',
+        message: 'Startup scheduler failed.',
+        meta: { error: e instanceof Error ? e.message : String(e) },
+      });
+      if (__DEV__) console.error('autoScheduleNotifications error:', e);
+      return 0;
+    }
+  });
 }

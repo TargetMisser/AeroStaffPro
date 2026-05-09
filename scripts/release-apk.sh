@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APK_PATH="$ROOT_DIR/android/app/build/outputs/apk/release/app-release.apk"
 
+npm run release:check
+npm run test:smoke
+npm run typecheck
 "$ROOT_DIR/scripts/check-env.sh"
 
 pushd "$ROOT_DIR/android" >/dev/null
