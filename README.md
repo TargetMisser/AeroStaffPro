@@ -1,54 +1,44 @@
-# FlightWorkApp
+# AeroStaff Pro
 
-FlightWorkApp is an Expo / React Native app designed for airport operations work, bringing shift planning, flight activity, quick-reference manuals, and phone + Wear OS support into one place.
+AeroStaff Pro is a React Native app for airport shift work. It keeps the things that usually end up scattered across calendars, screenshots, notes, staff tools, and flight boards in one place.
 
-It is mainly built to:
+The repository is still named `FlightWorkApp`, but the app ships as **AeroStaff Pro**.
 
-- check the current shift
-- view the operational flight timeline
-- use quick Android widgets
-- use a Wear OS companion for essential info
-- store notes, passwords, contacts, and operational manuals
+## What It Does
 
-## AI-Assisted Development
+- Tracks shifts with month and week views.
+- Imports shift rosters from files and screenshots.
+- Shows same-day and next-day flight activity for the selected airport.
+- Supports flight data providers such as AirLabs and Flightradar24 through user-provided API keys.
+- Opens flights in Flightradar24 when the installed app can handle the route.
+- Provides Android widgets and a Wear OS companion for quick shift and flight information.
+- Stores operational notes, contacts, manuals, passwords, and useful links.
+- Includes notification controls for flight and shift reminders.
 
-A core part of this project is that it was built with AI support throughout the development process.
+## Development Note
 
-That includes:
+This is not an AI app. AeroStaff Pro does not include a chatbot, language model, AI decision-making, or AI features for end users.
 
-- feature ideation and planning
-- code implementation and refactoring
-- debugging and issue fixing
-- documentation drafting
-- repository and release workflow setup
+Claude and Codex are used as development tools for planning, implementation, debugging, refactoring, documentation, and release work. They help build the project, but they are not part of the shipped app experience.
 
-## Main Features
-
-- Shift calendar with manual entry and import tools.
-- Flight timeline and shift operations view.
-- Android widget for shift flights.
-- Companion Wear OS.
-- Editable manuals and operational notes.
-- Contacts, notepad, and password management.
-
-## Stack
+## Tech Stack
 
 - Expo SDK 54
 - React Native 0.81
 - React 19
 - TypeScript
-- Android native module + Wear OS module
+- Android native code
+- Wear OS module
+- Android widget support
 
 ## Requirements
 
 - Node.js 20 recommended
 - npm
-- Android Studio + Android SDK for local Android builds
+- Android Studio with the Android SDK
 - Java 17 or newer
 
-## Clone and Run
-
-To work on the project from another computer:
+## Getting Started
 
 ```bash
 git clone https://github.com/TargetMisser/FlightWorkApp.git
@@ -57,85 +47,84 @@ npm ci
 npm run start
 ```
 
-## Useful Commands
-
-Start Metro:
-
-```bash
-npm run start
-```
-
-Run Android:
+Run on Android:
 
 ```bash
 npm run android
 ```
 
-Run Web:
+Run the web preview:
 
 ```bash
 npm run web
 ```
 
-Typecheck:
+Run Storybook:
+
+```bash
+npm run storybook
+```
+
+## Useful Commands
 
 ```bash
 npm run typecheck
+npm test
+npm run test:smoke
+npm run release:check
+npm run github:branches:audit
 ```
 
-## Build and Releases
+## Releases
 
 APK files are published in [GitHub Releases](https://github.com/TargetMisser/FlightWorkApp/releases).
 
-Latest stable: **v2.6.38**
+Latest stable release: **v2.6.54**
 
-To install:
+To install the Android app:
 
-1. Open the Releases section and download `AeroStaffPro-vX.X.X.apk`.
-2. Transfer to your Android device and install (enable "Unknown sources" if needed).
-3. For Wear OS, pair the phone app — the watch companion installs automatically.
+1. Open the Releases page.
+2. Download `AeroStaffPro-vX.X.X.apk`.
+3. Install it on the Android device. You may need to allow installs from unknown sources.
+4. If using Wear OS, keep the phone and watch paired so the companion module can be installed.
 
-To build locally:
+## Local Android Release Build
 
-```bash
+Set the signing environment variables first:
+
+```powershell
 $env:RELEASE_STORE_FILE="C:\path\to\release.keystore"
 $env:RELEASE_STORE_PASSWORD="your-keystore-password"
 $env:RELEASE_KEY_ALIAS="your-key-alias"
 $env:RELEASE_KEY_PASSWORD="your-key-password"
+```
 
+Then build:
+
+```powershell
 cd android
 .\gradlew.bat assembleRelease
-# Output: android/app/build/outputs/apk/release/app-release.apk
+```
+
+The APK is generated at:
+
+```text
+android/app/build/outputs/apk/release/app-release.apk
 ```
 
 The GitHub Actions release workflow expects these repository secrets:
-`KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, and `KEY_PASSWORD`.
 
-## Branch Structure
-
-- `main`: most stable and shareable branch
-- `dev`: current development branch
-
-## Workflow Git
-
-Suggested flow:
-
-```bash
-git checkout dev
-git pull
-git checkout -b feature/nome-modifica
+```text
+KEYSTORE_BASE64
+KEYSTORE_PASSWORD
+KEY_ALIAS
+KEY_PASSWORD
 ```
 
-When you are done:
+## Repository Notes
 
-```bash
-git add .
-git commit -m "Describe your change"
-git push
-```
-
-## Notes
-
-- The repository is set up to be used from multiple computers.
-- Local files, logs, temporary outputs, and keystores are not published.
-- The Android / Wear OS module is included in the repository.
+- `main` is the public stable branch.
+- Feature and experiment branches should be short-lived.
+- Local logs, keystores, downloaded APKs, and temporary files should not be committed.
+- API keys are configured by the user inside the app or through local environment setup, not stored in the repository.
+- Release APKs live in GitHub Releases, not in git.
