@@ -2,6 +2,8 @@ export type Lang = 'it' | 'en';
 export type WeatherDescriptor = { text: string; iconName: string };
 
 const it = {
+  // Common
+  close: 'Chiudi',
   // Navigation
   tabHome: 'Home', tabShifts: 'Turni', tabFlights: 'Voli', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Blocco Note', overlayPhonebook: 'Rubrica', overlayPasswords: 'Password',
@@ -245,6 +247,8 @@ const it = {
 };
 
 const en: typeof it = {
+  // Common
+  close: 'Close',
   // Navigation
   tabHome: 'Home', tabShifts: 'Shifts', tabFlights: 'Flights', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Notepad', overlayPhonebook: 'Phonebook', overlayPasswords: 'Password',
