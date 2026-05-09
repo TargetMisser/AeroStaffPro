@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { MaterialIcons } from '@expo/vector-icons';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import { AirportProvider } from './src/context/AirportContext';
@@ -64,6 +65,7 @@ function AppInner() {
   const { colors, mode } = useAppTheme();
   const { t } = useLanguage();
   const { profileInitials } = useAirport();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab]   = useState<Tab>('Shifts');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [overlay, setOverlay]       = useState<OverlayScreen>(null);
@@ -205,19 +207,27 @@ function AppInner() {
     : colors.isDark
       ? 'rgba(235,239,245,0.78)'
       : colors.tabIconInactive;
+  const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
 
   return (
-    <View style={[styles.root, { backgroundColor: colors.bg, paddingTop: StatusBar.currentHeight || 48 }]}>
+    <View style={[styles.root, { backgroundColor: colors.bg }]}>
       <StatusBar
         barStyle={colors.statusBar}
-        backgroundColor={colors.appBar}
+        backgroundColor="transparent"
+        translucent
       />
 
       {/* Top App Bar */}
       <ExpoBlurView
         intensity={colors.isDark ? 60 : 50}
         tint={colors.isDark ? 'dark' : 'light'}
-        style={[styles.appBar, { borderBottomColor: colors.glassBorder }]}
+        style={[
+          styles.appBar,
+          {
+            paddingTop: topInset + 10,
+            borderBottomColor: colors.glassBorder,
+          },
+        ]}
       >
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.appBar }]} />
         {isOperations && (
@@ -334,13 +344,15 @@ function ThemedAppGate() {
 // ─── Root export con ThemeProvider ───────────────────────────────────────────
 export default function App() {
   return (
-    <ThemeProvider>
-      <AirportProvider>
-        <LanguageProvider>
-          <ThemedAppGate />
-        </LanguageProvider>
-      </AirportProvider>
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <AirportProvider>
+          <LanguageProvider>
+            <ThemedAppGate />
+          </LanguageProvider>
+        </AirportProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 
@@ -370,7 +382,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     overflow: 'hidden',
   },

@@ -41,6 +41,12 @@ assert(releaseWorkflow.includes('npm test'), 'CI should run the smoke test suite
 const releaseScript = read('scripts/release-apk.sh');
 assert(releaseScript.includes('npm run release:check'), 'local APK release should run release checks first');
 
+const appSource = read('App.tsx');
+assert(appSource.includes('SafeAreaProvider'), 'App root should provide safe-area insets');
+assert(appSource.includes('useSafeAreaInsets'), 'App shell should read native safe-area insets');
+assert(!appSource.includes('paddingTop: StatusBar.currentHeight || 48'), 'Root view should not create a blank status-bar spacer');
+assert(appSource.includes('translucent'), 'StatusBar should allow the app bar surface behind the status area');
+
 for (const file of [
   'src/components/motion/BoardReveal.tsx',
   'src/components/motion/TactilePressable.tsx',
