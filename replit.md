@@ -1,9 +1,9 @@
-# FlightWorkApp
+# AeroStaff Pro
 
 ## Overview
 
-FlightWorkApp (a.k.a. AeroStaff Pro) is an Expo / React Native application
-designed for airport operations work. It bundles shift planning, flight
+AeroStaff Pro is an Expo / React Native application designed for airport
+operations work. It bundles shift planning, flight
 activity views, quick-reference manuals, contacts/passwords/notes, and
 companion phone + Wear OS support.
 

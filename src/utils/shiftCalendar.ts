@@ -116,15 +116,15 @@ export async function getWritableCalendarId(): Promise<string | null> {
       const defaultCal = await Calendar.getDefaultCalendarAsync();
       source = defaultCal.source;
     } else {
-      source = { isLocalAccount: true, name: 'FlightWork', type: Calendar.SourceType.LOCAL, id: '' };
+      source = { isLocalAccount: true, name: 'AeroStaff Pro', type: Calendar.SourceType.LOCAL, id: '' };
     }
     const id = await Calendar.createCalendarAsync({
-      title: 'FlightWork Turni',
+      title: 'AeroStaff Turni',
       color: '#F47B16',
       entityType: Calendar.EntityTypes.EVENT,
       source,
-      name: 'FlightWork',
-      ownerAccount: 'FlightWork',
+      name: 'AeroStaff Pro',
+      ownerAccount: 'AeroStaff Pro',
       accessLevel: Calendar.CalendarAccessLevel.OWNER,
     });
     return id;

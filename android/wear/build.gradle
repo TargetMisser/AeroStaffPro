@@ -17,11 +17,11 @@ if (wantsReleaseBuild && !hasReleaseSigning) {
 }
 
 android {
-    namespace 'com.anonymous.flightworkapp.wear'
+    namespace 'com.aerostaffpro.wear'
     compileSdk rootProject.ext.compileSdkVersion
 
     defaultConfig {
-        applicationId 'com.anonymous.FlightWorkApp'
+        applicationId 'com.aerostaffpro.wear'
         minSdkVersion 30
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

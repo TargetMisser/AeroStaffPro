@@ -100,7 +100,7 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.FlightWorkApp'
+    namespace 'com.aerostaffpro.app'
     defaultConfig {
         applicationId 'com.aerostaffpro.app'
         minSdkVersion rootProject.ext.minSdkVersion

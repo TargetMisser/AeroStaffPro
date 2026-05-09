@@ -2,8 +2,6 @@
 
 AeroStaff Pro is a React Native app for airport shift work. It keeps the things that usually end up scattered across calendars, screenshots, notes, staff tools, and flight boards in one place.
 
-The repository is still named `FlightWorkApp`, but the app ships as **AeroStaff Pro**.
-
 ## What It Does
 
 - Tracks shifts with month and week views.
@@ -41,8 +39,8 @@ Claude and Codex are used as development tools for planning, implementation, deb
 ## Getting Started
 
 ```bash
-git clone https://github.com/TargetMisser/FlightWorkApp.git
-cd FlightWorkApp
+git clone https://github.com/TargetMisser/AeroStaffPro.git
+cd AeroStaffPro
 npm ci
 npm run start
 ```
@@ -77,7 +75,7 @@ npm run github:branches:audit
 
 ## Releases
 
-APK files are published in [GitHub Releases](https://github.com/TargetMisser/FlightWorkApp/releases).
+APK files are published in [GitHub Releases](https://github.com/TargetMisser/AeroStaffPro/releases).
 
 Latest stable release: **v2.6.54**
 
