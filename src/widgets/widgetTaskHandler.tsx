@@ -6,6 +6,7 @@ import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines } from '../utils/airportSettings';
 import { getBestDepartureTs } from '../utils/flightTimes';
 import { ShiftWidget } from './ShiftWidget';
+import { getStoredWidgetThemeProps } from './widgetTheme';
 
 /** Key used by the main app (FlightScreen) to push pre-built widget data */
 export const WIDGET_CACHE_KEY = 'widget_data_cache_v1';
@@ -102,7 +103,7 @@ function resolveWidgetShift(shiftData: WidgetShiftData): ResolvedWidgetShift | '
 }
 
 // ─── Read cached data written by the main app ──────────────────────────────────
-async function getWidgetData(): Promise<WidgetData> {
+export async function getWidgetData(): Promise<WidgetData> {
   try {
     const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
 
@@ -134,6 +135,17 @@ async function getWidgetData(): Promise<WidgetData> {
     return data;
   } catch {}
   return { state: 'error' };
+}
+
+async function renderThemedWidget(props: WidgetTaskHandlerProps, data: WidgetData): Promise<void> {
+  const { themeMode, themeSnapshot } = await getStoredWidgetThemeProps();
+  props.renderWidget(
+    <ShiftWidget
+      data={data}
+      themeMode={themeMode}
+      themeSnapshot={themeSnapshot}
+    />,
+  );
 }
 
 // ─── Fetch fresh widget data from FR24 + cached shift key ─────────────────────
@@ -221,21 +233,21 @@ export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
     case 'WIDGET_ADDED':
     case 'WIDGET_RESIZED': {
       const data = await getWidgetData();
-      props.renderWidget(<ShiftWidget data={data} />);
+      await renderThemedWidget(props, data);
       break;
     }
 
     case 'WIDGET_UPDATE': {
       // Fetch fresh data from FR24 + cached shift on periodic updates
       const data = await fetchFreshWidgetData();
-      props.renderWidget(<ShiftWidget data={data} />);
+      await renderThemedWidget(props, data);
       break;
     }
 
     case 'WIDGET_CLICK': {
       if (props.clickAction === 'REFRESH') {
         const data = await fetchFreshWidgetData();
-        props.renderWidget(<ShiftWidget data={data} />);
+        await renderThemedWidget(props, data);
       }
       break;
     }

@@ -1,8 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  getStoredThemeMode,
+  saveThemeMode,
+  saveThemeWidgetSnapshot,
+  type ThemeMode,
+} from '../utils/themeMode';
+import { refreshShiftWidgetTheme } from '../widgets/widgetThemeSync';
 
 // ─── Tipi ─────────────────────────────────────────────────────────────────────
-export type ThemeMode = 'light' | 'dark' | 'operations';
+export type { ThemeMode } from '../utils/themeMode';
 
 export type ThemeColors = {
   // Sfondi
@@ -124,8 +130,6 @@ const ThemeContext = createContext<ThemeContextValue>({
   isLoading: false,
 });
 
-const STORAGE_KEY = 'aerostaff_theme_mode';
-
 // ─── Provider ─────────────────────────────────────────────────────────────────
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('light');
@@ -133,19 +137,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Carica preferenza salvata
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY).then(v => {
-      if (v === 'light' || v === 'dark' || v === 'operations') {
-        setModeState(v);
-      } else if (v === 'weather') {
-        AsyncStorage.setItem(STORAGE_KEY, 'light').catch(() => {});
-      }
-      setReady(true);
-    });
+    getStoredThemeMode('light')
+      .then(setModeState)
+      .catch(() => {})
+      .finally(() => setReady(true));
   }, []);
 
   const setMode = useCallback(async (m: ThemeMode) => {
     setModeState(m);
-    await AsyncStorage.setItem(STORAGE_KEY, m);
+    await saveThemeMode(m);
   }, []);
 
   const colors: ThemeColors = mode === 'operations'
@@ -154,6 +154,25 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       ? DARK
       : LIGHT;
   const isLoading = !ready;
+
+  useEffect(() => {
+    if (!ready || isLoading) {
+      return;
+    }
+
+    let cancelled = false;
+    saveThemeWidgetSnapshot(mode, colors)
+      .then(() => {
+        if (!cancelled) {
+          refreshShiftWidgetTheme(mode).catch(() => {});
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [colors, isLoading, mode, ready]);
 
   return (
     <ThemeContext.Provider value={{ mode, colors, setMode, isLoading }}>

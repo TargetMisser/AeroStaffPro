@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity,
-  Platform, Modal, Alert, FlatList, TextInput,
+  Modal, Alert, FlatList, TextInput,
   Linking,
 } from 'react-native';
 import * as SystemCalendar from 'expo-calendar';
@@ -11,7 +11,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { WebView } from 'react-native-webview';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { requestWidgetUpdate } from 'react-native-android-widget';
 import { Calendar as RNCalendar, LocaleConfig, type DateData } from 'react-native-calendars';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import TimeCarouselPicker from '../components/TimeCarouselPicker';
@@ -24,7 +23,7 @@ import {
 } from '../utils/shiftCalendar';
 import { WIDGET_SHIFT_KEY, WIDGET_CACHE_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetShiftData } from '../widgets/widgetTaskHandler';
-import { ShiftWidget } from '../widgets/ShiftWidget';
+import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import {
   getPdfExtractorHtml, parseShiftCells,
   parseShiftCellFiles,
@@ -226,9 +225,7 @@ export default function CalendarScreen() {
             ? { state: 'work_empty', shiftLabel: `Domani ${fmt(nextShift.start)} – ${fmt(nextShift.end)}`, updatedAt: '' }
             : { state: 'no_shift' };
       await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(noFlightData));
-      if (Platform.OS === 'android') {
-        requestWidgetUpdate({ widgetName: 'ShiftFlights', renderWidget: () => (<ShiftWidget data={noFlightData as any} />) as any }).catch(() => {});
-      }
+      requestShiftWidgetUpdate(noFlightData as any).catch(() => {});
     } catch {}
   };
 

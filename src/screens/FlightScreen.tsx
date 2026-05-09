@@ -20,10 +20,9 @@ import { getAirlineOps, getAirlineColor, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES }
 import { fetchAirportScheduleRaw } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
-import { requestWidgetUpdate } from 'react-native-android-widget';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
-import { ShiftWidget } from '../widgets/ShiftWidget';
+import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
@@ -1386,7 +1385,7 @@ export default function FlightScreen() {
         }
         await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));
         if (Platform.OS === 'android') {
-          requestWidgetUpdate({ widgetName: 'ShiftFlights', renderWidget: () => (<ShiftWidget data={widgetData} />) as any }).catch(() => {});
+          requestShiftWidgetUpdate(widgetData).catch(() => {});
         }
       } catch {}
 
