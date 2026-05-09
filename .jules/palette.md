@@ -1,0 +1,3 @@
+## 2025-05-15 - [Flight Card Haptics and Accessibility]
+**Learning:** Combining gesture feedback (haptics) with structural accessibility (ARIA labels and actions) creates a significantly more "premium" and inclusive feel for interactive cards. Providing a single descriptive `accessibilityLabel` for complex items prevents screen reader "noise" while `accessibilityActions` keep functionality discoverable.
+**Action:** When implementing custom gestures (like swipe), always pair them with `expo-haptics` for tactile confirmation and `accessibilityActions` to ensure the same functionality is available to screen reader users without needing the complex gesture.
