@@ -9,6 +9,7 @@ import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw } from '../utils/fr24api';
+import { filterFlightsByAirlines, getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import { useLanguage } from '../context/LanguageContext';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -48,7 +49,7 @@ function parseFlight(item: any): Flight | null {
     id: f.identification?.id || `${ts}`,
     flightNumber: f.identification?.number?.default || 'N/A',
     airlineName,
-    destination: f.airport?.destination?.code?.iata || f.airport?.destination?.name || '???',
+    destination: getFlightAirportLabel(f.airport?.destination, 'N/A'),
     departureTs: ts,
     status: f.status?.text || 'Scheduled',
     statusColor: f.status?.generic?.status?.color || 'gray',
@@ -81,11 +82,10 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
         AsyncStorage.getItem('aerostaff_flight_filter_v1'),
       ]);
       const selectedAirlines: string[] = filterRaw ? JSON.parse(filterRaw) : [];
-      const filtered = departures
+      const filtered = filterFlightsByAirlines(departures, selectedAirlines)
         .map(parseFlight)
         .filter((f): f is Flight => {
           if (!f || f.departureTs < startSec || f.departureTs > endSec) return false;
-          if (selectedAirlines.length > 0 && !selectedAirlines.some(k => f.airlineName.toLowerCase().includes(k))) return false;
           return true;
         })
         .sort((a, b) => a.departureTs - b.departureTs);

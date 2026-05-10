@@ -17,6 +17,8 @@ const AIRLINE_NAME_BY_IATA: Record<string, string> = {
   '9H': 'Wizz Air Malta',
   AZ: 'ITA Airways',
   BA: AIRLINE_DISPLAY_NAMES['british airways'],
+  DS: AIRLINE_DISPLAY_NAMES.easyjet,
+  EC: AIRLINE_DISPLAY_NAMES.easyjet,
   EI: AIRLINE_DISPLAY_NAMES['aer lingus'],
   EN: 'Air Dolomiti',
   EW: 'Eurowings',

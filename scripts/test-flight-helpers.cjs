@@ -100,6 +100,27 @@ assert(
   'airport label should ignore placeholder airport codes',
 );
 
+assert(typeof adapter.isFlightAirlineMatch === 'function', 'flight adapter should expose airline matching helper');
+const easyJetEuropeCodeOnly = {
+  flight: {
+    identification: { number: { default: 'EC4810' } },
+    airline: { name: 'Compagnia EC', code: { iata: 'EC', icao: 'EJU' } },
+  },
+};
+const easyJetFlightNumberOnly = {
+  flight: {
+    identification: { number: { default: 'U24810' } },
+    airline: { name: 'Sconosciuta', code: {} },
+  },
+};
+assert(adapter.isFlightAirlineMatch(easyJetEuropeCodeOnly, 'easyjet'), 'easyJet Europe EC/EJU flights should match easyjet filter');
+assert(adapter.isFlightAirlineMatch(easyJetFlightNumberOnly, 'easyjet'), 'U2 flight-number prefix should match easyjet filter');
+assert(!adapter.isFlightAirlineMatch(delayed, 'easyjet'), 'wizz flight should not match easyjet filter');
+assert(
+  adapter.filterFlightsByAirlines([easyJetEuropeCodeOnly, easyJetFlightNumberOnly, delayed], ['easyjet']).length === 2,
+  'airline filter should keep easyJet variants identified by code or flight number',
+);
+
 const merged = adapter.mergeFlightLists([scheduledOnly], [scheduledOnly, delayed], 'departure');
 assert(merged.length === 2, 'merge should dedupe cached and fresh flights');
 

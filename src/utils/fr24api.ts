@@ -15,6 +15,7 @@ import {
   type FlightScheduleProviderStatus,
 } from './flightProviders';
 import { getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
+import { filterFlightsByAirlines } from './flightScheduleAdapter';
 
 const FETCH_TIMEOUT = 15000; // AirLabs live + route prediction can take a little longer on mobile networks.
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
@@ -37,16 +38,6 @@ export type FR24ScheduleRaw = FR24Schedule & {
   allArrivals: any[];
   allDepartures: any[];
 };
-
-function filterAirlines(data: any[], allowedList: string[]) {
-  if (allowedList.length === 0) {
-    return data;
-  }
-
-  return data.filter(item =>
-    allowedList.some(key => (item.flight?.airline?.name || '').toLowerCase().includes(key)),
-  );
-}
 
 async function resolveAirportCode(code?: string): Promise<string> {
   const normalized = normalizeAirportCode(code);
@@ -184,8 +175,8 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
   return {
     allArrivals,
     allDepartures,
-    arrivals: filterAirlines(allArrivals, airlines),
-    departures: filterAirlines(allDepartures, airlines),
+    arrivals: filterFlightsByAirlines(allArrivals, airlines),
+    departures: filterFlightsByAirlines(allDepartures, airlines),
     airportCode,
     airport,
     source: payload.source,

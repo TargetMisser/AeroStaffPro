@@ -29,7 +29,9 @@ import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification }
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
 import {
   compareFlightsChronologically,
+  filterFlightsByAirlines,
   getFlightAirportLabel,
+  isFlightAirlineMatch,
   mergeFlightLists,
   pruneExpiredFlights,
 } from '../utils/flightScheduleAdapter';
@@ -139,11 +141,7 @@ function shouldNotifyAirline(
   if (!settings.onlyTrackedAirlines || selectedAirlines.length === 0) {
     return true;
   }
-  const airline = normalizeAirlineKey(item?.flight?.airline?.name);
-  if (!airline) {
-    return false;
-  }
-  return selectedAirlines.some(key => airline.includes(normalizeAirlineKey(key)));
+  return selectedAirlines.some(key => isFlightAirlineMatch(item, key));
 }
 
 function sameAirlineKeys(left: string[], right: string[]): boolean {
@@ -1329,7 +1327,7 @@ export default function FlightScreen() {
               const ts = getBestDepartureTs(item);
               if (ts == null) return false;
               const airline = item.flight?.airline?.name || '';
-              if (wAllowedAirlines.length > 0 && !wAllowedAirlines.some(k => airline.toLowerCase().includes(k))) return false;
+              if (wAllowedAirlines.length > 0 && !wAllowedAirlines.some(k => isFlightAirlineMatch(item, k))) return false;
               const ops = getAirlineOps(airline);
               const ciO = ts - ops.checkInOpen * 60, ciC = ts - ops.checkInClose * 60;
               const gO = ts - ops.gateOpen * 60, gC = ts - ops.gateClose * 60;
@@ -1637,15 +1635,13 @@ export default function FlightScreen() {
     const source = activeTab === 'arrivals' ? allArrivalsFull : allDeparturesFull;
     const timeField = activeTab === 'arrivals' ? 'arrival' : 'departure';
     const seen = new Set<string>();
-    return source.filter(item => {
+    return filterFlightsByAirlines(source, selectedAirlines).filter(item => {
       const ts = item.flight?.time?.scheduled?.[timeField];
       if (!ts || !isSameDay(new Date(ts * 1000), selectedDate)) return false;
       const dedupeKey = `${item.flight?.identification?.number?.default ?? ''}_${ts}`;
       if (seen.has(dedupeKey)) return false;
       seen.add(dedupeKey);
-      if (selectedAirlines.length === 0) return true;
-      const name = (item.flight?.airline?.name || '').toLowerCase();
-      return selectedAirlines.some(key => name.includes(key));
+      return true;
     }).sort(compareFlightsChronologically(timeField));
   })();
 

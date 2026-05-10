@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAirlineOps } from './airlineOps';
 import { fetchAirportScheduleRaw } from './fr24api';
+import { isFlightAirlineMatch } from './flightScheduleAdapter';
 import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
 import {
   showShiftOngoingNotification,
@@ -33,12 +34,7 @@ function isFlightCoveredByProfile(item: any, selectedAirlines: string[]): boolea
     return false;
   }
 
-  const airlineName = normalizeAirline(item?.flight?.airline?.name);
-  if (!airlineName) {
-    return false;
-  }
-
-  return selectedAirlines.some(key => airlineName.includes(key));
+  return selectedAirlines.some(key => isFlightAirlineMatch(item, key));
 }
 
 function parseSelectedAirlines(raw: string | null): string[] {
