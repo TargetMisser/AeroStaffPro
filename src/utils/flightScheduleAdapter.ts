@@ -20,6 +20,22 @@ export function getFlightAirlineName(item: any): string {
   return String(item?.flight?.airline?.name ?? '').trim();
 }
 
+function readUsefulAirportText(value: unknown): string | undefined {
+  if (typeof value !== 'string' && typeof value !== 'number') return undefined;
+  const text = String(value).trim();
+  if (!text || text === '???' || /^n\/?a$/i.test(text) || text === '-') return undefined;
+  return text;
+}
+
+export function getFlightAirportLabel(airport: any, fallback = 'N/A'): string {
+  return readUsefulAirportText(airport?.code?.iata)
+    ?? readUsefulAirportText(airport?.iata)
+    ?? readUsefulAirportText(airport?.code?.icao)
+    ?? readUsefulAirportText(airport?.icao)
+    ?? readUsefulAirportText(airport?.name)
+    ?? fallback;
+}
+
 export function getFlightScheduledTs(item: any, direction: FlightDirection): number | undefined {
   return readFlightTs(item, 'scheduled', direction);
 }

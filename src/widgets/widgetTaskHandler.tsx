@@ -4,7 +4,7 @@ import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines } from '../utils/airportSettings';
-import { getFlightBestTs } from '../utils/flightScheduleAdapter';
+import { getFlightAirportLabel, getFlightBestTs } from '../utils/flightScheduleAdapter';
 import { ShiftWidget } from './ShiftWidget';
 import { getStoredWidgetThemeProps } from './widgetTheme';
 
@@ -205,7 +205,7 @@ async function fetchFreshWidgetData(): Promise<WidgetData> {
         const fn = item.flight?.identification?.number?.default || 'N/A';
         return {
           flightNumber: fn,
-          destinationIata: item.flight?.airport?.destination?.code?.iata || '???',
+          destinationIata: getFlightAirportLabel(item.flight?.airport?.destination, 'N/A'),
           departureTs: ts,
           departureTime: fmtTs(ts),
           ciOpen: fmtOff(ts, ops.checkInOpen), ciClose: fmtOff(ts, ops.checkInClose),

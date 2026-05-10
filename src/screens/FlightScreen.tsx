@@ -29,6 +29,7 @@ import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification }
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
 import {
   compareFlightsChronologically,
+  getFlightAirportLabel,
   mergeFlightLists,
   pruneExpiredFlights,
 } from '../utils/flightScheduleAdapter';
@@ -1346,7 +1347,7 @@ export default function FlightScreen() {
                       ?? smDeps.find(x => strip(x.flightNumber) === strip(normFn));
               return {
                 flightNumber: fn,
-                destinationIata: item.flight?.airport?.destination?.code?.iata || '???',
+                destinationIata: getFlightAirportLabel(item.flight?.airport?.destination, 'N/A'),
                 departureTs: ts,
                 departureTime: fmtT(ts),
                 ciOpen: fmtOff(ts, ops.checkInOpen), ciClose: fmtOff(ts, ops.checkInClose),

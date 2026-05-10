@@ -82,6 +82,24 @@ assert(adapter.getFlightBestTs(delayed, 'departure') === 1200, 'best time should
 assert(adapter.getFlightBestTs(departed, 'departure') === 875, 'best time should prefer real over estimated');
 assert(adapter.getFlightStableKey(delayed, 'departure') === 'W45030_900', 'stable key should use flight number and scheduled time');
 
+assert(typeof adapter.getFlightAirportLabel === 'function', 'flight adapter should expose airport label helper');
+assert(
+  adapter.getFlightAirportLabel({ code: { iata: 'AMS' }, name: 'Amsterdam' }) === 'AMS',
+  'airport label should prefer nested IATA code',
+);
+assert(
+  adapter.getFlightAirportLabel({ iata: 'TIA', name: 'Tirana' }) === 'TIA',
+  'airport label should support flat IATA code',
+);
+assert(
+  adapter.getFlightAirportLabel({ name: 'Krakow' }) === 'Krakow',
+  'airport label should fall back to airport name',
+);
+assert(
+  adapter.getFlightAirportLabel({ code: { iata: '???' }, iata: '', name: 'Lisbon' }) === 'Lisbon',
+  'airport label should ignore placeholder airport codes',
+);
+
 const merged = adapter.mergeFlightLists([scheduledOnly], [scheduledOnly, delayed], 'departure');
 assert(merged.length === 2, 'merge should dedupe cached and fresh flights');
 
