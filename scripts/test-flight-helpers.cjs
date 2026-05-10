@@ -121,6 +121,40 @@ assert(
   'airline filter should keep easyJet variants identified by code or flight number',
 );
 
+const airportSettings = loadTsModule('src/utils/airportSettings.ts', {
+  '@react-native-async-storage/async-storage': {
+    getItem: async () => null,
+    setItem: async () => {},
+  },
+});
+const detectedAirlines = airportSettings.extractAirportAirlinesFromSchedule([
+  'Compagnia XU',
+  'XUE',
+  'SI',
+  'Q1',
+  'KI',
+  'JT',
+  'Sconosciuta',
+  {
+    flight: {
+      identification: { number: { default: 'U24810' } },
+      airline: { name: 'Sconosciuta', code: { iata: 'U2' } },
+    },
+  },
+  {
+    flight: {
+      identification: { number: { default: 'LH123' } },
+      airline: { name: 'Compagnia LH', code: { iata: 'LH', icao: 'DLH' } },
+    },
+  },
+  { flight: { airline: { name: 'Transavia France' } } },
+]);
+assert(detectedAirlines.includes('easyjet'), 'airport airline discovery should keep easyJet from codes');
+assert(detectedAirlines.includes('lufthansa'), 'airport airline discovery should keep real airlines from codes');
+assert(detectedAirlines.includes('transavia'), 'airport airline discovery should canonicalize real airline names');
+assert(!detectedAirlines.some(key => key.startsWith('compagnia')), 'airport airline discovery should drop generic company placeholders');
+assert(!['xue', 'si', 'q1', 'ki', 'jt', 'sconosciuta'].some(key => detectedAirlines.includes(key)), 'airport airline discovery should drop raw unknown airline codes');
+
 const merged = adapter.mergeFlightLists([scheduledOnly], [scheduledOnly, delayed], 'departure');
 assert(merged.length === 2, 'merge should dedupe cached and fresh flights');
 

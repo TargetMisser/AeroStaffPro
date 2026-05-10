@@ -51,21 +51,60 @@ const airportAirlinesCache: Record<string, string[]> = Object.fromEntries(
 );
 
 function normalizeAirlineKey(value: string | null | undefined): string {
-  return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  return (value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function compactAirlineKey(value: string | null | undefined): string {
+  return normalizeAirlineKey(value).replace(/\s+/g, '');
 }
 
 const AIRLINE_CANONICAL_RULES: Array<{ canonical: string; needles: string[] }> = [
-  { canonical: 'ryanair', needles: ['ryanair'] },
-  { canonical: 'easyjet', needles: ['easyjet', 'easyjet europe', 'easyjet switzerland', 'easyjet uk'] },
-  { canonical: 'wizz', needles: ['wizz', 'wizz air malta', 'wizz air uk', 'wizz air abu dhabi'] },
-  { canonical: 'volotea', needles: ['volotea'] },
-  { canonical: 'vueling', needles: ['vueling'] },
-  { canonical: 'transavia', needles: ['transavia france', 'transavia holland', 'transavia airlines', 'transavia'] },
-  { canonical: 'aer lingus', needles: ['aer lingus'] },
-  { canonical: 'british airways', needles: ['british airways'] },
-  { canonical: 'sas', needles: ['sas', 'scandinavian'] },
-  { canonical: 'flydubai', needles: ['flydubai'] },
+  { canonical: 'ryanair', needles: ['ryanair', 'fr', 'ryr'] },
+  { canonical: 'easyjet', needles: ['easyjet', 'easy jet', 'easyjet europe', 'easyjet switzerland', 'easyjet uk', 'u2', 'ec', 'ds', 'eju', 'ezy', 'ezs'] },
+  { canonical: 'wizz', needles: ['wizz', 'wizz air', 'wizz air malta', 'wizz air uk', 'wizz air abu dhabi', 'w6', 'w4', 'w9', 'wzz', 'wmt', 'wuk'] },
+  { canonical: 'volotea', needles: ['volotea', 'v7'] },
+  { canonical: 'vueling', needles: ['vueling', 'vy'] },
+  { canonical: 'transavia', needles: ['transavia france', 'transavia holland', 'transavia airlines', 'transavia', 'hv', 'to', 'tra', 'tvf'] },
+  { canonical: 'aer lingus', needles: ['aer lingus', 'ei'] },
+  { canonical: 'british airways', needles: ['british airways', 'ba', 'baw'] },
+  { canonical: 'sas', needles: ['sas', 'scandinavian', 'sk'] },
+  { canonical: 'flydubai', needles: ['flydubai', 'fz', 'fdb'] },
+  { canonical: 'aeroitalia', needles: ['aeroitalia', 'xz'] },
+  { canonical: 'air arabia maroc', needles: ['air arabia maroc', '3o', 'mac'] },
+  { canonical: 'air arabia', needles: ['air arabia', 'g9', 'abz'] },
+  { canonical: 'air dolomiti', needles: ['air dolomiti', 'en', 'dla'] },
+  { canonical: 'buzz', needles: ['buzz', 'rr', 'rys'] },
+  { canonical: 'dhl', needles: ['dhl', 'qy', 'bcs'] },
+  { canonical: 'eurowings', needles: ['eurowings', 'ew', 'ewg'] },
+  { canonical: 'ita airways', needles: ['ita airways', 'ita', 'az', 'ity'] },
+  { canonical: 'lufthansa', needles: ['lufthansa', 'lh', 'dlh'] },
 ];
+
+function isGenericAirlinePlaceholder(value: string): boolean {
+  return value === 'sconosciuta'
+    || value === 'unknown'
+    || value === 'n a'
+    || value === 'na'
+    || /^(compagnia|company|airline) [a-z0-9]{1,3}$/.test(value);
+}
+
+function isLikelyRawAirlineCode(value: string): boolean {
+  return /^[a-z0-9]{1,3}$/.test(compactAirlineKey(value));
+}
+
+function airlineRuleMatches(value: string, needle: string): boolean {
+  const normalizedNeedle = normalizeAirlineKey(needle);
+  const compactNeedle = compactAirlineKey(needle);
+  if (!normalizedNeedle || !compactNeedle) {
+    return false;
+  }
+
+  if (compactNeedle.length <= 3) {
+    return value.split(' ').includes(compactNeedle) || compactAirlineKey(value) === compactNeedle;
+  }
+
+  return compactAirlineKey(value).includes(compactNeedle);
+}
 
 function canonicalizeAirlineKey(value: string | null | undefined): string {
   const normalized = normalizeAirlineKey(value);
@@ -73,10 +112,18 @@ function canonicalizeAirlineKey(value: string | null | undefined): string {
     return '';
   }
 
+  if (isGenericAirlinePlaceholder(normalized)) {
+    return '';
+  }
+
   for (const rule of AIRLINE_CANONICAL_RULES) {
-    if (rule.needles.some(needle => normalized.includes(needle))) {
+    if (rule.needles.some(needle => airlineRuleMatches(normalized, needle))) {
       return rule.canonical;
     }
+  }
+
+  if (isLikelyRawAirlineCode(normalized)) {
+    return '';
   }
 
   return normalized;
@@ -111,7 +158,12 @@ function normalizeAirportAirlineMap(raw: unknown): Record<string, string[]> {
         return null;
       }
 
-      return [normalizedCode, sanitizeAirlineList(airlines as string[], [])] as const;
+      const sanitizedAirlines = sanitizeAirlineList(airlines as string[], []);
+      if (sanitizedAirlines.length === 0) {
+        return null;
+      }
+
+      return [normalizedCode, sanitizedAirlines] as const;
     })
     .filter((entry): entry is readonly [string, string[]] => entry !== null);
 
@@ -148,7 +200,26 @@ export function extractAirportAirlinesFromSchedule(...sources: unknown[]): strin
     }
 
     return source
-      .map(item => typeof item === 'string' ? item : item?.flight?.airline?.name)
+      .flatMap(item => {
+        if (typeof item === 'string') {
+          return [item];
+        }
+
+        const airline = item?.flight?.airline ?? {};
+        const flightNumber = String(item?.flight?.identification?.number?.default ?? '')
+          .toUpperCase()
+          .replace(/[\s\-_]/g, '');
+        const flightPrefix = flightNumber.match(/^([A-Z0-9]{2,3}?)(?=\d)/)?.[1] ?? '';
+
+        return [
+          airline.name,
+          airline.code?.iata,
+          airline.code?.icao,
+          airline.iata,
+          airline.icao,
+          flightPrefix,
+        ];
+      })
       .filter((name): name is string => typeof name === 'string' && name.trim().length > 0);
   });
 

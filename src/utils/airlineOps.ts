@@ -33,6 +33,9 @@ export const AIRLINE_COLORS: Record<string, HexColor> = {
   'volotea': '#3C0F8B', 'vueling': '#FFB300', 'transavia': '#00A650',
   'aer lingus': '#006E44', 'british airways': '#075AAA',
   'sas': '#003E7E', 'scandinavian': '#003E7E', 'flydubai': '#CC1E42',
+  'aeroitalia': '#1E5BFF', 'air arabia': '#D71920', 'air arabia maroc': '#C41230',
+  'air dolomiti': '#0A4EA3', 'buzz': '#F4C400', 'dhl': '#FFCC00',
+  'eurowings': '#651D88', 'ita airways': '#006B5B', 'lufthansa': '#05164D',
 };
 
 export function getAirlineColor(name: string): HexColor {
@@ -53,6 +56,15 @@ export const AIRLINE_DISPLAY_NAMES: Record<string, string> = {
   'sas': 'SAS',
   'scandinavian': 'Scandinavian Airlines',
   'flydubai': 'flydubai',
+  'aeroitalia': 'Aeroitalia',
+  'air arabia': 'Air Arabia',
+  'air arabia maroc': 'Air Arabia Maroc',
+  'air dolomiti': 'Air Dolomiti',
+  'buzz': 'Buzz',
+  'dhl': 'DHL',
+  'eurowings': 'Eurowings',
+  'ita airways': 'ITA Airways',
+  'lufthansa': 'Lufthansa',
 };
 
 export const ALLOWED_AIRLINES = [
