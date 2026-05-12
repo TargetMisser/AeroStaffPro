@@ -193,6 +193,30 @@ assert(
   'merge should not collapse the same flight number on a different route',
 );
 
+const easyJetArrivalScheduledTs = Math.floor(new Date(2026, 4, 12, 17, 35, 0).getTime() / 1000);
+const easyJetArrivalEstimatedTs = Math.floor(new Date(2026, 4, 12, 17, 32, 0).getTime() / 1000);
+const fr24ApiArrival = {
+  flight: {
+    identification: { number: { default: 'U28319' } },
+    airline: { name: 'EZY', code: { iata: 'U2', icao: 'EZY' } },
+    airport: { origin: { code: { iata: 'LGW' }, name: 'LGW' } },
+    time: { scheduled: { arrival: easyJetArrivalEstimatedTs }, estimated: { arrival: easyJetArrivalEstimatedTs }, real: {} },
+  },
+};
+const staffMonitorArrival = {
+  flight: {
+    identification: { number: { default: 'U28319' } },
+    airline: { name: 'easyJet', code: { iata: 'U2' } },
+    airport: { origin: { name: 'LONDON GATWICK' } },
+    time: { scheduled: { arrival: easyJetArrivalScheduledTs }, estimated: { arrival: easyJetArrivalEstimatedTs }, real: {} },
+  },
+};
+const mergedProviderArrival = adapter.mergeFlightLists([fr24ApiArrival], [staffMonitorArrival], 'arrival');
+assert(
+  mergedProviderArrival.length === 1,
+  'merge should collapse provider duplicates when one source has airport IATA and the other has the matching airport name',
+);
+
 const pruned = adapter.pruneExpiredFlights([scheduledOnly, delayed], 'departure', 5000, 3600);
 assert(pruned.length === 0, 'prune should remove flights older than retention using best time');
 

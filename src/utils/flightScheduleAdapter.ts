@@ -155,18 +155,123 @@ function normalizeFlightIdentityPart(value: unknown): string {
   return String(value).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '');
 }
 
-function getFlightRemoteAirportKey(item: any, direction: FlightDirection): string {
-  const airport = direction === 'arrival'
+type AirportIdentityConfidence = 'code' | 'name' | 'unknown';
+
+type FlightMergeIdentity = {
+  flightNumber: string;
+  remoteAirport: string;
+  remoteAirportConfidence: AirportIdentityConfidence;
+  serviceDate: string;
+};
+
+const REMOTE_AIRPORT_ALIASES: Record<string, string> = {
+  AMSTERDAM: 'AMS',
+  AMSTERDAMSCHIPHOL: 'AMS',
+  SCHIPHOL: 'AMS',
+  EHAM: 'AMS',
+  LONDONGATWICK: 'LGW',
+  GATWICK: 'LGW',
+  EGKK: 'LGW',
+  LONDONSTANSTED: 'STN',
+  STANSTED: 'STN',
+  EGSS: 'STN',
+  LONDONLUTON: 'LTN',
+  LUTON: 'LTN',
+  EGGW: 'LTN',
+  PARISORLY: 'ORY',
+  ORLY: 'ORY',
+  LFPO: 'ORY',
+  BRUSSELSSOUTHCHARLEROI: 'CRL',
+  BRUSSELSCHARLEROI: 'CRL',
+  CHARLEROI: 'CRL',
+  EBCI: 'CRL',
+  TIRANA: 'TIA',
+  TIRANAINTERNATIONAL: 'TIA',
+  LATI: 'TIA',
+};
+
+function canonicalizeAirportIdentity(value: unknown): string {
+  const normalized = normalizeFlightIdentityPart(value);
+  return REMOTE_AIRPORT_ALIASES[normalized] ?? normalized;
+}
+
+function getRemoteAirport(item: any, direction: FlightDirection): any {
+  return direction === 'arrival'
     ? item?.flight?.airport?.origin
     : item?.flight?.airport?.destination;
-  return normalizeFlightIdentityPart(
-    readUsefulAirportText(airport?.code?.iata)
-      ?? readUsefulAirportText(airport?.iata)
-      ?? readUsefulAirportText(airport?.code?.icao)
-      ?? readUsefulAirportText(airport?.icao)
-      ?? readUsefulAirportText(airport?.name)
-      ?? '',
-  );
+}
+
+function getFlightRemoteAirportIdentity(item: any, direction: FlightDirection): {
+  key: string;
+  confidence: AirportIdentityConfidence;
+} {
+  const airport = getRemoteAirport(item, direction);
+  const airportCode = readUsefulAirportText(airport?.code?.iata)
+    ?? readUsefulAirportText(airport?.iata)
+    ?? readUsefulAirportText(airport?.code?.icao)
+    ?? readUsefulAirportText(airport?.icao);
+  if (airportCode) {
+    return { key: canonicalizeAirportIdentity(airportCode), confidence: 'code' };
+  }
+
+  const airportName = readUsefulAirportText(airport?.name);
+  if (airportName) {
+    const key = canonicalizeAirportIdentity(airportName);
+    const confidence = REMOTE_AIRPORT_ALIASES[normalizeFlightIdentityPart(airportName)] ? 'code' : 'name';
+    return { key, confidence };
+  }
+
+  return { key: '', confidence: 'unknown' };
+}
+
+function getFlightMergeIdentity(item: any, direction: FlightDirection): FlightMergeIdentity {
+  const remoteAirport = getFlightRemoteAirportIdentity(item, direction);
+  return {
+    flightNumber: normalizeFlightIdentityPart(getFlightNumber(item)),
+    remoteAirport: remoteAirport.key || 'AIRPORT_UNKNOWN',
+    remoteAirportConfidence: remoteAirport.confidence,
+    serviceDate: getFlightServiceDateKey(item, direction) || 'DATE_UNKNOWN',
+  };
+}
+
+function areFlightTimesCompatible(left: any, right: any, direction: FlightDirection): boolean {
+  const leftTs = getFlightBestTs(left, direction) ?? getFlightScheduledTs(left, direction);
+  const rightTs = getFlightBestTs(right, direction) ?? getFlightScheduledTs(right, direction);
+  if (!leftTs || !rightTs) return true;
+
+  return Math.abs(leftTs - rightTs) <= 2 * 60 * 60;
+}
+
+function isLikelySameFlight(left: any, right: any, direction: FlightDirection): boolean {
+  const leftIdentity = getFlightMergeIdentity(left, direction);
+  const rightIdentity = getFlightMergeIdentity(right, direction);
+
+  if (!leftIdentity.flightNumber || leftIdentity.flightNumber !== rightIdentity.flightNumber) return false;
+  if (leftIdentity.serviceDate !== rightIdentity.serviceDate) return false;
+  if (leftIdentity.remoteAirport === rightIdentity.remoteAirport) return true;
+
+  const bothHaveReliableCodes = leftIdentity.remoteAirportConfidence === 'code'
+    && rightIdentity.remoteAirportConfidence === 'code';
+  const bothOnlyHaveNames = leftIdentity.remoteAirportConfidence === 'name'
+    && rightIdentity.remoteAirportConfidence === 'name';
+  if (bothHaveReliableCodes || bothOnlyHaveNames) return false;
+
+  return areFlightTimesCompatible(left, right, direction);
+}
+
+function findMergeCandidateKey(map: Map<string, any>, item: any, direction: FlightDirection): string | undefined {
+  const exactKey = getFlightMergeKey(item, direction);
+  if (map.has(exactKey)) {
+    return exactKey;
+  }
+
+  for (const [candidateKey, candidate] of map) {
+    if (isLikelySameFlight(candidate, item, direction)) {
+      return candidateKey;
+    }
+  }
+
+  return undefined;
 }
 
 function getFlightServiceDateKey(item: any, direction: FlightDirection): string {
@@ -184,14 +289,17 @@ function getFlightServiceDateKey(item: any, direction: FlightDirection): string 
 }
 
 export function getFlightMergeKey(item: any, direction: FlightDirection): string {
-  const flightNumber = normalizeFlightIdentityPart(getFlightNumber(item));
-  if (!flightNumber) {
+  const identity = getFlightMergeIdentity(item, direction);
+  if (!identity.flightNumber) {
     return getFlightStableKey(item, direction);
   }
 
-  const remoteAirport = getFlightRemoteAirportKey(item, direction) || 'AIRPORT_UNKNOWN';
-  const serviceDate = getFlightServiceDateKey(item, direction) || 'DATE_UNKNOWN';
-  return [flightNumber, direction, remoteAirport, serviceDate].join('_');
+  return [
+    identity.flightNumber,
+    direction,
+    identity.remoteAirport,
+    identity.serviceDate,
+  ].join('_');
 }
 
 export function mergeFlightLists(cached: any[], fresh: any[], direction: FlightDirection): any[] {
@@ -200,7 +308,12 @@ export function mergeFlightLists(cached: any[], fresh: any[], direction: FlightD
     map.set(getFlightMergeKey(item, direction), item);
   }
   for (const item of fresh) {
-    map.set(getFlightMergeKey(item, direction), item);
+    const nextKey = getFlightMergeKey(item, direction);
+    const existingKey = findMergeCandidateKey(map, item, direction);
+    if (existingKey && existingKey !== nextKey) {
+      map.delete(existingKey);
+    }
+    map.set(nextKey, item);
   }
   return Array.from(map.values());
 }
