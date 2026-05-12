@@ -15,7 +15,7 @@ import {
   type FlightScheduleProviderStatus,
 } from './flightProviders';
 import { getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
-import { filterFlightsByAirlines } from './flightScheduleAdapter';
+import { filterFlightsByAirlines, mergeFlightLists } from './flightScheduleAdapter';
 
 const FETCH_TIMEOUT = 15000; // AirLabs live + route prediction can take a little longer on mobile networks.
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
@@ -54,6 +54,14 @@ type ScheduleCacheEntry = {
   fetchedAt: number;
   savedAt: number;
 };
+
+function dedupeSchedulePayload<T extends { allArrivals: any[]; allDepartures: any[] }>(payload: T): T {
+  return {
+    ...payload,
+    allArrivals: mergeFlightLists([], payload.allArrivals, 'arrival'),
+    allDepartures: mergeFlightLists([], payload.allDepartures, 'departure'),
+  };
+}
 
 export type FlightProviderDiagnosticsSnapshot = {
   airportCode: string;
@@ -128,13 +136,13 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
     const airLabsApiKey = await getAirLabsApiKey();
     const fr24ApiKey = await getFr24ApiKey();
     const providerPreference = await getFlightProviderPreference();
-    payload = await fetchFlightScheduleFromProviders({
+    payload = dedupeSchedulePayload(await fetchFlightScheduleFromProviders({
       airportCode,
       airport,
       airLabsApiKey,
       fr24ApiKey,
       signal: controller.signal,
-    }, getFlightScheduleProviders(providerPreference));
+    }, getFlightScheduleProviders(providerPreference)));
     await saveCachedSchedule({
       airportCode,
       allArrivals: payload.allArrivals,
@@ -149,7 +157,7 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
     const cached = await loadCachedSchedule(airportCode);
     if (!cached) throw error;
 
-    payload = {
+    payload = dedupeSchedulePayload({
       allArrivals: cached.allArrivals,
       allDepartures: cached.allDepartures,
       source: cached.source ?? 'cache',
@@ -164,7 +172,7 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
           message: `Fallback cache: ${errorMessage(error)}`,
         },
       ],
-    };
+    });
   } finally {
     clearTimeout(timer);
   }

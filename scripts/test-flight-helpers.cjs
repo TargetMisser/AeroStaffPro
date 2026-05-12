@@ -158,6 +158,41 @@ assert(!['xue', 'si', 'q1', 'ki', 'jt', 'sconosciuta'].some(key => detectedAirli
 const merged = adapter.mergeFlightLists([scheduledOnly], [scheduledOnly, delayed], 'departure');
 assert(merged.length === 2, 'merge should dedupe cached and fresh flights');
 
+const liveDuplicateOld = {
+  flight: {
+    identification: { number: { default: 'HV5426' } },
+    airline: { name: 'Transavia' },
+    airport: { destination: { code: { iata: 'AMS' }, name: 'Amsterdam' } },
+    time: { scheduled: { departure: 2000 }, estimated: {}, real: {} },
+  },
+};
+const liveDuplicateFresh = {
+  flight: {
+    identification: { number: { default: 'HV5426' } },
+    airline: { name: 'Transavia' },
+    airport: { destination: { code: { iata: 'AMS' }, name: 'Amsterdam' } },
+    time: { scheduled: { departure: 2060 }, estimated: { departure: 2090 }, real: {} },
+  },
+};
+const sameNumberDifferentRoute = {
+  flight: {
+    identification: { number: { default: 'HV5426' } },
+    airline: { name: 'Transavia' },
+    airport: { destination: { code: { iata: 'ORY' }, name: 'Paris Orly' } },
+    time: { scheduled: { departure: 2060 }, estimated: {}, real: {} },
+  },
+};
+const mergedLiveDuplicates = adapter.mergeFlightLists([liveDuplicateOld], [liveDuplicateFresh], 'departure');
+assert(mergedLiveDuplicates.length === 1, 'merge should collapse the same flight when only the live timestamp changed');
+assert(
+  mergedLiveDuplicates[0].flight.time.estimated.departure === 2090,
+  'merge should keep the freshest timing for a collapsed live duplicate',
+);
+assert(
+  adapter.mergeFlightLists([liveDuplicateOld], [sameNumberDifferentRoute], 'departure').length === 2,
+  'merge should not collapse the same flight number on a different route',
+);
+
 const pruned = adapter.pruneExpiredFlights([scheduledOnly, delayed], 'departure', 5000, 3600);
 assert(pruned.length === 0, 'prune should remove flights older than retention using best time');
 

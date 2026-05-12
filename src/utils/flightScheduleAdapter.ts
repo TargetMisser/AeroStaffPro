@@ -150,13 +150,57 @@ export function getFlightStableKey(item: any, direction: FlightDirection): strin
   return typeof id === 'string' && id ? id : JSON.stringify(item);
 }
 
+function normalizeFlightIdentityPart(value: unknown): string {
+  if (typeof value !== 'string' && typeof value !== 'number') return '';
+  return String(value).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '');
+}
+
+function getFlightRemoteAirportKey(item: any, direction: FlightDirection): string {
+  const airport = direction === 'arrival'
+    ? item?.flight?.airport?.origin
+    : item?.flight?.airport?.destination;
+  return normalizeFlightIdentityPart(
+    readUsefulAirportText(airport?.code?.iata)
+      ?? readUsefulAirportText(airport?.iata)
+      ?? readUsefulAirportText(airport?.code?.icao)
+      ?? readUsefulAirportText(airport?.icao)
+      ?? readUsefulAirportText(airport?.name)
+      ?? '',
+  );
+}
+
+function getFlightServiceDateKey(item: any, direction: FlightDirection): string {
+  const ts = getFlightScheduledTs(item, direction) ?? getFlightBestTs(item, direction);
+  if (!ts) return '';
+
+  const date = new Date(ts * 1000);
+  if (Number.isNaN(date.getTime())) return '';
+
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+export function getFlightMergeKey(item: any, direction: FlightDirection): string {
+  const flightNumber = normalizeFlightIdentityPart(getFlightNumber(item));
+  if (!flightNumber) {
+    return getFlightStableKey(item, direction);
+  }
+
+  const remoteAirport = getFlightRemoteAirportKey(item, direction) || 'AIRPORT_UNKNOWN';
+  const serviceDate = getFlightServiceDateKey(item, direction) || 'DATE_UNKNOWN';
+  return [flightNumber, direction, remoteAirport, serviceDate].join('_');
+}
+
 export function mergeFlightLists(cached: any[], fresh: any[], direction: FlightDirection): any[] {
   const map = new Map<string, any>();
   for (const item of cached) {
-    map.set(getFlightStableKey(item, direction), item);
+    map.set(getFlightMergeKey(item, direction), item);
   }
   for (const item of fresh) {
-    map.set(getFlightStableKey(item, direction), item);
+    map.set(getFlightMergeKey(item, direction), item);
   }
   return Array.from(map.values());
 }

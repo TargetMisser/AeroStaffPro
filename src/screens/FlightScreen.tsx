@@ -31,6 +31,7 @@ import {
   compareFlightsChronologically,
   filterFlightsByAirlines,
   getFlightAirportLabel,
+  getFlightMergeKey,
   isFlightAirlineMatch,
   mergeFlightLists,
   pruneExpiredFlights,
@@ -1638,7 +1639,7 @@ export default function FlightScreen() {
     return filterFlightsByAirlines(source, selectedAirlines).filter(item => {
       const ts = item.flight?.time?.scheduled?.[timeField];
       if (!ts || !isSameDay(new Date(ts * 1000), selectedDate)) return false;
-      const dedupeKey = `${item.flight?.identification?.number?.default ?? ''}_${ts}`;
+      const dedupeKey = getFlightMergeKey(item, timeField);
       if (seen.has(dedupeKey)) return false;
       seen.add(dedupeKey);
       return true;
