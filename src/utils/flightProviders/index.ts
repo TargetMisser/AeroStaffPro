@@ -1,11 +1,14 @@
 import { airLabsProvider } from './airLabsProvider';
 import { fr24ApiProvider, fr24PublicProvider } from './fr24Provider';
 import { staffMonitorProvider } from './staffMonitorProvider';
+import { getFlightBestTs, mergeFlightLists, type FlightDirection } from '../flightScheduleAdapter';
 import type { FlightProviderPreference } from '../flightProviderSettings';
 import type {
   FlightSchedulePayload,
   FlightScheduleProvider,
   FlightScheduleProviderContext,
+  FlightScheduleProviderId,
+  FlightScheduleProviderResult,
   FlightScheduleProviderStatus,
 } from './types';
 
@@ -55,11 +58,77 @@ function errorMessage(error: unknown): string {
   return String(error ?? 'unknown_error');
 }
 
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isSameLocalDay(ts: number | undefined, day: Date): boolean {
+  if (!ts) return false;
+  const actual = new Date(ts * 1000);
+  return actual.getFullYear() === day.getFullYear()
+    && actual.getMonth() === day.getMonth()
+    && actual.getDate() === day.getDate();
+}
+
+function hasFlightsOnDay(items: any[], direction: FlightDirection, day: Date): boolean {
+  return items.some(item => isSameLocalDay(getFlightBestTs(item, direction), day));
+}
+
+function hasDayCoverage(result: FlightScheduleProviderResult, day: Date): boolean {
+  return hasFlightsOnDay(result.allArrivals, 'arrival', day)
+    || hasFlightsOnDay(result.allDepartures, 'departure', day);
+}
+
+function hasUsefulCoverage(result: FlightScheduleProviderResult): boolean {
+  return result.allArrivals.length + result.allDepartures.length > 0;
+}
+
+function hasTodayAndTomorrowCoverage(result: FlightScheduleProviderResult, now: Date): boolean {
+  const today = new Date(now);
+  const tomorrow = addDays(today, 1);
+  return hasDayCoverage(result, today) && hasDayCoverage(result, tomorrow);
+}
+
+function mergeProviderResults(
+  previous: FlightScheduleProviderResult | null,
+  next: FlightScheduleProviderResult,
+): FlightScheduleProviderResult {
+  if (!previous) {
+    return next;
+  }
+
+  return {
+    allArrivals: mergeFlightLists(previous.allArrivals, next.allArrivals, 'arrival'),
+    allDepartures: mergeFlightLists(previous.allDepartures, next.allDepartures, 'departure'),
+  };
+}
+
+function buildPayload(
+  result: FlightScheduleProviderResult,
+  source: FlightScheduleProviderId,
+  sourceLabels: string[],
+  diagnostics: FlightScheduleProviderStatus[],
+): FlightSchedulePayload {
+  return {
+    ...result,
+    source,
+    sourceLabel: sourceLabels.join(' + '),
+    fetchedAt: Date.now(),
+    diagnostics,
+  };
+}
+
 export async function fetchFlightScheduleFromProviders(
   context: FlightScheduleProviderContext,
   providers = DEFAULT_PROVIDERS,
 ): Promise<FlightSchedulePayload> {
   const diagnostics: FlightScheduleProviderStatus[] = [];
+  const now = context.now ?? new Date();
+  let aggregate: FlightScheduleProviderResult | null = null;
+  let source: FlightScheduleProviderId | null = null;
+  const sourceLabels: string[] = [];
 
   for (const provider of providers) {
     if (!provider.supports(context)) {
@@ -85,13 +154,17 @@ export async function fetchFlightScheduleFromProviders(
         departures: result.allDepartures.length,
       });
 
-      return {
-        ...result,
-        source: provider.id,
-        sourceLabel: provider.label,
-        fetchedAt: Date.now(),
-        diagnostics,
-      };
+      if (!hasUsefulCoverage(result)) {
+        continue;
+      }
+
+      aggregate = mergeProviderResults(aggregate, result);
+      source ??= provider.id;
+      sourceLabels.push(provider.label);
+
+      if (hasTodayAndTomorrowCoverage(aggregate, now)) {
+        return buildPayload(aggregate, source, sourceLabels, diagnostics);
+      }
     } catch (error) {
       diagnostics.push({
         provider: provider.id,
@@ -100,8 +173,14 @@ export async function fetchFlightScheduleFromProviders(
         durationMs: Date.now() - startedAt,
         message: errorMessage(error),
       });
-      if (__DEV__) console.warn(`[flightProviders] ${provider.id} failed:`, error);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn(`[flightProviders] ${provider.id} failed:`, error);
+      }
     }
+  }
+
+  if (aggregate && source) {
+    return buildPayload(aggregate, source, sourceLabels, diagnostics);
   }
 
   const summary = diagnostics.map(item => `${item.label}: ${item.message ?? item.status}`).join(' | ');

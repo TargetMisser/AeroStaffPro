@@ -527,10 +527,10 @@ export const airLabsProvider: FlightScheduleProvider = {
   label: 'AirLabs',
   supports: ({ airLabsApiKey }) => Boolean(airLabsApiKey),
   unavailableMessage: () => 'AirLabs API key non configurata',
-  fetch: async ({ airportCode, airLabsApiKey, signal }) => {
+  fetch: async ({ airportCode, airLabsApiKey, signal, now = new Date() }) => {
     if (!airLabsApiKey) throw new Error('AIRLABS_API_KEY_MISSING');
 
-    const tomorrow = addDays(new Date(), 1);
+    const tomorrow = addDays(now, 1);
     tomorrow.setHours(0, 0, 0, 0);
 
     const [departuresResult, arrivalsResult, routeDeparturesResult, routeArrivalsResult] = await Promise.allSettled([

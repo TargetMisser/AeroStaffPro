@@ -128,6 +128,7 @@ async function saveCachedSchedule(entry: ScheduleCacheEntry): Promise<void> {
 async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
   const airportCode = await resolveAirportCode(code);
   const airport = getAirportInfo(airportCode);
+  const now = new Date();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
@@ -142,6 +143,7 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
       airLabsApiKey,
       fr24ApiKey,
       signal: controller.signal,
+      now,
     }, getFlightScheduleProviders(providerPreference)));
     await saveCachedSchedule({
       airportCode,

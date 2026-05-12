@@ -219,4 +219,98 @@ const cache = flightCache.sanitizeFlightScreenCache({
 assert(cache && cache.arrivals.length === 1 && cache.departures.length === 1, 'flight screen cache should accept matching fresh airport cache');
 assert(flightCache.sanitizeFlightScreenCache({ airportCode: 'FCO', savedAt: 10_000 }, 'PSA', 20_000) === null, 'flight screen cache should reject another airport');
 
-console.log('Flight helper tests passed.');
+function makeProvider(id, label, result, calls) {
+  return {
+    id,
+    label,
+    supports: () => true,
+    fetch: async () => {
+      calls.push(id);
+      return result;
+    },
+  };
+}
+
+function makeProviderFlight(flightNumber, departureTs, destination = 'AMS') {
+  return {
+    flight: {
+      identification: { number: { default: flightNumber } },
+      airline: { name: 'Transavia' },
+      airport: { destination: { code: { iata: destination }, name: destination } },
+      time: { scheduled: { departure: departureTs }, estimated: {}, real: {} },
+    },
+  };
+}
+
+async function runProviderLayerTests() {
+  const now = new Date(2026, 4, 12, 12, 0, 0);
+  const todayTs = Math.floor(new Date(2026, 4, 12, 14, 0, 0).getTime() / 1000);
+  const tomorrowTs = Math.floor(new Date(2026, 4, 13, 14, 0, 0).getTime() / 1000);
+  const calls = [];
+  const providerLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', {
+        allArrivals: [],
+        allDepartures: [makeProviderFlight('HV9002', tomorrowTs)],
+      }, calls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
+        allArrivals: [],
+        allDepartures: [makeProviderFlight('HV9001', todayTs)],
+      }, calls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', { allArrivals: [], allDepartures: [] }, calls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, calls),
+    },
+  });
+
+  const payload = await providerLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+  });
+
+  assert(calls.includes('airlabs') && calls.includes('staffMonitor'), 'provider auto mode should continue past partial AirLabs coverage');
+  assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow coverage from fallback providers');
+  assert(payload.sourceLabel.includes('AirLabs') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
+
+  const fullCalls = [];
+  const fullProviderLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', {
+        allArrivals: [],
+        allDepartures: [
+          makeProviderFlight('HV9101', todayTs),
+          makeProviderFlight('HV9102', tomorrowTs),
+        ],
+      }, fullCalls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
+        allArrivals: [],
+        allDepartures: [makeProviderFlight('HV9103', todayTs)],
+      }, fullCalls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', { allArrivals: [], allDepartures: [] }, fullCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, fullCalls),
+    },
+  });
+  await fullProviderLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+  });
+  assert(fullCalls.join(',') === 'airlabs', 'provider auto mode should stop once one provider covers today and tomorrow');
+}
+
+runProviderLayerTests()
+  .then(() => {
+    console.log('Flight helper tests passed.');
+  })
+  .catch(error => {
+    console.error(error);
+    process.exit(1);
+  });
