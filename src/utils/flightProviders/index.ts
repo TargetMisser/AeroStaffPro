@@ -1,3 +1,4 @@
+import { aeroDataBoxProvider } from './aeroDataBoxProvider';
 import { airLabsProvider } from './airLabsProvider';
 import { fr24ApiProvider, fr24PublicProvider } from './fr24Provider';
 import { staffMonitorProvider } from './staffMonitorProvider';
@@ -22,11 +23,13 @@ export type {
 const DEFAULT_PROVIDERS: FlightScheduleProvider[] = [
   staffMonitorProvider,
   fr24ApiProvider,
+  aeroDataBoxProvider,
   fr24PublicProvider,
   airLabsProvider,
 ];
 
 const PROVIDERS_BY_ID = {
+  aeroDataBox: aeroDataBoxProvider,
   airlabs: airLabsProvider,
   staffMonitor: staffMonitorProvider,
 } satisfies Record<Exclude<FlightProviderPreference, 'auto' | 'fr24'>, FlightScheduleProvider>;

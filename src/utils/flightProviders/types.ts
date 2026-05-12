@@ -1,6 +1,6 @@
 import type { AirportInfo } from '../airportSettings';
 
-export type FlightScheduleProviderId = 'airlabs' | 'fr24Api' | 'fr24Public' | 'staffMonitor' | 'cache';
+export type FlightScheduleProviderId = 'aeroDataBox' | 'airlabs' | 'fr24Api' | 'fr24Public' | 'staffMonitor' | 'cache';
 
 export type FlightScheduleProviderStatus = {
   provider: FlightScheduleProviderId;
@@ -19,6 +19,8 @@ export type FlightScheduleProviderStatus = {
 export type FlightScheduleProviderContext = {
   airportCode: string;
   airport: AirportInfo;
+  aeroDataBoxApiKey?: string | null;
+  aeroDataBoxGateway?: 'apiMarket' | 'rapidApi';
   airLabsApiKey?: string | null;
   fr24ApiKey?: string | null;
   airLabsMode?: 'full' | 'routesOnly';

@@ -304,10 +304,16 @@ async function runProviderLayerTests() {
   const calls = [];
   const contexts = [];
   const providerLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [makeProviderArrival('U29202', tomorrowTs)],
+        allDepartures: [makeProviderFlight('HV9002', tomorrowTs)],
+      }, calls),
+    },
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
         allArrivals: [],
-        allDepartures: [makeProviderFlight('HV9002', tomorrowTs)],
+        allDepartures: [makeProviderFlight('HV9003', tomorrowTs)],
       }, calls, contexts),
     },
     './staffMonitorProvider': {
@@ -325,23 +331,32 @@ async function runProviderLayerTests() {
   const payload = await providerLayer.fetchFlightScheduleFromProviders({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'adb-key',
     now,
   });
 
-  assert(calls.includes('airlabs') && calls.includes('staffMonitor'), 'provider auto mode should continue past partial AirLabs coverage');
-  assert(calls.indexOf('staffMonitor') < calls.indexOf('airlabs'), 'provider auto mode should try local/live providers before AirLabs');
+  assert(calls.includes('aeroDataBox') && calls.includes('staffMonitor'), 'provider auto mode should continue to AeroDataBox for future coverage');
+  assert(!calls.includes('airlabs'), 'provider auto mode should not spend AirLabs when AeroDataBox covers tomorrow');
+  assert(calls.indexOf('staffMonitor') < calls.indexOf('aeroDataBox'), 'provider auto mode should try local/live providers before AeroDataBox');
   assert(
-    contexts.find(item => item.id === 'airlabs')?.context?.airLabsMode === 'routesOnly',
-    'provider auto mode should use AirLabs routes-only once today is covered',
+    !calls.includes('fr24Public') || calls.indexOf('aeroDataBox') < calls.indexOf('fr24Public'),
+    'provider auto mode should prefer configured AeroDataBox before public FR24 fallback',
   );
-  assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow coverage from fallback providers');
-  assert(payload.sourceLabel.includes('AirLabs') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
-  const airLabsStatus = payload.diagnostics.find(item => item.provider === 'airlabs');
-  assert(airLabsStatus?.tomorrowDepartures === 1, 'provider diagnostics should count tomorrow departures');
-  assert(airLabsStatus?.todayDepartures === 0, 'provider diagnostics should count today departures separately');
+  assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow departures from fallback providers');
+  assert(payload.sourceLabel.includes('AeroDataBox') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
+  const aeroDataBoxStatus = payload.diagnostics.find(item => item.provider === 'aeroDataBox');
+  assert(aeroDataBoxStatus?.tomorrowDepartures === 1, 'provider diagnostics should count AeroDataBox tomorrow departures');
+  assert(aeroDataBoxStatus?.tomorrowArrivals === 1, 'provider diagnostics should count AeroDataBox tomorrow arrivals');
+  assert(aeroDataBoxStatus?.todayDepartures === 0, 'provider diagnostics should count AeroDataBox today departures separately');
 
   const partialTomorrowCalls = [];
   const partialTomorrowLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [],
+        allDepartures: [],
+      }, partialTomorrowCalls),
+    },
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
         allArrivals: [
@@ -377,6 +392,12 @@ async function runProviderLayerTests() {
 
   const fullCalls = [];
   const fullProviderLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [],
+        allDepartures: [],
+      }, fullCalls),
+    },
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
         allArrivals: [
@@ -405,7 +426,95 @@ async function runProviderLayerTests() {
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
     now,
   });
-  assert(fullCalls.join(',') === 'staffMonitor,fr24Api,fr24Public,airlabs', 'provider auto mode should reserve AirLabs until live/local providers are exhausted');
+  assert(fullCalls.join(',') === 'staffMonitor,fr24Api,aeroDataBox,fr24Public,airlabs', 'provider auto mode should reserve AirLabs until live/local/schedule providers are exhausted');
+
+  const aeroStorage = new Map();
+  const aeroCalls = [];
+  const aeroDataBoxModule = loadTsModule('src/utils/flightProviders/aeroDataBoxProvider.ts', {
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => aeroStorage.get(key) ?? null,
+      setItem: async (key, value) => { aeroStorage.set(key, value); },
+    },
+    __globals: {
+      fetch: async (url, options = {}) => {
+        const decodedUrl = decodeURIComponent(String(url));
+        aeroCalls.push({ url: decodedUrl, headers: options.headers ?? {} });
+        const isTomorrowMorning = decodedUrl.includes('/2026-05-13T00:00/2026-05-13T12:00');
+        return {
+          ok: true,
+          text: async () => JSON.stringify(isTomorrowMorning
+            ? {
+                departures: [{
+                  number: 'HV5426',
+                  status: 'Expected',
+                  codeshareStatus: 'IsOperator',
+                  isCargo: false,
+                  airline: { name: 'Transavia', iata: 'HV', icao: 'TRA' },
+                  aircraft: { reg: 'PH-HXA', model: 'B738' },
+                  departure: {
+                    airport: { name: 'Pisa Galileo Galilei', iata: 'PSA', icao: 'LIRP' },
+                    scheduledTime: { local: '2026-05-13T09:50:00', utc: '2026-05-13T07:50:00Z' },
+                    revisedTime: { local: '2026-05-13T09:55:00', utc: '2026-05-13T07:55:00Z' },
+                    checkInDesk: '12-14',
+                    gate: 'B4',
+                    quality: ['Basic', 'Live'],
+                  },
+                  arrival: {
+                    airport: { name: 'Amsterdam Schiphol', iata: 'AMS', icao: 'EHAM' },
+                    scheduledTime: { local: '2026-05-13T11:45:00', utc: '2026-05-13T09:45:00Z' },
+                    quality: ['Basic'],
+                  },
+                }],
+                arrivals: [{
+                  number: 'U28319',
+                  status: 'Delayed',
+                  codeshareStatus: 'IsOperator',
+                  isCargo: false,
+                  airline: { name: 'easyJet', iata: 'U2', icao: 'EZY' },
+                  departure: {
+                    airport: { name: 'London Gatwick', iata: 'LGW', icao: 'EGKK' },
+                    scheduledTime: { local: '2026-05-13T08:00:00', utc: '2026-05-13T07:00:00Z' },
+                    quality: ['Basic'],
+                  },
+                  arrival: {
+                    airport: { name: 'Pisa Galileo Galilei', iata: 'PSA', icao: 'LIRP' },
+                    scheduledTime: { local: '2026-05-13T10:50:00', utc: '2026-05-13T08:50:00Z' },
+                    revisedTime: { local: '2026-05-13T11:05:00', utc: '2026-05-13T09:05:00Z' },
+                    baggageBelt: '2',
+                    quality: ['Basic', 'Live'],
+                  },
+                }],
+              }
+            : { departures: [], arrivals: [] }),
+        };
+      },
+    },
+  });
+  const aeroResult = await aeroDataBoxModule.aeroDataBoxProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'adb-key',
+    aeroDataBoxGateway: 'apiMarket',
+    now,
+  });
+  assert(aeroCalls.length > 0, 'AeroDataBox provider should call the schedule API');
+  assert(aeroCalls[0].url.startsWith('https://prod.api.market/api/v1/aedbx/aerodatabox/flights/airports/iata/PSA/'), 'AeroDataBox provider should use the API.Market gateway by default');
+  assert(aeroCalls[0].headers['x-magicapi-key'] === 'adb-key', 'AeroDataBox provider should send API.Market key header');
+  assert(aeroResult.allDepartures.some(item => item.flight.identification.number.default === 'HV5426'), 'AeroDataBox provider should parse departures');
+  assert(aeroResult.allArrivals.some(item => item.flight.identification.number.default === 'U28319'), 'AeroDataBox provider should parse arrivals');
+  const parsedDeparture = aeroResult.allDepartures.find(item => item.flight.identification.number.default === 'HV5426');
+  assert(parsedDeparture.flight.airport.destination.code.iata === 'AMS', 'AeroDataBox departures should expose destination IATA');
+  assert(parsedDeparture.flight.time.estimated.departure > parsedDeparture.flight.time.scheduled.departure, 'AeroDataBox revised time should become estimated time');
+  assert(parsedDeparture.flight._operational.departureGate === 'B4', 'AeroDataBox provider should expose departure gate');
+  const aeroFirstCallCount = aeroCalls.length;
+  await aeroDataBoxModule.aeroDataBoxProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'adb-key',
+    aeroDataBoxGateway: 'apiMarket',
+    now,
+  });
+  assert(aeroCalls.length === aeroFirstCallCount, 'AeroDataBox provider should cache identical schedule windows');
 
   const memoryStorage = new Map();
   const airLabsCalls = [];

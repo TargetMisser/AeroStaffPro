@@ -3,16 +3,22 @@ import * as SecureStore from 'expo-secure-store';
 
 const AIRLABS_API_KEY_SECURE_KEY = 'aerostaff_airlabs_api_key_v1';
 const FR24_API_KEY_SECURE_KEY = 'aerostaff_fr24_api_key_v1';
+const AERODATABOX_API_KEY_SECURE_KEY = 'aerostaff_aerodatabox_api_key_v1';
+const AERODATABOX_GATEWAY_KEY = 'aerostaff_aerodatabox_gateway_v1';
 const FLIGHT_PROVIDER_PREFERENCE_KEY = 'aerostaff_flight_provider_preference_v1';
 
-export type FlightProviderPreference = 'auto' | 'staffMonitor' | 'airlabs' | 'fr24';
+export type AeroDataBoxGateway = 'apiMarket' | 'rapidApi';
+export type FlightProviderPreference = 'auto' | 'staffMonitor' | 'aeroDataBox' | 'airlabs' | 'fr24';
 
 export const FLIGHT_PROVIDER_PREFERENCES: FlightProviderPreference[] = [
   'auto',
   'staffMonitor',
+  'aeroDataBox',
   'airlabs',
   'fr24',
 ];
+
+export const AERODATABOX_GATEWAYS: AeroDataBoxGateway[] = ['apiMarket', 'rapidApi'];
 
 declare const process:
   | {
@@ -28,9 +34,12 @@ export type ProviderApiKeyState = {
 
 export type AirLabsKeyState = ProviderApiKeyState;
 export type Fr24KeyState = ProviderApiKeyState;
+export type AeroDataBoxKeyState = ProviderApiKeyState;
 
 export type FlightProviderSettingsState = {
   preference: FlightProviderPreference;
+  aeroDataBox: AeroDataBoxKeyState;
+  aeroDataBoxGateway: AeroDataBoxGateway;
   airLabs: AirLabsKeyState;
   fr24: Fr24KeyState;
 };
@@ -53,6 +62,13 @@ function getBuildFr24ApiKey(): string {
   return sanitizeApiKey(value);
 }
 
+function getBuildAeroDataBoxApiKey(): string {
+  const value = typeof process !== 'undefined'
+    ? process.env?.EXPO_PUBLIC_AERODATABOX_API_KEY
+    : undefined;
+  return sanitizeApiKey(value);
+}
+
 function maskApiKey(value: string | null | undefined): string | null {
   const key = sanitizeApiKey(value);
   if (!key) return null;
@@ -62,6 +78,7 @@ function maskApiKey(value: string | null | undefined): string | null {
 
 export const maskAirLabsApiKey = maskApiKey;
 export const maskFr24ApiKey = maskApiKey;
+export const maskAeroDataBoxApiKey = maskApiKey;
 
 export async function getAirLabsApiKey(): Promise<string | null> {
   try {
@@ -81,6 +98,34 @@ export async function getFr24ApiKey(): Promise<string | null> {
 
   const buildKey = getBuildFr24ApiKey();
   return buildKey || null;
+}
+
+export async function getAeroDataBoxApiKey(): Promise<string | null> {
+  try {
+    const stored = sanitizeApiKey(await SecureStore.getItemAsync(AERODATABOX_API_KEY_SECURE_KEY));
+    if (stored) return stored;
+  } catch {}
+
+  const buildKey = getBuildAeroDataBoxApiKey();
+  return buildKey || null;
+}
+
+export function isAeroDataBoxGateway(value: unknown): value is AeroDataBoxGateway {
+  return typeof value === 'string'
+    && AERODATABOX_GATEWAYS.includes(value as AeroDataBoxGateway);
+}
+
+export async function getAeroDataBoxGateway(): Promise<AeroDataBoxGateway> {
+  try {
+    const stored = await AsyncStorage.getItem(AERODATABOX_GATEWAY_KEY);
+    return isAeroDataBoxGateway(stored) ? stored : 'apiMarket';
+  } catch {
+    return 'apiMarket';
+  }
+}
+
+export async function saveAeroDataBoxGateway(value: AeroDataBoxGateway): Promise<void> {
+  await AsyncStorage.setItem(AERODATABOX_GATEWAY_KEY, value);
 }
 
 export function isFlightProviderPreference(value: unknown): value is FlightProviderPreference {
@@ -141,14 +186,52 @@ export async function getFr24KeyState(): Promise<Fr24KeyState> {
   };
 }
 
+export async function getAeroDataBoxKeyState(): Promise<AeroDataBoxKeyState> {
+  try {
+    const stored = sanitizeApiKey(await SecureStore.getItemAsync(AERODATABOX_API_KEY_SECURE_KEY));
+    if (stored) {
+      return {
+        configured: true,
+        source: 'device',
+        masked: maskApiKey(stored),
+      };
+    }
+  } catch {}
+
+  const buildKey = getBuildAeroDataBoxApiKey();
+  return {
+    configured: Boolean(buildKey),
+    source: buildKey ? 'build' : null,
+    masked: maskApiKey(buildKey),
+  };
+}
+
 export async function getFlightProviderSettingsState(): Promise<FlightProviderSettingsState> {
-  const [preference, airLabs, fr24] = await Promise.all([
+  const [preference, aeroDataBox, aeroDataBoxGateway, airLabs, fr24] = await Promise.all([
     getFlightProviderPreference(),
+    getAeroDataBoxKeyState(),
+    getAeroDataBoxGateway(),
     getAirLabsKeyState(),
     getFr24KeyState(),
   ]);
 
-  return { preference, airLabs, fr24 };
+  return { preference, aeroDataBox, aeroDataBoxGateway, airLabs, fr24 };
+}
+
+export async function saveAeroDataBoxApiKey(value: string): Promise<void> {
+  const key = sanitizeApiKey(value);
+  if (!key) {
+    await clearAeroDataBoxApiKey();
+    return;
+  }
+
+  await SecureStore.setItemAsync(AERODATABOX_API_KEY_SECURE_KEY, key);
+}
+
+export async function clearAeroDataBoxApiKey(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(AERODATABOX_API_KEY_SECURE_KEY);
+  } catch {}
 }
 
 export async function saveAirLabsApiKey(value: string): Promise<void> {
