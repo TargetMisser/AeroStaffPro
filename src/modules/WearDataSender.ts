@@ -1,5 +1,6 @@
 import { NativeModules, Platform } from 'react-native';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
+import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 
 const { WearDataSender } = NativeModules;
 
@@ -11,22 +12,21 @@ function flightItemToWearJson(item: any): string {
   const tab: string = item._pinTab || 'departures';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
-  const ops = tab === 'departures' ? getAirlineOps(airline) : null;
+  const airlineIdentity = [
+    airline,
+    iataCode,
+    item.flight?.airline?.code?.icao,
+  ].filter(Boolean).join(' ');
+  const ops = tab === 'departures' ? getAirlineOps(airlineIdentity) : null;
 
   const payload: Record<string, any> = {
     flightNumber: item.flight?.identification?.number?.default || 'N/A',
     airline,
-    airlineColor: getAirlineColor(airline),
+    airlineColor: getAirlineColor(airlineIdentity),
     iataCode,
     tab,
-    destination:
-      item.flight?.airport?.destination?.name ||
-      item.flight?.airport?.destination?.code?.iata ||
-      '',
-    origin:
-      item.flight?.airport?.origin?.name ||
-      item.flight?.airport?.origin?.code?.iata ||
-      '',
+    destination: getFlightAirportLabel(item.flight?.airport?.destination, ''),
+    origin: getFlightAirportLabel(item.flight?.airport?.origin, ''),
     scheduledTime:
       tab === 'arrivals'
         ? item.flight?.time?.scheduled?.arrival ?? 0

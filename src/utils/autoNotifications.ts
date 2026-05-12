@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAirlineOps } from './airlineOps';
 import { fetchAirportScheduleRaw } from './fr24api';
-import { isFlightAirlineMatch } from './flightScheduleAdapter';
+import { getFlightAirportLabel, isFlightAirlineMatch } from './flightScheduleAdapter';
 import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
 import {
   showShiftOngoingNotification,
@@ -178,7 +178,7 @@ export async function autoScheduleNotifications(): Promise<number> {
       if (next) {
         const depTs = getBestDepartureTs(next) as number;
         const fn    = next.flight?.identification?.number?.default ?? '';
-        const dest  = next.flight?.airport?.destination?.code?.iata ?? '';
+        const dest  = getFlightAirportLabel(next.flight?.airport?.destination, '');
         const time  = new Date(depTs * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
         flightInfo  = `Prossima: ${fn} per ${dest} alle ${time} · ${shiftDepartures.length} voli oggi`;
       } else {
@@ -210,8 +210,7 @@ export async function autoScheduleNotifications(): Promise<number> {
 
         const flightNumber = item.flight?.identification?.number?.default || 'N/A';
         const airline = item.flight?.airline?.name || 'Sconosciuta';
-        const origin = item.flight?.airport?.origin?.name
-          || item.flight?.airport?.origin?.code?.iata || 'N/A';
+        const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
         const arrivalTime = new Date(arrTs * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
         const id = await Notifications.scheduleNotificationAsync({
@@ -243,8 +242,7 @@ export async function autoScheduleNotifications(): Promise<number> {
 
         const airline = item.flight?.airline?.name || 'Sconosciuta';
         const flightNumber = item.flight?.identification?.number?.default || 'N/A';
-        const destination = item.flight?.airport?.destination?.name
-          || item.flight?.airport?.destination?.code?.iata || 'N/A';
+        const destination = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
         const depTime = new Date(depTs * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
         // Get airline-specific ops times

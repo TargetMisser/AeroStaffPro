@@ -16,6 +16,7 @@ import BoardReveal from '../components/motion/BoardReveal';
 import ShiftTimeline from '../components/ShiftTimeline';
 
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
+import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import {
   getWritableCalendarId,
   replaceShiftForDate,
@@ -61,20 +62,25 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
   const tab = item._pinTab || 'departures';
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
-  const airlineColor = getAirlineColor(airline);
+  const airlineIdentity = [
+    airline,
+    item.flight?.airline?.code?.iata,
+    item.flight?.airline?.code?.icao,
+  ].filter(Boolean).join(' ');
+  const airlineColor = getAirlineColor(airlineIdentity);
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
   const statusColor = raw === 'green' ? '#10b981' : raw === 'red' ? '#ef4444' : raw === 'yellow' ? '#f59e0b' : '#6b7280';
 
   const dest = tab === 'arrivals'
-    ? (item.flight?.airport?.origin?.code?.iata || 'N/A')
-    : (item.flight?.airport?.destination?.code?.iata || 'N/A');
+    ? getFlightAirportLabel(item.flight?.airport?.origin, 'N/A')
+    : getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
   const ts = tab === 'arrivals'
     ? item.flight?.time?.scheduled?.arrival
     : item.flight?.time?.scheduled?.departure;
   const depTime = ts ? new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
 
-  const ops = getAirlineOps(airline);
+  const ops = getAirlineOps(airlineIdentity);
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
   const headerBg = isOperations ? 'rgba(2,8,12,0.72)' : airlineColor;
@@ -137,7 +143,7 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
           </View>
         ) : (
           <Text style={{ fontSize: 12, color: colors.textSub }}>
-            Da: {item.flight?.airport?.origin?.name || item.flight?.airport?.origin?.code?.iata || 'N/A'}
+            Da: {getFlightAirportLabel(item.flight?.airport?.origin, 'N/A')}
           </Text>
         )}
         {/* Status row */}

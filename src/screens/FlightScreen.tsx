@@ -430,17 +430,19 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
+  const icaoCode = item.flight?.airline?.code?.icao || '';
+  const airlineIdentity = [airline, iataCode, icaoCode].filter(Boolean).join(' ');
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
   const statusColor = raw === 'green' ? '#10b981' : raw === 'red' ? '#ef4444' : raw === 'yellow' ? '#f59e0b' : '#6b7280';
   const originDest = activeTab === 'arrivals'
-    ? (item.flight?.airport?.origin?.name || item.flight?.airport?.origin?.code?.iata || 'N/A')
-    : (item.flight?.airport?.destination?.name || item.flight?.airport?.destination?.code?.iata || 'N/A');
+    ? getFlightAirportLabel(item.flight?.airport?.origin, 'N/A')
+    : getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
   const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
   const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
   const duringShift = userShift && ts && (() => {
     if (activeTab === 'arrivals') return ts >= userShift.start && ts <= userShift.end;
-    const opsData = getAirlineOps(airline);
+    const opsData = getAirlineOps(airlineIdentity);
     const ciOpen = ts - opsData.checkInOpen * 60;
     const ciClose = ts - opsData.checkInClose * 60;
     const gOpen = ts - opsData.gateOpen * 60;
@@ -449,12 +451,12 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
     const gateOverlap = gOpen <= userShift.end && gClose >= userShift.start;
     return ciOverlap || gateOverlap;
   })();
-  const color = getAirlineColor(airline);
+  const color = getAirlineColor(airlineIdentity);
   const brandAccent = isOperations ? mixHexColor(color, '#FFFFFF', 0.34) : color;
   const airlineTint = hexToRgba(brandAccent, isOperations ? 0.20 : 0.14);
   const airlineTintStrong = hexToRgba(brandAccent, isOperations ? 0.42 : 0.22);
   const airlineBorder = hexToRgba(brandAccent, isOperations ? 0.62 : 0.36);
-  const ops = activeTab === 'departures' && ts ? getAirlineOps(airline) : null;
+  const ops = activeTab === 'departures' && ts ? getAirlineOps(airlineIdentity) : null;
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
   const fmtTs = (t: number) =>
@@ -809,9 +811,7 @@ async function scheduleShiftNotifications(
 
       const flightNumber = item.flight?.identification?.number?.default || 'N/A';
       const airline = item.flight?.airline?.name || 'Sconosciuta';
-      const origin = item.flight?.airport?.origin?.name
-        || item.flight?.airport?.origin?.code?.iata
-        || 'N/A';
+      const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
       const arrivalTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
       const id = await Notifications.scheduleNotificationAsync({
@@ -844,9 +844,7 @@ async function scheduleShiftNotifications(
 
       const flightNumber = item.flight?.identification?.number?.default || 'N/A';
       const airline = item.flight?.airline?.name || 'Sconosciuta';
-      const destination = item.flight?.airport?.destination?.name
-        || item.flight?.airport?.destination?.code?.iata
-        || 'N/A';
+      const destination = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
       const departureTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
       const id = await Notifications.scheduleNotificationAsync({
@@ -942,7 +940,7 @@ async function schedulePinnedNotifications(
   if (tab === 'arrivals') {
     const ts = getBestArrivalTs(item);
     if (!ts) return;
-    const origin = item.flight?.airport?.origin?.name || item.flight?.airport?.origin?.code?.iata || 'N/A';
+    const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
     const arrTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     const secsUntil = ts - settings.arrivalLeadMinutes * 60 - now;
     if (secsUntil > 0) {
@@ -968,7 +966,7 @@ async function schedulePinnedNotifications(
   } else {
     const ts = getBestDepartureTs(item);
     if (!ts) return;
-    const dest = item.flight?.airport?.destination?.name || item.flight?.airport?.destination?.code?.iata || 'N/A';
+    const dest = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
     const depTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     const ops = getAirlineOps(airline);
 
@@ -1337,7 +1335,12 @@ export default function FlightScreen() {
             .map(item => {
               const ts = getBestDepartureTs(item)!;
               const airline = item.flight?.airline?.name || 'Sconosciuta';
-              const ops = getAirlineOps(airline);
+              const airlineIdentity = [
+                airline,
+                item.flight?.airline?.code?.iata,
+                item.flight?.airline?.code?.icao,
+              ].filter(Boolean).join(' ');
+              const ops = getAirlineOps(airlineIdentity);
               const fn = item.flight?.identification?.number?.default || 'N/A';
               const normFn = normalizeFlightNumber(fn);
               const strip = (s: string) => s.replace(/[\s\-_]/g, '').toUpperCase();
@@ -1351,7 +1354,7 @@ export default function FlightScreen() {
                 departureTime: fmtT(ts),
                 ciOpen: fmtOff(ts, ops.checkInOpen), ciClose: fmtOff(ts, ops.checkInClose),
                 gateOpen: fmtOff(ts, ops.gateOpen), gateClose: fmtOff(ts, ops.gateClose),
-                airlineColor: getAirlineColor(airline),
+                airlineColor: getAirlineColor(airlineIdentity),
                 isPinned: fn === pinnedFn,
                 stand: sm?.stand,
                 checkin: sm?.checkin,
@@ -1594,19 +1597,24 @@ export default function FlightScreen() {
       }
       // Send to watch
       if (WearDataSender) {
+        const airlineIdentity = [
+          item.flight?.airline?.name,
+          item.flight?.airline?.code?.iata,
+          item.flight?.airline?.code?.icao,
+        ].filter(Boolean).join(' ');
         const payload = JSON.stringify({
           flightNumber: item.flight?.identification?.number?.default || '',
           airline: item.flight?.airline?.name || '',
-          airlineColor: getAirlineColor(item.flight?.airline?.name || ''),
+          airlineColor: getAirlineColor(airlineIdentity),
           iataCode: item.flight?.airline?.code?.iata || '',
           tab,
-          destination: item.flight?.airport?.destination?.name || item.flight?.airport?.destination?.code?.iata || '',
-          origin: item.flight?.airport?.origin?.name || item.flight?.airport?.origin?.code?.iata || '',
+          destination: getFlightAirportLabel(item.flight?.airport?.destination, ''),
+          origin: getFlightAirportLabel(item.flight?.airport?.origin, ''),
           scheduledTime: tab === 'departures' ? item.flight?.time?.scheduled?.departure : item.flight?.time?.scheduled?.arrival,
           estimatedTime: tab === 'departures' ? item.flight?.time?.estimated?.departure : item.flight?.time?.estimated?.arrival,
           realDeparture: item.flight?.time?.real?.departure || null,
           realArrival: item.flight?.time?.real?.arrival || null,
-          ops: tab === 'departures' ? getAirlineOps(item.flight?.airline?.name || '') : null,
+          ops: tab === 'departures' ? getAirlineOps(airlineIdentity) : null,
           inboundArrival: tab === 'departures' && item.flight?.aircraft?.registration ? inboundArrivals[item.flight.aircraft.registration] || null : null,
           pinnedAt: Math.floor(Date.now() / 1000),
         });
@@ -1637,7 +1645,7 @@ export default function FlightScreen() {
     const timeField = activeTab === 'arrivals' ? 'arrival' : 'departure';
     const seen = new Set<string>();
     return filterFlightsByAirlines(source, selectedAirlines).filter(item => {
-      const ts = item.flight?.time?.scheduled?.[timeField];
+      const ts = activeTab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
       if (!ts || !isSameDay(new Date(ts * 1000), selectedDate)) return false;
       const dedupeKey = getFlightMergeKey(item, timeField);
       if (seen.has(dedupeKey)) return false;

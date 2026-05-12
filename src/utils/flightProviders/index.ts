@@ -81,6 +81,11 @@ function hasDayCoverage(result: FlightScheduleProviderResult, day: Date): boolea
     || hasFlightsOnDay(result.allDepartures, 'departure', day);
 }
 
+function hasTomorrowListCoverage(result: FlightScheduleProviderResult, tomorrow: Date): boolean {
+  return hasFlightsOnDay(result.allArrivals, 'arrival', tomorrow)
+    && hasFlightsOnDay(result.allDepartures, 'departure', tomorrow);
+}
+
 function hasUsefulCoverage(result: FlightScheduleProviderResult): boolean {
   return result.allArrivals.length + result.allDepartures.length > 0;
 }
@@ -88,7 +93,7 @@ function hasUsefulCoverage(result: FlightScheduleProviderResult): boolean {
 function hasTodayAndTomorrowCoverage(result: FlightScheduleProviderResult, now: Date): boolean {
   const today = new Date(now);
   const tomorrow = addDays(today, 1);
-  return hasDayCoverage(result, today) && hasDayCoverage(result, tomorrow);
+  return hasDayCoverage(result, today) && hasTomorrowListCoverage(result, tomorrow);
 }
 
 function mergeProviderResults(

@@ -187,6 +187,33 @@ function dayCode(date: Date): string {
   return DAYS_OF_WEEK[date.getDay()];
 }
 
+function normalizeRouteDays(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap(normalizeRouteDays);
+  }
+
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return [];
+  }
+
+  const raw = String(value).trim().toLowerCase();
+  if (!raw) return [];
+  if (/^(daily|everyday|all)$/.test(raw)) return [...DAYS_OF_WEEK];
+
+  const tokens = raw.split(/[^a-z0-9]+/).filter(Boolean);
+  return tokens.flatMap(token => {
+    if (DAYS_OF_WEEK.includes(token as any)) return [token];
+    if (/^[0-7]+$/.test(token)) {
+      return token.split('').map(char => {
+        const numeric = Number(char);
+        if (numeric === 0 || numeric === 7) return 'sun';
+        return DAYS_OF_WEEK[numeric] ?? '';
+      }).filter(Boolean);
+    }
+    return [];
+  });
+}
+
 function parseClock(value: unknown): { hours: number; minutes: number } | null {
   if (typeof value !== 'string') return null;
   const match = value.trim().match(/^(\d{1,2}):(\d{2})/);
@@ -219,9 +246,7 @@ function isSameLocalDay(ts: number | undefined, date: Date): boolean {
 }
 
 function routeRunsOn(route: AirLabsRouteItem, departureDate: Date): boolean {
-  const days = Array.isArray(route.days)
-    ? route.days.map(day => String(day).trim().toLowerCase())
-    : [];
+  const days = normalizeRouteDays(route.days);
   return days.includes(dayCode(departureDate));
 }
 

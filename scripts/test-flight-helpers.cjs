@@ -48,6 +48,8 @@ function loadTsModule(relativePath, mocks = {}) {
     Array,
     Math,
     JSON,
+    URLSearchParams,
+    ...(mocks.__globals ?? {}),
   };
   vm.runInNewContext(output, sandbox, { filename: absolutePath });
   return module.exports;
@@ -99,6 +101,21 @@ assert(
   adapter.getFlightAirportLabel({ code: { iata: '???' }, iata: '', name: 'Lisbon' }) === 'Lisbon',
   'airport label should ignore placeholder airport codes',
 );
+assert(
+  adapter.getFlightAirportLabel({ name: 'LONDON GATWICK' }) === 'LGW',
+  'airport label should canonicalize known airport names to IATA codes',
+);
+assert(
+  adapter.getFlightAirportLabel({ name: 'Amsterdam Schiphol' }) === 'AMS',
+  'airport label should canonicalize common airport aliases to IATA codes',
+);
+
+const airlineOps = loadTsModule('src/utils/airlineOps.ts');
+assert(airlineOps.getAirlineColor('Transavia') === '#00A650', 'Transavia name should use brand green');
+assert(airlineOps.getAirlineColor('TRA') === '#00A650', 'Transavia ICAO code should use brand green');
+assert(airlineOps.getAirlineColor('HV') === '#00A650', 'Transavia IATA code should use brand green');
+assert(airlineOps.getAirlineColor('EZY') === '#FF6600', 'easyJet ICAO code should use brand orange');
+assert(airlineOps.getAirlineColor('WMT') === '#C6006E', 'Wizz Air Malta ICAO code should use Wizz brand color');
 
 assert(typeof adapter.isFlightAirlineMatch === 'function', 'flight adapter should expose airline matching helper');
 const easyJetEuropeCodeOnly = {
@@ -266,6 +283,17 @@ function makeProviderFlight(flightNumber, departureTs, destination = 'AMS') {
   };
 }
 
+function makeProviderArrival(flightNumber, arrivalTs, origin = 'LGW') {
+  return {
+    flight: {
+      identification: { number: { default: flightNumber } },
+      airline: { name: 'easyJet' },
+      airport: { origin: { code: { iata: origin }, name: origin } },
+      time: { scheduled: { arrival: arrivalTs }, estimated: {}, real: {} },
+    },
+  };
+}
+
 async function runProviderLayerTests() {
   const now = new Date(2026, 4, 12, 12, 0, 0);
   const todayTs = Math.floor(new Date(2026, 4, 12, 14, 0, 0).getTime() / 1000);
@@ -300,11 +328,47 @@ async function runProviderLayerTests() {
   assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow coverage from fallback providers');
   assert(payload.sourceLabel.includes('AirLabs') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
 
+  const partialTomorrowCalls = [];
+  const partialTomorrowLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', {
+        allArrivals: [
+          makeProviderArrival('U29201', todayTs),
+          makeProviderArrival('U29202', tomorrowTs),
+        ],
+        allDepartures: [makeProviderFlight('HV9203', todayTs)],
+      }, partialTomorrowCalls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
+        allArrivals: [],
+        allDepartures: [makeProviderFlight('HV9204', tomorrowTs)],
+      }, partialTomorrowCalls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', { allArrivals: [], allDepartures: [] }, partialTomorrowCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, partialTomorrowCalls),
+    },
+  });
+  const partialTomorrowPayload = await partialTomorrowLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+  });
+  assert(partialTomorrowCalls.includes('staffMonitor'), 'provider auto mode should continue when tomorrow departures are still missing');
+  assert(
+    partialTomorrowPayload.allDepartures.some(item => item.flight.identification.number.default === 'HV9204'),
+    'provider auto mode should merge fallback tomorrow departures',
+  );
+
   const fullCalls = [];
   const fullProviderLayer = loadTsModule('src/utils/flightProviders/index.ts', {
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
-        allArrivals: [],
+        allArrivals: [
+          makeProviderArrival('U29104', todayTs),
+          makeProviderArrival('U29105', tomorrowTs),
+        ],
         allDepartures: [
           makeProviderFlight('HV9101', todayTs),
           makeProviderFlight('HV9102', tomorrowTs),
@@ -328,6 +392,48 @@ async function runProviderLayerTests() {
     now,
   });
   assert(fullCalls.join(',') === 'airlabs', 'provider auto mode should stop once one provider covers today and tomorrow');
+
+  const memoryStorage = new Map();
+  const airLabsCalls = [];
+  const airLabsModule = loadTsModule('src/utils/flightProviders/airLabsProvider.ts', {
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => memoryStorage.get(key) ?? null,
+      setItem: async (key, value) => { memoryStorage.set(key, value); },
+    },
+    __globals: {
+      fetch: async url => {
+        airLabsCalls.push(String(url));
+        const isRoutes = String(url).includes('/routes');
+        return {
+          ok: true,
+          text: async () => JSON.stringify({
+            response: isRoutes
+              ? [{
+                  airline_iata: 'HV',
+                  flight_iata: 'HV9999',
+                  dep_iata: 'PSA',
+                  dep_time: '10:00',
+                  arr_iata: 'AMS',
+                  arr_time: '12:00',
+                  days: 'tue,wed,thu',
+                }]
+              : [],
+          }),
+        };
+      },
+    },
+  });
+  const airLabsResult = await airLabsModule.airLabsProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    airLabsApiKey: 'test-key',
+    now,
+  });
+  assert(airLabsCalls.some(url => url.includes('/routes')), 'AirLabs provider should query routes for tomorrow coverage');
+  assert(
+    airLabsResult.allDepartures.some(item => item.flight.identification.number.default === 'HV9999'),
+    'AirLabs routes should accept comma-separated day strings for tomorrow departures',
+  );
 }
 
 runProviderLayerTests()

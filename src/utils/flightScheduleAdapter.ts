@@ -111,12 +111,27 @@ function readUsefulAirportText(value: unknown): string | undefined {
   return text;
 }
 
+function getAirportDisplayLabel(value: unknown, preferCode = false): string | undefined {
+  const text = readUsefulAirportText(value);
+  if (!text) return undefined;
+
+  const normalized = normalizeFlightIdentityPart(text);
+  const alias = REMOTE_AIRPORT_ALIASES[normalized];
+  if (alias) return alias;
+
+  if (preferCode || /^[A-Z]{3}$/.test(normalized)) {
+    return normalized;
+  }
+
+  return text;
+}
+
 export function getFlightAirportLabel(airport: any, fallback = 'N/A'): string {
-  return readUsefulAirportText(airport?.code?.iata)
-    ?? readUsefulAirportText(airport?.iata)
-    ?? readUsefulAirportText(airport?.code?.icao)
-    ?? readUsefulAirportText(airport?.icao)
-    ?? readUsefulAirportText(airport?.name)
+  return getAirportDisplayLabel(airport?.code?.iata, true)
+    ?? getAirportDisplayLabel(airport?.iata, true)
+    ?? getAirportDisplayLabel(airport?.code?.icao, true)
+    ?? getAirportDisplayLabel(airport?.icao, true)
+    ?? getAirportDisplayLabel(airport?.name)
     ?? fallback;
 }
 

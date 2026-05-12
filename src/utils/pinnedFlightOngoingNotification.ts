@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { getFlightAirportLabel } from './flightScheduleAdapter';
 
 const PINNED_ONGOING_ID = 'aerostaff-pinned-flight-ongoing';
 const PINNED_ONGOING_CHANNEL = 'pinned-flight-ongoing';
@@ -42,8 +43,8 @@ export async function showOrUpdatePinnedFlightNotification(
   const when = realTs || estimatedTs || scheduledTs;
 
   const place = tab === 'departures'
-    ? item?.flight?.airport?.destination?.code?.iata || item?.flight?.airport?.destination?.name || 'N/A'
-    : item?.flight?.airport?.origin?.code?.iata || item?.flight?.airport?.origin?.name || 'N/A';
+    ? getFlightAirportLabel(item?.flight?.airport?.destination, 'N/A')
+    : getFlightAirportLabel(item?.flight?.airport?.origin, 'N/A');
   const label = tab === 'departures' ? 'Partenza' : 'Arrivo';
 
   await Notifications.scheduleNotificationAsync({
