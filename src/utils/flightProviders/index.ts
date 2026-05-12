@@ -20,10 +20,10 @@ export type {
 } from './types';
 
 const DEFAULT_PROVIDERS: FlightScheduleProvider[] = [
-  airLabsProvider,
   staffMonitorProvider,
   fr24ApiProvider,
   fr24PublicProvider,
+  airLabsProvider,
 ];
 
 const PROVIDERS_BY_ID = {
@@ -169,12 +169,19 @@ export async function fetchFlightScheduleFromProviders(
 
     const startedAt = Date.now();
     try {
-      const result = await provider.fetch(context);
+      const useAirLabsRoutesOnly = provider.id === 'airlabs'
+        && aggregate !== null
+        && hasDayCoverage(aggregate, now);
+      const providerContext = useAirLabsRoutesOnly
+        ? { ...context, airLabsMode: 'routesOnly' as const }
+        : context;
+      const result = await provider.fetch(providerContext);
       const durationMs = Date.now() - startedAt;
       diagnostics.push({
         provider: provider.id,
         label: provider.label,
         status: 'success',
+        message: useAirLabsRoutesOnly ? 'Routes-only mode per ridurre consumo AirLabs' : undefined,
         durationMs,
         arrivals: result.allArrivals.length,
         departures: result.allDepartures.length,

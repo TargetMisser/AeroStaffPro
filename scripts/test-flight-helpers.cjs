@@ -262,13 +262,14 @@ assert(cache && cache.arrivals.length === 1 && cache.departures.length === 1, 'f
 assert(cache.providerDiagnostics?.[0]?.tomorrowDepartures === 1, 'flight screen cache should preserve provider diagnostics');
 assert(flightCache.sanitizeFlightScreenCache({ airportCode: 'FCO', savedAt: 10_000 }, 'PSA', 20_000) === null, 'flight screen cache should reject another airport');
 
-function makeProvider(id, label, result, calls) {
+function makeProvider(id, label, result, calls, contexts) {
   return {
     id,
     label,
     supports: () => true,
-    fetch: async () => {
+    fetch: async context => {
       calls.push(id);
+      contexts?.push({ id, context });
       return result;
     },
   };
@@ -301,12 +302,13 @@ async function runProviderLayerTests() {
   const todayTs = Math.floor(new Date(2026, 4, 12, 14, 0, 0).getTime() / 1000);
   const tomorrowTs = Math.floor(new Date(2026, 4, 13, 14, 0, 0).getTime() / 1000);
   const calls = [];
+  const contexts = [];
   const providerLayer = loadTsModule('src/utils/flightProviders/index.ts', {
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
         allArrivals: [],
         allDepartures: [makeProviderFlight('HV9002', tomorrowTs)],
-      }, calls),
+      }, calls, contexts),
     },
     './staffMonitorProvider': {
       staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
@@ -327,6 +329,11 @@ async function runProviderLayerTests() {
   });
 
   assert(calls.includes('airlabs') && calls.includes('staffMonitor'), 'provider auto mode should continue past partial AirLabs coverage');
+  assert(calls.indexOf('staffMonitor') < calls.indexOf('airlabs'), 'provider auto mode should try local/live providers before AirLabs');
+  assert(
+    contexts.find(item => item.id === 'airlabs')?.context?.airLabsMode === 'routesOnly',
+    'provider auto mode should use AirLabs routes-only once today is covered',
+  );
   assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow coverage from fallback providers');
   assert(payload.sourceLabel.includes('AirLabs') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
   const airLabsStatus = payload.diagnostics.find(item => item.provider === 'airlabs');
@@ -398,7 +405,7 @@ async function runProviderLayerTests() {
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
     now,
   });
-  assert(fullCalls.join(',') === 'airlabs', 'provider auto mode should stop once one provider covers today and tomorrow');
+  assert(fullCalls.join(',') === 'staffMonitor,fr24Api,fr24Public,airlabs', 'provider auto mode should reserve AirLabs until live/local providers are exhausted');
 
   const memoryStorage = new Map();
   const airLabsCalls = [];
@@ -441,6 +448,25 @@ async function runProviderLayerTests() {
     airLabsResult.allDepartures.some(item => item.flight.identification.number.default === 'HV9999'),
     'AirLabs routes should accept comma-separated day strings for tomorrow departures',
   );
+
+  airLabsCalls.length = 0;
+  await airLabsModule.airLabsProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    airLabsApiKey: 'test-key',
+    airLabsMode: 'routesOnly',
+    now,
+  });
+  assert(!airLabsCalls.some(url => url.includes('/schedules')), 'AirLabs routes-only mode should skip live schedules calls');
+  const firstRoutesOnlyCallCount = airLabsCalls.length;
+  await airLabsModule.airLabsProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    airLabsApiKey: 'test-key',
+    airLabsMode: 'routesOnly',
+    now,
+  });
+  assert(airLabsCalls.length === firstRoutesOnlyCallCount, 'AirLabs routes-only mode should cache routes after the first routes-only call');
 }
 
 runProviderLayerTests()

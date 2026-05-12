@@ -5,8 +5,11 @@ import type { FlightScheduleProvider } from './types';
 const AIRLABS_API_BASE = 'https://airlabs.co/api/v9/schedules';
 const AIRLABS_ROUTES_API_BASE = 'https://airlabs.co/api/v9/routes';
 const AIRLABS_LIMIT = 50;
+const AIRLABS_LIVE_CACHE_KEY = 'aerostaff_airlabs_live_cache_v1';
+const AIRLABS_LIVE_CACHE_TTL_MS = 10 * 60 * 1000;
 const AIRLABS_ROUTES_CACHE_KEY = 'aerostaff_airlabs_routes_cache_v1';
 const AIRLABS_ROUTES_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const AIRLABS_EMPTY_ROUTES_CACHE_TTL_MS = 60 * 60 * 1000;
 const DAYS_OF_WEEK = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 type AirLabsScheduleItem = Record<string, any>;
@@ -433,8 +436,13 @@ async function fetchAirLabsDirection(
   airportCode: string,
   direction: 'arrivals' | 'departures',
   apiKey: string,
+  now: Date,
   signal?: AbortSignal,
 ): Promise<any[]> {
+  const cacheKey = `${airportCode}:${direction}:${toLocalIso(now)}:${apiKeyFingerprint(apiKey)}`;
+  const cached = await loadCachedFlights(AIRLABS_LIVE_CACHE_KEY, cacheKey, AIRLABS_LIVE_CACHE_TTL_MS);
+  if (cached) return cached;
+
   const paramName = direction === 'arrivals' ? 'arr_iata' : 'dep_iata';
   const res = await fetch(buildAirLabsUrl(paramName, airportCode, apiKey), {
     headers: { Accept: 'application/json' },
@@ -463,30 +471,35 @@ async function fetchAirLabsDirection(
     throw new Error('AIRLABS_UNEXPECTED_RESPONSE');
   }
 
-  return response
+  const flights = response
     .map(item => itemToScheduleItem(item, direction))
     .filter((item): item is any => item !== null);
+  await saveCachedFlights(AIRLABS_LIVE_CACHE_KEY, cacheKey, flights, AIRLABS_LIVE_CACHE_TTL_MS);
+  return flights;
 }
 
-async function loadCachedRoutePredictions(cacheKey: string): Promise<any[] | null> {
+async function loadCachedFlights(storageKey: string, cacheKey: string, fallbackTtlMs: number): Promise<any[] | null> {
   try {
-    const raw = await AsyncStorage.getItem(AIRLABS_ROUTES_CACHE_KEY);
+    const raw = await AsyncStorage.getItem(storageKey);
     if (!raw) return null;
     const cache = JSON.parse(raw);
     const entry = cache?.[cacheKey];
-    if (!entry || Date.now() - entry.savedAt > AIRLABS_ROUTES_CACHE_TTL_MS) return null;
+    const ttlMs = typeof entry?.ttlMs === 'number' && Number.isFinite(entry.ttlMs)
+      ? entry.ttlMs
+      : fallbackTtlMs;
+    if (!entry || Date.now() - entry.savedAt > ttlMs) return null;
     return Array.isArray(entry.flights) ? entry.flights : null;
   } catch {
     return null;
   }
 }
 
-async function saveCachedRoutePredictions(cacheKey: string, flights: any[]): Promise<void> {
+async function saveCachedFlights(storageKey: string, cacheKey: string, flights: any[], ttlMs: number): Promise<void> {
   try {
-    const raw = await AsyncStorage.getItem(AIRLABS_ROUTES_CACHE_KEY);
+    const raw = await AsyncStorage.getItem(storageKey);
     const cache = raw ? JSON.parse(raw) : {};
-    cache[cacheKey] = { savedAt: Date.now(), flights };
-    await AsyncStorage.setItem(AIRLABS_ROUTES_CACHE_KEY, JSON.stringify(cache));
+    cache[cacheKey] = { savedAt: Date.now(), ttlMs, flights };
+    await AsyncStorage.setItem(storageKey, JSON.stringify(cache));
   } catch {}
 }
 
@@ -498,7 +511,7 @@ async function fetchAirLabsRoutePredictions(
   signal?: AbortSignal,
 ): Promise<any[]> {
   const cacheKey = `${airportCode}:${direction}:${toLocalIso(targetDate)}:${apiKeyFingerprint(apiKey)}`;
-  const cached = await loadCachedRoutePredictions(cacheKey);
+  const cached = await loadCachedFlights(AIRLABS_ROUTES_CACHE_KEY, cacheKey, AIRLABS_ROUTES_CACHE_TTL_MS);
   if (cached) return cached;
 
   const paramName = direction === 'arrivals' ? 'arr_iata' : 'dep_iata';
@@ -538,9 +551,12 @@ async function fetchAirLabsRoutePredictions(
     ))
     .filter((item): item is any => item !== null);
 
-  if (flights.length > 0) {
-    await saveCachedRoutePredictions(cacheKey, flights);
-  }
+  await saveCachedFlights(
+    AIRLABS_ROUTES_CACHE_KEY,
+    cacheKey,
+    flights,
+    flights.length > 0 ? AIRLABS_ROUTES_CACHE_TTL_MS : AIRLABS_EMPTY_ROUTES_CACHE_TTL_MS,
+  );
   return flights;
 }
 
@@ -562,15 +578,16 @@ export const airLabsProvider: FlightScheduleProvider = {
   label: 'AirLabs',
   supports: ({ airLabsApiKey }) => Boolean(airLabsApiKey),
   unavailableMessage: () => 'AirLabs API key non configurata',
-  fetch: async ({ airportCode, airLabsApiKey, signal, now = new Date() }) => {
+  fetch: async ({ airportCode, airLabsApiKey, airLabsMode = 'full', signal, now = new Date() }) => {
     if (!airLabsApiKey) throw new Error('AIRLABS_API_KEY_MISSING');
 
     const tomorrow = addDays(now, 1);
     tomorrow.setHours(0, 0, 0, 0);
+    const useLiveSchedules = airLabsMode !== 'routesOnly';
 
     const [departuresResult, arrivalsResult, routeDeparturesResult, routeArrivalsResult] = await Promise.allSettled([
-      fetchAirLabsDirection(airportCode, 'departures', airLabsApiKey, signal),
-      fetchAirLabsDirection(airportCode, 'arrivals', airLabsApiKey, signal),
+      useLiveSchedules ? fetchAirLabsDirection(airportCode, 'departures', airLabsApiKey, now, signal) : Promise.resolve([]),
+      useLiveSchedules ? fetchAirLabsDirection(airportCode, 'arrivals', airLabsApiKey, now, signal) : Promise.resolve([]),
       fetchAirLabsRoutePredictions(airportCode, 'departures', airLabsApiKey, tomorrow, signal),
       fetchAirLabsRoutePredictions(airportCode, 'arrivals', airLabsApiKey, tomorrow, signal),
     ]);

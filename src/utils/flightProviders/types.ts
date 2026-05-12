@@ -21,6 +21,7 @@ export type FlightScheduleProviderContext = {
   airport: AirportInfo;
   airLabsApiKey?: string | null;
   fr24ApiKey?: string | null;
+  airLabsMode?: 'full' | 'routesOnly';
   signal?: AbortSignal;
   now?: Date;
 };
