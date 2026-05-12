@@ -76,6 +76,27 @@ function hasFlightsOnDay(items: any[], direction: FlightDirection, day: Date): b
   return items.some(item => isSameLocalDay(getFlightBestTs(item, direction), day));
 }
 
+function countFlightsOnDay(items: any[], direction: FlightDirection, day: Date): number {
+  return items.reduce(
+    (count, item) => count + (isSameLocalDay(getFlightBestTs(item, direction), day) ? 1 : 0),
+    0,
+  );
+}
+
+function buildProviderCoverage(
+  result: FlightScheduleProviderResult,
+  now: Date,
+): Pick<FlightScheduleProviderStatus, 'todayArrivals' | 'todayDepartures' | 'tomorrowArrivals' | 'tomorrowDepartures'> {
+  const today = new Date(now);
+  const tomorrow = addDays(today, 1);
+  return {
+    todayArrivals: countFlightsOnDay(result.allArrivals, 'arrival', today),
+    todayDepartures: countFlightsOnDay(result.allDepartures, 'departure', today),
+    tomorrowArrivals: countFlightsOnDay(result.allArrivals, 'arrival', tomorrow),
+    tomorrowDepartures: countFlightsOnDay(result.allDepartures, 'departure', tomorrow),
+  };
+}
+
 function hasDayCoverage(result: FlightScheduleProviderResult, day: Date): boolean {
   return hasFlightsOnDay(result.allArrivals, 'arrival', day)
     || hasFlightsOnDay(result.allDepartures, 'departure', day);
@@ -157,6 +178,7 @@ export async function fetchFlightScheduleFromProviders(
         durationMs,
         arrivals: result.allArrivals.length,
         departures: result.allDepartures.length,
+        ...buildProviderCoverage(result, now),
       });
 
       if (!hasUsefulCoverage(result)) {

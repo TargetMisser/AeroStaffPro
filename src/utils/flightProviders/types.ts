@@ -10,6 +10,10 @@ export type FlightScheduleProviderStatus = {
   durationMs?: number;
   arrivals?: number;
   departures?: number;
+  todayArrivals?: number;
+  todayDepartures?: number;
+  tomorrowArrivals?: number;
+  tomorrowDepartures?: number;
 };
 
 export type FlightScheduleProviderContext = {

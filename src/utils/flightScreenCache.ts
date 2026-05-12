@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FlightScheduleProviderStatus } from './flightProviders';
 
 export const FLIGHTS_CACHE_KEY = 'aerostaff_flights_cache_v3';
 export const LEGACY_FLIGHTS_CACHE_KEY = 'aerostaff_flights_cache_v2';
@@ -11,6 +12,7 @@ export type FlightScreenCache = {
   sourceLabel: string;
   fetchedAt: number;
   savedAt: number;
+  providerDiagnostics?: FlightScheduleProviderStatus[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -43,6 +45,9 @@ export function sanitizeFlightScreenCache(
       : 'Cache voli',
     fetchedAt: readTimestamp(value.fetchedAt, savedAt),
     savedAt,
+    providerDiagnostics: Array.isArray(value.providerDiagnostics)
+      ? value.providerDiagnostics as FlightScheduleProviderStatus[]
+      : undefined,
   };
 }
 

@@ -256,8 +256,10 @@ const cache = flightCache.sanitizeFlightScreenCache({
   departures: [delayed],
   sourceLabel: 'AirLabs',
   fetchedAt: 9_000,
+  providerDiagnostics: [{ provider: 'airlabs', label: 'AirLabs', status: 'success', tomorrowDepartures: 1 }],
 }, 'PSA', 20_000);
 assert(cache && cache.arrivals.length === 1 && cache.departures.length === 1, 'flight screen cache should accept matching fresh airport cache');
+assert(cache.providerDiagnostics?.[0]?.tomorrowDepartures === 1, 'flight screen cache should preserve provider diagnostics');
 assert(flightCache.sanitizeFlightScreenCache({ airportCode: 'FCO', savedAt: 10_000 }, 'PSA', 20_000) === null, 'flight screen cache should reject another airport');
 
 function makeProvider(id, label, result, calls) {
@@ -327,6 +329,9 @@ async function runProviderLayerTests() {
   assert(calls.includes('airlabs') && calls.includes('staffMonitor'), 'provider auto mode should continue past partial AirLabs coverage');
   assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow coverage from fallback providers');
   assert(payload.sourceLabel.includes('AirLabs') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
+  const airLabsStatus = payload.diagnostics.find(item => item.provider === 'airlabs');
+  assert(airLabsStatus?.tomorrowDepartures === 1, 'provider diagnostics should count tomorrow departures');
+  assert(airLabsStatus?.todayDepartures === 0, 'provider diagnostics should count today departures separately');
 
   const partialTomorrowCalls = [];
   const partialTomorrowLayer = loadTsModule('src/utils/flightProviders/index.ts', {
@@ -360,6 +365,8 @@ async function runProviderLayerTests() {
     partialTomorrowPayload.allDepartures.some(item => item.flight.identification.number.default === 'HV9204'),
     'provider auto mode should merge fallback tomorrow departures',
   );
+  const fallbackStatus = partialTomorrowPayload.diagnostics.find(item => item.provider === 'staffMonitor');
+  assert(fallbackStatus?.tomorrowDepartures === 1, 'fallback provider diagnostics should expose tomorrow coverage');
 
   const fullCalls = [];
   const fullProviderLayer = loadTsModule('src/utils/flightProviders/index.ts', {

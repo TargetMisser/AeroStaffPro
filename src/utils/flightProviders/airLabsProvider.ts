@@ -183,6 +183,14 @@ function toLocalIso(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function apiKeyFingerprint(apiKey: string): string {
+  let hash = 0;
+  for (let index = 0; index < apiKey.length; index += 1) {
+    hash = ((hash << 5) - hash + apiKey.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
 function dayCode(date: Date): string {
   return DAYS_OF_WEEK[date.getDay()];
 }
@@ -489,7 +497,7 @@ async function fetchAirLabsRoutePredictions(
   targetDate: Date,
   signal?: AbortSignal,
 ): Promise<any[]> {
-  const cacheKey = `${airportCode}:${direction}:${toLocalIso(targetDate)}`;
+  const cacheKey = `${airportCode}:${direction}:${toLocalIso(targetDate)}:${apiKeyFingerprint(apiKey)}`;
   const cached = await loadCachedRoutePredictions(cacheKey);
   if (cached) return cached;
 
@@ -530,7 +538,9 @@ async function fetchAirLabsRoutePredictions(
     ))
     .filter((item): item is any => item !== null);
 
-  await saveCachedRoutePredictions(cacheKey, flights);
+  if (flights.length > 0) {
+    await saveCachedRoutePredictions(cacheKey, flights);
+  }
   return flights;
 }
 

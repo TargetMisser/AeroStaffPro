@@ -15,7 +15,7 @@ import {
   type FlightScheduleProviderStatus,
 } from './flightProviders';
 import { getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
-import { filterFlightsByAirlines, mergeFlightLists } from './flightScheduleAdapter';
+import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, type FlightDirection } from './flightScheduleAdapter';
 
 const FETCH_TIMEOUT = 15000; // AirLabs live + route prediction can take a little longer on mobile networks.
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
@@ -71,6 +71,10 @@ export type FlightProviderDiagnosticsSnapshot = {
   diagnostics: FlightScheduleProviderStatus[];
   arrivals: number;
   departures: number;
+  todayArrivals: number;
+  todayDepartures: number;
+  tomorrowArrivals: number;
+  tomorrowDepartures: number;
 };
 
 function errorMessage(error: unknown): string {
@@ -92,6 +96,27 @@ async function loadCachedSchedule(airportCode: string): Promise<ScheduleCacheEnt
   }
 }
 
+function addDays(date: Date, days: number): Date {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function isSameLocalDay(ts: number | undefined, day: Date): boolean {
+  if (!ts) return false;
+  const actual = new Date(ts * 1000);
+  return actual.getFullYear() === day.getFullYear()
+    && actual.getMonth() === day.getMonth()
+    && actual.getDate() === day.getDate();
+}
+
+function countFlightsOnDay(items: any[], direction: FlightDirection, day: Date): number {
+  return items.reduce(
+    (count, item) => count + (isSameLocalDay(getFlightBestTs(item, direction), day) ? 1 : 0),
+    0,
+  );
+}
+
 export async function getCachedFlightProviderDiagnostics(code?: string): Promise<FlightProviderDiagnosticsSnapshot | null> {
   try {
     const airportCode = await resolveAirportCode(code);
@@ -101,6 +126,10 @@ export async function getCachedFlightProviderDiagnostics(code?: string): Promise
     const cache = JSON.parse(raw);
     const entry = cache?.[airportCode] as ScheduleCacheEntry | undefined;
     if (!entry) return null;
+    const allArrivals = Array.isArray(entry.allArrivals) ? entry.allArrivals : [];
+    const allDepartures = Array.isArray(entry.allDepartures) ? entry.allDepartures : [];
+    const today = new Date();
+    const tomorrow = addDays(today, 1);
 
     return {
       airportCode,
@@ -108,8 +137,12 @@ export async function getCachedFlightProviderDiagnostics(code?: string): Promise
       fetchedAt: entry.fetchedAt,
       savedAt: entry.savedAt,
       diagnostics: Array.isArray(entry.providerDiagnostics) ? entry.providerDiagnostics : [],
-      arrivals: Array.isArray(entry.allArrivals) ? entry.allArrivals.length : 0,
-      departures: Array.isArray(entry.allDepartures) ? entry.allDepartures.length : 0,
+      arrivals: allArrivals.length,
+      departures: allDepartures.length,
+      todayArrivals: countFlightsOnDay(allArrivals, 'arrival', today),
+      todayDepartures: countFlightsOnDay(allDepartures, 'departure', today),
+      tomorrowArrivals: countFlightsOnDay(allArrivals, 'arrival', tomorrow),
+      tomorrowDepartures: countFlightsOnDay(allDepartures, 'departure', tomorrow),
     };
   } catch {
     return null;

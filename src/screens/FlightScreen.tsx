@@ -17,7 +17,7 @@ import ValueChangeFlash from '../components/motion/ValueChangeFlash';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
-import { fetchAirportScheduleRaw } from '../utils/fr24api';
+import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
@@ -30,6 +30,7 @@ import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
 import {
   compareFlightsChronologically,
   filterFlightsByAirlines,
+  type FlightDirection,
   getFlightAirportLabel,
   getFlightMergeKey,
   isFlightAirlineMatch,
@@ -63,6 +64,7 @@ type FlightAlertTone = 'success' | 'warning' | 'info';
 type FlightDataSourceState = {
   sourceLabel: string;
   fetchedAt: number;
+  providerDiagnostics?: FlightScheduleProviderStatus[];
 };
 
 type FlightNotificationSettings = {
@@ -103,6 +105,95 @@ async function openFlightradar24Flight(flightNumber: string): Promise<void> {
   const url = buildFlightradar24FlightUrl(flightNumber);
   if (!url) return;
   await Linking.openURL(url);
+}
+
+type FlightListTab = 'arrivals' | 'departures';
+type FlightListDay = 'today' | 'tomorrow';
+
+function formatProviderDiagnostic(item: FlightScheduleProviderStatus): string {
+  if (item.status === 'success') {
+    const hasDayCounts = typeof item.todayArrivals === 'number'
+      || typeof item.todayDepartures === 'number'
+      || typeof item.tomorrowArrivals === 'number'
+      || typeof item.tomorrowDepartures === 'number';
+    if (!hasDayCounts) {
+      return `${item.label}: A ${item.arrivals ?? 0} / P ${item.departures ?? 0}`;
+    }
+    return `${item.label}: oggi A${item.todayArrivals ?? 0}/P${item.todayDepartures ?? 0}, domani A${item.tomorrowArrivals ?? 0}/P${item.tomorrowDepartures ?? 0}`;
+  }
+
+  const status = item.status === 'skipped' ? 'saltato' : 'errore';
+  const message = item.message ? ` - ${item.message.slice(0, 96)}` : '';
+  return `${item.label}: ${status}${message}`;
+}
+
+function EmptyFlightState({
+  activeDay,
+  activeTab,
+  rawDayCount,
+  sourceLabel,
+  diagnostics,
+  colors,
+  t,
+}: {
+  activeDay: FlightListDay;
+  activeTab: FlightListTab;
+  rawDayCount: number;
+  sourceLabel?: string;
+  diagnostics?: FlightScheduleProviderStatus[];
+  colors: ThemeColors;
+  t: (key: TranslationKey) => string;
+}) {
+  const hiddenByFilters = rawDayCount > 0;
+  const title = hiddenByFilters
+    ? t('flightNoFlightsFilteredTitle')
+    : activeDay === 'tomorrow'
+      ? t('flightTomorrowEmptyTitle')
+      : t('flightNoFlights');
+  const body = hiddenByFilters
+    ? t('flightNoFlightsFilteredMsg').replace('{count}', String(rawDayCount))
+    : activeDay === 'tomorrow'
+      ? t('flightTomorrowEmptyMsg')
+      : '';
+  const providerLines = activeDay === 'tomorrow'
+    ? (diagnostics ?? []).slice(0, 5).map(formatProviderDiagnostic)
+    : [];
+  const tabLabel = activeTab === 'arrivals' ? t('flightArrivals') : t('flightDepartures');
+
+  return (
+    <View style={{
+      marginTop: 32,
+      padding: 16,
+      borderRadius: 18,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    }}>
+      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900' }}>{title}</Text>
+      {body ? (
+        <Text style={{ color: colors.textSub, fontSize: 13, lineHeight: 19, marginTop: 8 }}>{body}</Text>
+      ) : null}
+      {activeDay === 'tomorrow' ? (
+        <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 10 }}>
+          {t('flightTomorrowEmptyContext')
+            .replace('{tab}', tabLabel)
+            .replace('{source}', sourceLabel ?? 'n/d')}
+        </Text>
+      ) : null}
+      {providerLines.length > 0 ? (
+        <View style={{ marginTop: 12, gap: 6 }}>
+          <Text style={{ color: colors.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>
+            {t('flightProviderDebugTitle')}
+          </Text>
+          {providerLines.map((line, index) => (
+            <Text key={`${line}_${index}`} style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
+              {line}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 function sanitizeNotificationSettings(value: unknown): FlightNotificationSettings {
@@ -1103,6 +1194,7 @@ export default function FlightScreen() {
       setFlightDataSource({
         sourceLabel: cache.sourceLabel,
         fetchedAt: cache.fetchedAt,
+        providerDiagnostics: cache.providerDiagnostics,
       });
     }).catch(() => {});
     return () => {
@@ -1162,6 +1254,7 @@ export default function FlightScreen() {
         arrivals: fetchedArrivals,
         sourceLabel,
         fetchedAt,
+        providerDiagnostics,
       } = await fetchAirportScheduleRaw(airportCode);
       const nextAirportAirlines = getAirportAirlines(airportCode);
       setAirportAirlines(nextAirportAirlines);
@@ -1193,6 +1286,7 @@ export default function FlightScreen() {
       const sourceState: FlightDataSourceState = {
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
+        providerDiagnostics,
       };
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);
@@ -1203,6 +1297,7 @@ export default function FlightScreen() {
         departures: mergedDeps,
         sourceLabel: sourceState.sourceLabel,
         fetchedAt: sourceState.fetchedAt,
+        providerDiagnostics: sourceState.providerDiagnostics,
       }).catch(() => {});
 
       // Build inbound arrival map: registration → best known arrival timestamp
@@ -1640,11 +1735,11 @@ export default function FlightScreen() {
 
   const allSelected = airportAirlines.length > 0 && airportAirlines.every(k => selectedAirlines.includes(k));
 
-  const currentData = (() => {
+  const currentDayRawData = (() => {
     const source = activeTab === 'arrivals' ? allArrivalsFull : allDeparturesFull;
     const timeField = activeTab === 'arrivals' ? 'arrival' : 'departure';
     const seen = new Set<string>();
-    return filterFlightsByAirlines(source, selectedAirlines).filter(item => {
+    return source.filter(item => {
       const ts = activeTab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
       if (!ts || !isSameDay(new Date(ts * 1000), selectedDate)) return false;
       const dedupeKey = getFlightMergeKey(item, timeField);
@@ -1652,6 +1747,12 @@ export default function FlightScreen() {
       seen.add(dedupeKey);
       return true;
     }).sort(compareFlightsChronologically(timeField));
+  })();
+
+  const currentData = (() => {
+    const timeField: FlightDirection = activeTab === 'arrivals' ? 'arrival' : 'departure';
+    return filterFlightsByAirlines(currentDayRawData, selectedAirlines)
+      .sort(compareFlightsChronologically(timeField));
   })();
 
   const renderFlight = useCallback(({ item, index }: { item: any; index: number }) => (
@@ -1760,7 +1861,17 @@ export default function FlightScreen() {
             paddingBottom: isOperations ? 176 : 120,
           }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(); }} tintColor={colors.primary} />}
-          ListEmptyComponent={<Text style={{ textAlign: 'center', marginTop: 40, color: '#9CA3AF', fontSize: 15 }}>{t('flightNoFlights')}</Text>}
+          ListEmptyComponent={
+            <EmptyFlightState
+              activeDay={activeDay}
+              activeTab={activeTab}
+              rawDayCount={currentDayRawData.length}
+              sourceLabel={flightDataSource?.sourceLabel}
+              diagnostics={flightDataSource?.providerDiagnostics}
+              colors={colors}
+              t={t}
+            />
+          }
           showsVerticalScrollIndicator={false}
         />
       )}

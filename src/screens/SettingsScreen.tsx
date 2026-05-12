@@ -1174,7 +1174,7 @@ export default function SettingsScreen() {
                           ? '#94A3B8'
                           : '#EF4444';
                       const counts = item.status === 'success'
-                        ? `A:${item.arrivals ?? 0} D:${item.departures ?? 0}`
+                        ? `A:${item.arrivals ?? 0} D:${item.departures ?? 0} · oggi A:${item.todayArrivals ?? 0} D:${item.todayDepartures ?? 0} · domani A:${item.tomorrowArrivals ?? 0} D:${item.tomorrowDepartures ?? 0}`
                         : item.message ?? item.status;
                       return (
                         <View
