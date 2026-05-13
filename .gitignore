@@ -51,6 +51,9 @@ config_err.txt
 err.txt
 test_cli.js
 storybook-preview.log
+expo-web-preview*.log
+android-emulator*.log
+emulator-*.png
 
 # generated native folders
 /ios

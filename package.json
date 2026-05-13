@@ -1,6 +1,6 @@
 {
   "name": "aerostaff-pro",
-  "version": "2.6.61",
+  "version": "2.6.62",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -35,7 +35,6 @@
     "expo-image-picker": "~17.0.10",
     "expo-intent-launcher": "~13.0.8",
     "expo-linear-gradient": "~15.0.8",
-    "expo-location": "~19.0.8",
     "expo-notifications": "~0.32.16",
     "expo-secure-store": "~15.0.5",
     "expo-status-bar": "~3.0.9",

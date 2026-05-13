@@ -49,6 +49,9 @@ function loadTsModule(relativePath, mocks = {}) {
     Math,
     JSON,
     URLSearchParams,
+    setTimeout,
+    clearTimeout,
+    AbortController,
     ...(mocks.__globals ?? {}),
   };
   vm.runInNewContext(output, sandbox, { filename: absolutePath });
@@ -308,7 +311,7 @@ async function runProviderLayerTests() {
       aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
         allArrivals: [makeProviderArrival('U29202', tomorrowTs)],
         allDepartures: [makeProviderFlight('HV9002', tomorrowTs)],
-      }, calls),
+      }, calls, contexts),
     },
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
@@ -337,6 +340,7 @@ async function runProviderLayerTests() {
 
   assert(calls.includes('aeroDataBox') && calls.includes('staffMonitor'), 'provider auto mode should continue to AeroDataBox for future coverage');
   assert(!calls.includes('airlabs'), 'provider auto mode should not spend AirLabs when AeroDataBox covers tomorrow');
+  assert(calls.indexOf('fr24Api') < calls.indexOf('staffMonitor'), 'provider auto mode should try configured FR24 API before StaffMonitor');
   assert(calls.indexOf('staffMonitor') < calls.indexOf('aeroDataBox'), 'provider auto mode should try local/live providers before AeroDataBox');
   assert(
     !calls.includes('fr24Public') || calls.indexOf('aeroDataBox') < calls.indexOf('fr24Public'),
@@ -344,6 +348,8 @@ async function runProviderLayerTests() {
   );
   assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow departures from fallback providers');
   assert(payload.sourceLabel.includes('AeroDataBox') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
+  const aeroDataBoxContext = contexts.find(item => item.id === 'aeroDataBox')?.context;
+  assert(aeroDataBoxContext?.aeroDataBoxMode === 'futureOnly', 'provider auto mode should ask AeroDataBox only for future coverage once today is already covered');
   const aeroDataBoxStatus = payload.diagnostics.find(item => item.provider === 'aeroDataBox');
   assert(aeroDataBoxStatus?.tomorrowDepartures === 1, 'provider diagnostics should count AeroDataBox tomorrow departures');
   assert(aeroDataBoxStatus?.tomorrowArrivals === 1, 'provider diagnostics should count AeroDataBox tomorrow arrivals');
@@ -426,7 +432,36 @@ async function runProviderLayerTests() {
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
     now,
   });
-  assert(fullCalls.join(',') === 'staffMonitor,fr24Api,aeroDataBox,fr24Public,airlabs', 'provider auto mode should reserve AirLabs until live/local/schedule providers are exhausted');
+  assert(fullCalls.join(',') === 'fr24Api,staffMonitor,aeroDataBox,fr24Public,airlabs', 'provider auto mode should reserve AirLabs until live/local/schedule providers are exhausted');
+
+  const timeoutCalls = [];
+  const timeoutPayload = await providerLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    providerTimeoutMs: 1,
+    now,
+  }, [
+    {
+      id: 'staffMonitor',
+      label: 'Slow provider',
+      supports: () => true,
+      fetch: async () => {
+        timeoutCalls.push('slow');
+        return new Promise(() => {});
+      },
+    },
+    makeProvider('fr24Api', 'Fast provider', {
+      allArrivals: [makeProviderArrival('U29300', tomorrowTs)],
+      allDepartures: [
+        makeProviderFlight('HV9300', todayTs),
+        makeProviderFlight('HV9301', tomorrowTs),
+      ],
+    }, timeoutCalls),
+  ]);
+  assert(timeoutCalls.join(',') === 'slow,fr24Api', 'provider auto mode should continue after a provider timeout');
+  assert(timeoutPayload.sourceLabel.includes('Fast provider'), 'provider auto mode should return the next provider after timeout');
+  const timeoutStatus = timeoutPayload.diagnostics.find(item => item.provider === 'staffMonitor');
+  assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
 
   const aeroStorage = new Map();
   const aeroCalls = [];
@@ -515,6 +550,38 @@ async function runProviderLayerTests() {
     now,
   });
   assert(aeroCalls.length === aeroFirstCallCount, 'AeroDataBox provider should cache identical schedule windows');
+
+  const futureOnlyStorage = new Map();
+  const futureOnlyCalls = [];
+  const futureOnlyModule = loadTsModule('src/utils/flightProviders/aeroDataBoxProvider.ts', {
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => futureOnlyStorage.get(key) ?? null,
+      setItem: async (key, value) => { futureOnlyStorage.set(key, value); },
+    },
+    __globals: {
+      fetch: async (url, options = {}) => {
+        const decodedUrl = decodeURIComponent(String(url));
+        futureOnlyCalls.push({ url: decodedUrl, headers: options.headers ?? {} });
+        return {
+          ok: true,
+          text: async () => JSON.stringify({ departures: [], arrivals: [] }),
+        };
+      },
+    },
+  });
+  await futureOnlyModule.aeroDataBoxProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'future-key',
+    aeroDataBoxGateway: 'apiMarket',
+    aeroDataBoxMode: 'futureOnly',
+    now,
+  });
+  assert(futureOnlyCalls.length === 2, 'AeroDataBox future-only mode should fetch only tomorrow schedule windows');
+  assert(
+    futureOnlyCalls.every(call => call.url.includes('/2026-05-13T')),
+    'AeroDataBox future-only mode should skip today schedule windows',
+  );
 
   const memoryStorage = new Map();
   const airLabsCalls = [];

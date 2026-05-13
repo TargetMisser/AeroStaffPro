@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity,
-  ActivityIndicator, Dimensions, LayoutAnimation, Platform, UIManager,
+  ActivityIndicator, Dimensions, LayoutAnimation, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -10,11 +10,10 @@ import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw } from '../utils/fr24api';
 import { filterFlightsByAirlines, getFlightAirportLabel } from '../utils/flightScheduleAdapter';
+import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import { useLanguage } from '../context/LanguageContext';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+enableLegacyAndroidLayoutAnimation();
 
 const CI_COLOR = '#F59E0B';
 const GATE_COLOR = '#3B82F6';

@@ -6,6 +6,8 @@ export type AirportPreset = {
   name: string;
   city: string;
   icao?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 export type AirportInfo = AirportPreset & {
@@ -17,18 +19,18 @@ export const AIRPORT_AIRLINES_STORAGE_KEY = 'aerostaff_airport_airlines_v1';
 export const DEFAULT_AIRPORT_CODE = 'PSA';
 
 export const AIRPORT_PRESETS: AirportPreset[] = [
-  { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP' },
-  { code: 'FCO', name: 'Rome Fiumicino', city: 'Rome', icao: 'LIRF' },
-  { code: 'CIA', name: 'Rome Ciampino', city: 'Rome', icao: 'LIRA' },
-  { code: 'MXP', name: 'Milan Malpensa', city: 'Milan', icao: 'LIMC' },
-  { code: 'LIN', name: 'Milan Linate', city: 'Milan', icao: 'LIML' },
-  { code: 'BGY', name: 'Bergamo Orio al Serio', city: 'Bergamo', icao: 'LIME' },
-  { code: 'BLQ', name: 'Bologna Guglielmo Marconi', city: 'Bologna', icao: 'LIPE' },
-  { code: 'VCE', name: 'Venice Marco Polo', city: 'Venice', icao: 'LIPZ' },
-  { code: 'FLR', name: 'Florence Peretola', city: 'Florence', icao: 'LIRQ' },
-  { code: 'NAP', name: 'Naples International', city: 'Naples', icao: 'LIRN' },
-  { code: 'CTA', name: 'Catania Fontanarossa', city: 'Catania', icao: 'LICC' },
-  { code: 'PMO', name: 'Palermo Falcone Borsellino', city: 'Palermo', icao: 'LICJ' },
+  { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', latitude: 43.6839, longitude: 10.3927 },
+  { code: 'FCO', name: 'Rome Fiumicino', city: 'Rome', icao: 'LIRF', latitude: 41.8003, longitude: 12.2389 },
+  { code: 'CIA', name: 'Rome Ciampino', city: 'Rome', icao: 'LIRA', latitude: 41.7994, longitude: 12.5949 },
+  { code: 'MXP', name: 'Milan Malpensa', city: 'Milan', icao: 'LIMC', latitude: 45.6306, longitude: 8.7281 },
+  { code: 'LIN', name: 'Milan Linate', city: 'Milan', icao: 'LIML', latitude: 45.4451, longitude: 9.2767 },
+  { code: 'BGY', name: 'Bergamo Orio al Serio', city: 'Bergamo', icao: 'LIME', latitude: 45.6689, longitude: 9.7003 },
+  { code: 'BLQ', name: 'Bologna Guglielmo Marconi', city: 'Bologna', icao: 'LIPE', latitude: 44.5354, longitude: 11.2887 },
+  { code: 'VCE', name: 'Venice Marco Polo', city: 'Venice', icao: 'LIPZ', latitude: 45.5053, longitude: 12.3519 },
+  { code: 'FLR', name: 'Florence Peretola', city: 'Florence', icao: 'LIRQ', latitude: 43.81, longitude: 11.2051 },
+  { code: 'NAP', name: 'Naples International', city: 'Naples', icao: 'LIRN', latitude: 40.8844, longitude: 14.2908 },
+  { code: 'CTA', name: 'Catania Fontanarossa', city: 'Catania', icao: 'LICC', latitude: 37.4668, longitude: 15.0664 },
+  { code: 'PMO', name: 'Palermo Falcone Borsellino', city: 'Palermo', icao: 'LICJ', latitude: 38.176, longitude: 13.091 },
 ];
 
 export const AIRPORT_AIRLINES: Record<string, string[]> = {

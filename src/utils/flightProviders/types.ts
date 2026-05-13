@@ -21,9 +21,11 @@ export type FlightScheduleProviderContext = {
   airport: AirportInfo;
   aeroDataBoxApiKey?: string | null;
   aeroDataBoxGateway?: 'apiMarket' | 'rapidApi';
+  aeroDataBoxMode?: 'full' | 'futureOnly';
   airLabsApiKey?: string | null;
   fr24ApiKey?: string | null;
   airLabsMode?: 'full' | 'routesOnly';
+  providerTimeoutMs?: number;
   signal?: AbortSignal;
   now?: Date;
 };

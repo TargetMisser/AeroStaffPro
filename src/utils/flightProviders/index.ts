@@ -21,12 +21,21 @@ export type {
 } from './types';
 
 const DEFAULT_PROVIDERS: FlightScheduleProvider[] = [
-  staffMonitorProvider,
   fr24ApiProvider,
+  staffMonitorProvider,
   aeroDataBoxProvider,
   fr24PublicProvider,
   airLabsProvider,
 ];
+
+const PROVIDER_TIMEOUT_MS: Record<FlightScheduleProviderId, number> = {
+  staffMonitor: 45_000,
+  fr24Api: 15_000,
+  aeroDataBox: 22_000,
+  fr24Public: 12_000,
+  airlabs: 15_000,
+  cache: 0,
+};
 
 const PROVIDERS_BY_ID = {
   aeroDataBox: aeroDataBoxProvider,
@@ -120,6 +129,55 @@ function hasTodayAndTomorrowCoverage(result: FlightScheduleProviderResult, now: 
   return hasDayCoverage(result, today) && hasTomorrowListCoverage(result, tomorrow);
 }
 
+function providerTimeoutMs(provider: FlightScheduleProvider, context: FlightScheduleProviderContext): number {
+  return context.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS[provider.id] ?? 15_000;
+}
+
+async function fetchProviderWithTimeout(
+  provider: FlightScheduleProvider,
+  context: FlightScheduleProviderContext,
+): Promise<FlightScheduleProviderResult> {
+  const timeoutMs = providerTimeoutMs(provider, context);
+  if (timeoutMs <= 0 || typeof AbortController === 'undefined') {
+    return provider.fetch(context);
+  }
+
+  const controller = new AbortController();
+  let parentAbortHandler: (() => void) | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`PROVIDER_TIMEOUT_MS_${timeoutMs}`));
+    }, timeoutMs);
+  });
+
+  if (context.signal?.aborted) {
+    controller.abort();
+    throw new Error('PROVIDER_PARENT_ABORTED');
+  }
+
+  if (context.signal) {
+    parentAbortHandler = () => {
+      controller.abort();
+    };
+    context.signal.addEventListener('abort', parentAbortHandler, { once: true });
+  }
+
+  try {
+    return await Promise.race([
+      provider.fetch({ ...context, signal: controller.signal }),
+      timeoutPromise,
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (context.signal && parentAbortHandler) {
+      context.signal.removeEventListener('abort', parentAbortHandler);
+    }
+  }
+}
+
 function mergeProviderResults(
   previous: FlightScheduleProviderResult | null,
   next: FlightScheduleProviderResult,
@@ -175,16 +233,29 @@ export async function fetchFlightScheduleFromProviders(
       const useAirLabsRoutesOnly = provider.id === 'airlabs'
         && aggregate !== null
         && hasDayCoverage(aggregate, now);
-      const providerContext = useAirLabsRoutesOnly
-        ? { ...context, airLabsMode: 'routesOnly' as const }
-        : context;
-      const result = await provider.fetch(providerContext);
+      const useAeroDataBoxFutureOnly = provider.id === 'aeroDataBox'
+        && aggregate !== null
+        && hasDayCoverage(aggregate, now);
+      const messages: string[] = [];
+      const providerContext: FlightScheduleProviderContext = {
+        ...context,
+        ...(useAirLabsRoutesOnly ? { airLabsMode: 'routesOnly' as const } : {}),
+        ...(useAeroDataBoxFutureOnly ? { aeroDataBoxMode: 'futureOnly' as const } : {}),
+      };
+      if (useAeroDataBoxFutureOnly) {
+        messages.push('Future-only mode per ridurre chiamate AeroDataBox');
+      }
+      if (useAirLabsRoutesOnly) {
+        messages.push('Routes-only mode per ridurre consumo AirLabs');
+      }
+
+      const result = await fetchProviderWithTimeout(provider, providerContext);
       const durationMs = Date.now() - startedAt;
       diagnostics.push({
         provider: provider.id,
         label: provider.label,
         status: 'success',
-        message: useAirLabsRoutesOnly ? 'Routes-only mode per ridurre consumo AirLabs' : undefined,
+        message: messages.length > 0 ? messages.join(' | ') : undefined,
         durationMs,
         arrivals: result.allArrivals.length,
         departures: result.allDepartures.length,
@@ -211,7 +282,7 @@ export async function fetchFlightScheduleFromProviders(
         message: errorMessage(error),
       });
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn(`[flightProviders] ${provider.id} failed:`, error);
+        console.log(`[flightProviders] ${provider.id} failed:`, error);
       }
     }
   }

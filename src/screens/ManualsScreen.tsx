@@ -2,10 +2,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  LayoutAnimation, Platform, UIManager, TextInput, Modal, Alert, KeyboardAvoidingView,
+  LayoutAnimation, Platform, TextInput, Modal, Alert, KeyboardAvoidingView,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 
 const STORAGE_KEY = 'manuals_data_v2';
 
@@ -22,9 +23,7 @@ const AIRLINE_COLORS = [
   { color: '#37474F', textColor: '#fff' },
 ];
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+enableLegacyAndroidLayoutAnimation();
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ManualItem = { title: string; body: string };

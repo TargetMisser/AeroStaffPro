@@ -16,17 +16,22 @@ const DARK_CSS_JS = `
 true;
 `;
 
-export default function TraveldocScreen() {
+export default function TraveldocScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors } = useAppTheme();
   const { t } = useLanguage();
+  const [hasActivated, setHasActivated] = useState(isFocused);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    if (!loading) return;
+    if (isFocused) setHasActivated(true);
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (!isFocused || !hasActivated || !loading) return;
     const timer = setTimeout(() => { setLoading(false); setLoadError(true); }, 15_000);
     return () => clearTimeout(timer);
-  }, [loading]);
+  }, [hasActivated, isFocused, loading]);
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -35,29 +40,31 @@ export default function TraveldocScreen() {
         <Text style={[styles.sub, { color: colors.textSub }]}>{t('traveldocSub')}</Text>
       </View>
 
-      {loading && (
+      {hasActivated && loading && (
         <View style={[styles.loadingWrap, { backgroundColor: colors.bg }]}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSub }]}>{t('traveldocLoading')}</Text>
         </View>
       )}
-      {loadError && !loading && (
+      {hasActivated && loadError && !loading && (
         <View style={[styles.loadingWrap, { backgroundColor: colors.bg }]}>
           <Text style={[styles.loadingText, { color: colors.textSub }]}>
             Caricamento lento. Verifica la connessione internet.
           </Text>
         </View>
       )}
-      <WebView
-        source={{ uri: 'https://legacy.traveldoc.aero/' }}
-        style={{ flex: 1, backgroundColor: colors.isDark ? '#111111' : '#ffffff' }}
-        onLoadEnd={() => { setLoading(false); setLoadError(false); }}
-        onError={() => { setLoading(false); setLoadError(true); }}
-        javaScriptEnabled
-        domStorageEnabled
-        injectedJavaScriptBeforeContentLoaded={colors.isDark ? DARK_CSS_JS : undefined}
-        injectedJavaScript={colors.isDark ? DARK_CSS_JS : undefined}
-      />
+      {hasActivated && (
+        <WebView
+          source={{ uri: 'https://legacy.traveldoc.aero/' }}
+          style={{ flex: 1, backgroundColor: colors.isDark ? '#111111' : '#ffffff' }}
+          onLoadEnd={() => { setLoading(false); setLoadError(false); }}
+          onError={() => { setLoading(false); setLoadError(true); }}
+          javaScriptEnabled
+          domStorageEnabled
+          injectedJavaScriptBeforeContentLoaded={colors.isDark ? DARK_CSS_JS : undefined}
+          injectedJavaScript={colors.isDark ? DARK_CSS_JS : undefined}
+        />
+      )}
     </View>
   );
 }

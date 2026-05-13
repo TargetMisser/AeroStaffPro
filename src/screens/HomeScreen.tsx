@@ -2,21 +2,23 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Image, Modal, TextInput,
-  Platform, UIManager
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
 import { WebView } from 'react-native-webview';
 import * as ImagePicker from 'expo-image-picker';
 import * as Calendar from 'expo-calendar';
-import * as Location from 'expo-location';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { useAirport } from '../context/AirportContext';
 import BoardReveal from '../components/motion/BoardReveal';
 import ShiftTimeline from '../components/ShiftTimeline';
 
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
+import { getAirportInfo } from '../utils/airportSettings';
 import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
+import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import {
   getWritableCalendarId,
   replaceShiftForDate,
@@ -29,9 +31,7 @@ import { useLanguage } from '../context/LanguageContext';
 
 const GOLD = '#F59E0B';
 
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
+enableLegacyAndroidLayoutAnimation();
 
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const HOME_REST_TIMING = { startHour: 12, startMinute: 0, endHour: 14, endMinute: 0, allDay: true };
@@ -166,6 +166,7 @@ const PinnedFlightCard = React.memo(PinnedFlightCardComponent);
 
 export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const { colors, mode } = useAppTheme();
+  const { airportCode } = useAirport();
   const { t, months, locale, weatherMap } = useLanguage();
   const isOperations = mode === 'operations';
   const [timelineKey, setTimelineKey] = React.useState(0);
@@ -174,7 +175,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const today = new Date();
   const [shiftEvent, setShiftEvent] = useState<any>(null);
   const [shiftKind, setShiftKind] = useState<HomeShiftKind>('none');
-  const [weather, setWeather] = useState<{ text: string; iconName: string; temp: number } | null>(null);
+  const [weather, setWeather] = useState<{ text: string; iconName: string; temp: number | null } | null>(null);
   const [loadingShift, setLoadingShift] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [imageList, setImageList] = useState<string[]>([]);
@@ -252,7 +253,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   };
 
   useEffect(() => { fetchShift(); }, []);
-  useEffect(() => { fetchWeather(); }, []);
+  useEffect(() => { fetchWeather(); }, [airportCode, weatherMap]);
 
   useEffect(() => {
     const loadPinned = async () => {
@@ -387,17 +388,27 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   };
 
   const fetchWeather = async () => {
+    const airport = getAirportInfo(airportCode);
+    const fallbackWeather = { text: 'N/D', iconName: 'cloud-question', temp: null };
+
     try {
-      await Location.requestForegroundPermissionsAsync();
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.coords.latitude}&longitude=${loc.coords.longitude}&current=temperature_2m,weather_code&timezone=Europe%2FRome`;
+      if (airport.latitude == null || airport.longitude == null) {
+        setWeather(fallbackWeather);
+        return;
+      }
+
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${airport.latitude}&longitude=${airport.longitude}&current=temperature_2m,weather_code&timezone=Europe%2FRome`;
       const res = await fetch(url);
+      if (!res.ok) throw new Error(`WEATHER_HTTP_${res.status}`);
       const json = await res.json();
       const code = json.current?.weather_code ?? 0;
       const temp = Math.round(json.current?.temperature_2m ?? 0);
       const w = weatherMap[code] || { text: 'Sereno', iconName: 'weather-sunny' };
       setWeather({ ...w, temp });
-    } catch (e) { if (__DEV__) console.warn('[weather]', e); }
+    } catch (e) {
+      setWeather(fallbackWeather);
+      if (__DEV__) console.log('[weather]', e);
+    }
   };
 
   const pickImage = async () => {
@@ -499,7 +510,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
                   color={colors.primaryDark}
                   style={s.weatherIcon}
                 />
-                <Text style={s.weatherTemp}>{weather.temp}°</Text>
+                <Text style={s.weatherTemp}>{weather.temp == null ? '--' : `${weather.temp}°`}</Text>
                 <Text style={s.weatherDesc}>{t('homeWeatherLocal')} • {weather.text}</Text>
               </>
             ) : (

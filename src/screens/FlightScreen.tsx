@@ -196,6 +196,48 @@ function EmptyFlightState({
   );
 }
 
+function FlightLoadingState({
+  colors,
+  t,
+}: {
+  colors: ThemeColors;
+  t: (key: TranslationKey) => string;
+}) {
+  return (
+    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 28 }}>
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 14,
+        padding: 16,
+        borderRadius: 20,
+        backgroundColor: colors.card,
+        borderWidth: 1,
+        borderColor: colors.border,
+      }}>
+        <View style={{
+          width: 52,
+          height: 52,
+          borderRadius: 18,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.primaryLight,
+        }}>
+          <ActivityIndicator size="small" color={colors.primary} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900' }}>
+            {t('flightLoadingTitle')}
+          </Text>
+          <Text style={{ color: colors.textSub, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
+            {t('flightLoadingMsg')}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function sanitizeNotificationSettings(value: unknown): FlightNotificationSettings {
   const raw = (value && typeof value === 'object') ? (value as Record<string, unknown>) : {};
   const num = (field: string, fallback: number) => {
@@ -1119,7 +1161,7 @@ async function schedulePinnedNotifications(
 }
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
-export default function FlightScreen() {
+export default function FlightScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors, mode } = useAppTheme();
   const { t, locale } = useLanguage();
   const {
@@ -1246,7 +1288,7 @@ export default function FlightScreen() {
   }, [activeProfile, activeProfileId, airportCode]);
 
   const fetchAll = useCallback(async () => {
-    if (airportLoading) return;
+    if (airportLoading || !isFocused) return;
 
     try {
       const {
@@ -1493,21 +1535,46 @@ export default function FlightScreen() {
         await cancelPreviousNotifications('flight refresh inactive', false);
         setScheduledCount(0);
       }
-    } catch (e) { if (__DEV__) console.error('[fetchAll]', e); } finally { setLoading(false); setRefreshing(false); }
-  }, [activeProfile, airportCode, airportLoading, applySelectedAirlines]);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const providerUnavailable = message.includes('NO_FLIGHT_PROVIDER_AVAILABLE');
+
+      if (providerUnavailable) {
+        setAllArrivalsFull([]);
+        setAllDeparturesFull([]);
+        setArrivals([]);
+        setDepartures([]);
+        setFlightDataSource({
+          sourceLabel: 'Nessuna fonte voli disponibile',
+          fetchedAt: Date.now(),
+          providerDiagnostics: [{
+            provider: 'cache',
+            label: 'Fonti voli',
+            status: 'failed',
+            message,
+          }],
+        });
+      }
+
+      if (__DEV__) {
+        if (providerUnavailable) console.log('[fetchAll]', message);
+        else console.error('[fetchAll]', e);
+      }
+    } finally { setLoading(false); setRefreshing(false); }
+  }, [activeProfile, airportCode, airportLoading, applySelectedAirlines, isFocused]);
 
   useEffect(() => {
-    if (airportLoading) return;
+    if (airportLoading || !isFocused) return;
     setLoading(true);
     fetchAll();
-  }, [airportLoading, fetchAll]);
+  }, [airportLoading, fetchAll, isFocused]);
 
   // Auto-refresh flight data every 2 minutes so status/times stay current
   useEffect(() => {
-    if (airportLoading) return;
+    if (airportLoading || !isFocused) return;
     const iv = setInterval(() => { fetchAll(); }, 2 * 60 * 1000);
     return () => clearInterval(iv);
-  }, [airportLoading, fetchAll]);
+  }, [airportLoading, fetchAll, isFocused]);
 
   useEffect(() => {
     AsyncStorage.getItem(PINNED_FLIGHT_KEY).then(raw => {
@@ -1525,6 +1592,7 @@ export default function FlightScreen() {
 
   // staffMonitor: poll stand / gate / belt every 60 s
   useEffect(() => {
+    if (!isFocused) return;
     const load = async () => {
       try {
         const [deps, arrs] = await Promise.all([
@@ -1540,7 +1608,7 @@ export default function FlightScreen() {
     load();
     const iv = setInterval(load, 60_000);
     return () => clearInterval(iv);
-  }, []);
+  }, [isFocused]);
 
   const showNotifDialog = useCallback((title: string, message: string, tone: FlightAlertTone) => {
     setNotifDialog({ title, message, tone });
@@ -1849,9 +1917,7 @@ export default function FlightScreen() {
       )}
 
       {loading ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
+        <FlightLoadingState colors={colors} t={t} />
       ) : (
         <FlatList
           data={currentData}

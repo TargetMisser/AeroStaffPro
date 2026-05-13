@@ -38,14 +38,19 @@ function makeDate(date: Date, hours: number, minutes: number): Date {
   return next;
 }
 
-function scheduleWindows(now: Date): Array<{ from: Date; to: Date }> {
+function scheduleWindows(now: Date, mode: 'full' | 'futureOnly' = 'full'): Array<{ from: Date; to: Date }> {
   const today = startOfDay(now);
   const tomorrow = addDays(today, 1);
+  const tomorrowWindows = [
+    { from: tomorrow, to: makeDate(tomorrow, 12, 0) },
+    { from: makeDate(tomorrow, 12, 0), to: makeDate(tomorrow, 23, 59) },
+  ];
+  if (mode === 'futureOnly') return tomorrowWindows;
+
   return [
     { from: today, to: makeDate(today, 12, 0) },
     { from: makeDate(today, 12, 0), to: makeDate(today, 23, 59) },
-    { from: tomorrow, to: makeDate(tomorrow, 12, 0) },
-    { from: makeDate(tomorrow, 12, 0), to: makeDate(tomorrow, 23, 59) },
+    ...tomorrowWindows,
   ];
 }
 
@@ -315,7 +320,7 @@ export const aeroDataBoxProvider: FlightScheduleProvider = {
   label: 'AeroDataBox',
   supports: ({ aeroDataBoxApiKey }) => Boolean(aeroDataBoxApiKey),
   unavailableMessage: () => 'AeroDataBox API key non configurata',
-  fetch: async ({ airportCode, airport, aeroDataBoxApiKey, aeroDataBoxGateway = 'apiMarket', signal, now = new Date() }) => {
+  fetch: async ({ airportCode, airport, aeroDataBoxApiKey, aeroDataBoxGateway = 'apiMarket', aeroDataBoxMode = 'full', signal, now = new Date() }) => {
     const apiKey = sanitizeApiKey(aeroDataBoxApiKey);
     if (!apiKey) throw new Error('AERODATABOX_API_KEY_MISSING');
 
@@ -324,7 +329,7 @@ export const aeroDataBoxProvider: FlightScheduleProvider = {
     const failures: string[] = [];
 
     // Sequential requests avoid AsyncStorage write races between cached windows.
-    for (const window of scheduleWindows(now)) {
+    for (const window of scheduleWindows(now, aeroDataBoxMode)) {
       try {
         const result = await fetchWindow(airportCode, airport, aeroDataBoxGateway, apiKey, window.from, window.to, signal);
         arrivals.push(...result.arrivals);

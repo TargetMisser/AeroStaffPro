@@ -17,7 +17,7 @@ import {
 import { getAeroDataBoxApiKey, getAeroDataBoxGateway, getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
 import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, type FlightDirection } from './flightScheduleAdapter';
 
-const FETCH_TIMEOUT = 15000; // AirLabs live + route prediction can take a little longer on mobile networks.
+const FETCH_TIMEOUT = 90_000; // Provider-level timeouts prevent one slow source from poisoning the whole chain.
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
 const SCHEDULE_CACHE_TTL_MS = 30 * 60 * 1000;
 

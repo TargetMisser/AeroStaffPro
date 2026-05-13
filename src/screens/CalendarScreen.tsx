@@ -5,7 +5,6 @@ import {
   Linking,
 } from 'react-native';
 import * as SystemCalendar from 'expo-calendar';
-import * as Location from 'expo-location';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { WebView } from 'react-native-webview';
@@ -15,6 +14,7 @@ import { Calendar as RNCalendar, LocaleConfig, type DateData } from 'react-nativ
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import TimeCarouselPicker from '../components/TimeCarouselPicker';
 import { useAirport } from '../context/AirportContext';
+import { getAirportInfo } from '../utils/airportSettings';
 import { fetchAirportScheduleRaw } from '../utils/fr24api';
 import {
   getWritableCalendarId,
@@ -87,7 +87,7 @@ function isSameMonth(date: Date, iso: string): boolean {
   return target.getFullYear() === date.getFullYear() && target.getMonth() === date.getMonth();
 }
 
-export default function CalendarScreen() {
+export default function CalendarScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors } = useAppTheme();
   const { lang, t, months, weekDaysShort, weekDaysLong, locale, weatherMap } = useLanguage();
   const { airportCode, isLoading: airportLoading } = useAirport();
@@ -293,17 +293,18 @@ export default function CalendarScreen() {
   }, [lang, months, weekDaysLong, weekDaysShort]);
 
   useEffect(() => {
-    if (!airportLoading) fetchCalendar(hasLoadedCalendarRef.current);
-  }, [visibleMonth, airportCode, airportLoading]);
+    if (!isFocused || airportLoading) return;
+    fetchCalendar(hasLoadedCalendarRef.current);
+  }, [visibleMonth, airportCode, airportLoading, isFocused]);
 
   useEffect(() => {
-    if (airportLoading || loading) return;
+    if (!isFocused || airportLoading || loading) return;
     const weekStart = getMonday(fromIsoDate(selectedDay));
     weekStart.setHours(0, 0, 0, 0);
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
     fetchWeatherAndFlights(weekStart, weekEnd, eventsData);
-  }, [selectedDay, eventsData, airportCode, airportLoading, loading, weatherMap]);
+  }, [selectedDay, eventsData, airportCode, airportLoading, loading, weatherMap, isFocused]);
 
   const fetchCalendar = async (silent = false) => {
     try {
@@ -355,11 +356,15 @@ export default function CalendarScreen() {
   const fetchWeatherAndFlights = async (start: Date, end: Date, localData: Record<string, ShiftEvent[]>) => {
     const dict: Record<string, DayStats> = {};
     try {
-      await Location.requestForegroundPermissionsAsync();
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const airport = getAirportInfo(airportCode);
+      if (airport.latitude == null || airport.longitude == null) {
+        throw new Error('AIRPORT_COORDS_MISSING');
+      }
+
       const s = start.toISOString().split('T')[0];
       const e2 = new Date(end.getTime() - 1000).toISOString().split('T')[0];
-      const wr = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${loc.coords.latitude}&longitude=${loc.coords.longitude}&daily=weather_code&timezone=Europe%2FRome&start_date=${s}&end_date=${e2}`);
+      const wr = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${airport.latitude}&longitude=${airport.longitude}&daily=weather_code&timezone=Europe%2FRome&start_date=${s}&end_date=${e2}`);
+      if (!wr.ok) throw new Error(`WEATHER_HTTP_${wr.status}`);
       const wj = await wr.json();
       if (wj.daily?.time) {
         wj.daily.time.forEach((date: string, i: number) => {
@@ -367,7 +372,7 @@ export default function CalendarScreen() {
           dict[date] = { weatherText: m.text, weatherIconName: m.iconName, flightCount: 0 };
         });
       }
-    } catch (e) { if (__DEV__) console.warn('[calWeather]', e); }
+    } catch (e) { if (__DEV__) console.log('[calWeather]', e); }
     try {
       const { arrivals, departures } = await fetchAirportScheduleRaw(airportCode);
       const allF = [...arrivals, ...departures];
@@ -383,7 +388,13 @@ export default function CalendarScreen() {
           if (dict[iso]) dict[iso].flightCount = cnt; else dict[iso] = { weatherText: 'N/A', weatherIconName: 'cloud-question', flightCount: cnt };
         }
       });
-    } catch (e) { if (__DEV__) console.warn('[calFlights]', e); }
+    } catch (e) {
+      if (__DEV__) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (message.startsWith('NO_FLIGHT_PROVIDER_AVAILABLE')) console.log('[calFlights]', message);
+        else console.warn('[calFlights]', e);
+      }
+    }
     setDailyStats(dict);
   };
 

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { devLog } from './devLog';
 
 export type StaffMonitorFlight = {
   flightNumber: string;
@@ -130,7 +131,7 @@ function detectColumns(headerRow: RawCell[]): ColMap | null {
 
   const headerStr = positions.map(p => `${p.start}:"${p.name}"`).join(' ');
   _lastDebugColumns = `map=${JSON.stringify(map)} | ${headerStr}`;
-  console.warn('[staffMonitor] columns:', _lastDebugColumns);
+  devLog('[staffMonitor] columns:', _lastDebugColumns);
   return map;
 }
 
@@ -214,7 +215,7 @@ function parseSection(sectionHTML: string): StaffMonitorFlight[] {
     });
   }
 
-  if (!colMap) { _lastDebugColumns = 'NESSUNA intestazione trovata'; console.warn('[staffMonitor] header row never detected'); }
+  if (!colMap) { _lastDebugColumns = 'NESSUNA intestazione trovata'; devLog('[staffMonitor] header row never detected'); }
   return results;
 }
 
@@ -259,7 +260,7 @@ function captureSessionCookie(resp: Response): void {
   const m = /JSESSIONID=([^;,\s]+)/i.exec(raw);
   if (m) {
     _sessionCookie = `JSESSIONID=${m[1]}`;
-    console.warn('[staffMonitor] JSESSIONID captured');
+    devLog('[staffMonitor] JSESSIONID captured');
   }
 }
 
@@ -385,7 +386,7 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
           break;
         } catch (e: any) {
           _lastDebugStatus = `D:ERR ${String(e).slice(0, 60)}`;
-          console.warn(`[staffMonitor] D fetch error: ${_lastDebugStatus}`);
+          devLog(`[staffMonitor] D fetch error: ${_lastDebugStatus}`);
         }
       }
     } else {
@@ -394,9 +395,9 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
       if (!_sessionCookie) {
         try {
           await tryFetchWithRetry(`${base}?trans=true&nature=D`, 12_000);
-          console.warn('[staffMonitor] session primed for A:', _sessionCookie ?? 'none');
+          devLog('[staffMonitor] session primed for A:', _sessionCookie ?? 'none');
         } catch {
-          console.warn('[staffMonitor] session prime failed, proceeding anyway');
+          devLog('[staffMonitor] session prime failed, proceeding anyway');
         }
       }
 
@@ -404,15 +405,15 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
       html = await raceUrls([...primaryUrls, ...arrivalExtras], 40_000) ?? '';
       if (html) {
         _lastDebugStatus = `A:200 len=${html.length} cookie=${_sessionCookie ? 'yes' : 'no'}`;
-        console.warn(`[staffMonitor] A parallel race succeeded len=${html.length}`);
+        devLog(`[staffMonitor] A parallel race succeeded len=${html.length}`);
       } else {
         _lastDebugStatus = `A:ERR all ${primaryUrls.length + arrivalExtras.length} URLs failed cookie=${_sessionCookie ? 'yes' : 'no'}`;
-        console.warn(`[staffMonitor] ${_lastDebugStatus}`);
+        devLog(`[staffMonitor] ${_lastDebugStatus}`);
       }
     }
 
     if (!html) {
-      console.warn(`[staffMonitor] all URLs failed for ${nature} — trying cache`);
+      devLog(`[staffMonitor] all URLs failed for ${nature} — trying cache`);
       const cached = await loadCached(nature);
       if (cached) {
         _lastDebugStatus = `${nature}:CACHE(${cached.length})`;
