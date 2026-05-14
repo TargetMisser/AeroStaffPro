@@ -300,6 +300,12 @@ function makeProviderArrival(flightNumber, arrivalTs, origin = 'LGW') {
   };
 }
 
+function makeFr24LiveProviderFlight(flightNumber, departureTs, destination = 'AMS') {
+  const item = makeProviderFlight(flightNumber, departureTs, destination);
+  item.flight._source = 'fr24_api';
+  return item;
+}
+
 async function runProviderLayerTests() {
   const now = new Date(2026, 4, 12, 12, 0, 0);
   const todayTs = Math.floor(new Date(2026, 4, 12, 14, 0, 0).getTime() / 1000);
@@ -354,6 +360,70 @@ async function runProviderLayerTests() {
   assert(aeroDataBoxStatus?.tomorrowDepartures === 1, 'provider diagnostics should count AeroDataBox tomorrow departures');
   assert(aeroDataBoxStatus?.tomorrowArrivals === 1, 'provider diagnostics should count AeroDataBox tomorrow arrivals');
   assert(aeroDataBoxStatus?.todayDepartures === 0, 'provider diagnostics should count AeroDataBox today departures separately');
+
+  const thinTodayCalls = [];
+  const thinTodayContexts = [];
+  const thinTodayLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: {
+        id: 'aeroDataBox',
+        label: 'AeroDataBox',
+        supports: () => true,
+        fetch: async context => {
+          thinTodayCalls.push('aeroDataBox');
+          thinTodayContexts.push(context);
+          if (context.aeroDataBoxMode === 'futureOnly') {
+            return {
+              allArrivals: [makeProviderArrival('U29910', tomorrowTs)],
+              allDepartures: [makeProviderFlight('HV9910', tomorrowTs)],
+            };
+          }
+          return {
+            allArrivals: [
+              makeProviderArrival('U29901', todayTs),
+              makeProviderArrival('U29902', todayTs + 900),
+              makeProviderArrival('U29910', tomorrowTs),
+            ],
+            allDepartures: [
+              makeProviderFlight('HV9901', todayTs),
+              makeProviderFlight('HV9902', todayTs + 900),
+              makeProviderFlight('HV9910', tomorrowTs),
+            ],
+          };
+        },
+      },
+    },
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', { allArrivals: [], allDepartures: [] }, thinTodayCalls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', { allArrivals: [], allDepartures: [] }, thinTodayCalls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', {
+        allArrivals: [],
+        allDepartures: [
+          makeFr24LiveProviderFlight('FRLIVE1', todayTs, 'STN'),
+          makeFr24LiveProviderFlight('FRLIVE2', todayTs + 600, 'LGW'),
+          makeFr24LiveProviderFlight('FRLIVE3', todayTs + 1200, 'LTN'),
+        ],
+      }, thinTodayCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, thinTodayCalls),
+    },
+  });
+  const thinTodayPayload = await thinTodayLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'adb-key',
+    fr24ApiKey: 'fr24-key',
+    now,
+  });
+  assert(thinTodayContexts[0]?.aeroDataBoxMode !== 'futureOnly', 'provider auto mode should not treat three live flights as complete today coverage');
+  assert(thinTodayPayload.allDepartures.length >= 5, 'provider auto mode should merge today schedule data when FR24 API only returns thin live coverage');
+  assert(
+    thinTodayPayload.allArrivals.some(item => item.flight.identification.number.default === 'U29901'),
+    'provider auto mode should keep today arrivals from schedule fallback after thin FR24 live coverage',
+  );
 
   const partialTomorrowCalls = [];
   const partialTomorrowLayer = loadTsModule('src/utils/flightProviders/index.ts', {

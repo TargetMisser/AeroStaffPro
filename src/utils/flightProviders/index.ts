@@ -88,6 +88,15 @@ function hasFlightsOnDay(items: any[], direction: FlightDirection, day: Date): b
   return items.some(item => isSameLocalDay(getFlightBestTs(item, direction), day));
 }
 
+function isScheduleBackedFlight(item: any): boolean {
+  // FR24 API live positions are useful status overlays, not a complete airport schedule.
+  return item?.flight?._source !== 'fr24_api';
+}
+
+function hasScheduleBackedFlightsOnDay(items: any[], direction: FlightDirection, day: Date): boolean {
+  return items.some(item => isScheduleBackedFlight(item) && isSameLocalDay(getFlightBestTs(item, direction), day));
+}
+
 function countFlightsOnDay(items: any[], direction: FlightDirection, day: Date): number {
   return items.reduce(
     (count, item) => count + (isSameLocalDay(getFlightBestTs(item, direction), day) ? 1 : 0),
@@ -112,6 +121,11 @@ function buildProviderCoverage(
 function hasDayCoverage(result: FlightScheduleProviderResult, day: Date): boolean {
   return hasFlightsOnDay(result.allArrivals, 'arrival', day)
     || hasFlightsOnDay(result.allDepartures, 'departure', day);
+}
+
+function hasScheduleBackedDayCoverage(result: FlightScheduleProviderResult, day: Date): boolean {
+  return hasScheduleBackedFlightsOnDay(result.allArrivals, 'arrival', day)
+    || hasScheduleBackedFlightsOnDay(result.allDepartures, 'departure', day);
 }
 
 function hasTomorrowListCoverage(result: FlightScheduleProviderResult, tomorrow: Date): boolean {
@@ -232,10 +246,10 @@ export async function fetchFlightScheduleFromProviders(
     try {
       const useAirLabsRoutesOnly = provider.id === 'airlabs'
         && aggregate !== null
-        && hasDayCoverage(aggregate, now);
+        && hasScheduleBackedDayCoverage(aggregate, now);
       const useAeroDataBoxFutureOnly = provider.id === 'aeroDataBox'
         && aggregate !== null
-        && hasDayCoverage(aggregate, now);
+        && hasScheduleBackedDayCoverage(aggregate, now);
       const messages: string[] = [];
       const providerContext: FlightScheduleProviderContext = {
         ...context,
