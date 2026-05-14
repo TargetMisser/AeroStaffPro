@@ -25,11 +25,6 @@ function formatCommand(command, args = []) {
   return [command, ...args].join(' ');
 }
 
-function shouldUseCmd(command) {
-  if (process.platform !== 'win32') return false;
-  return !path.isAbsolute(command) || /\.(bat|cmd)$/i.test(command);
-}
-
 function quoteWindowsArg(value) {
   const raw = String(value);
   if (raw.length === 0) return '""';
@@ -37,12 +32,35 @@ function quoteWindowsArg(value) {
   return `"${raw.replace(/(["^&|<>])/g, '^$1')}"`;
 }
 
+function resolveWindowsCommand(command) {
+  if (process.platform !== 'win32' || path.isAbsolute(command)) {
+    return command;
+  }
+
+  const where = spawnSync('where.exe', [command], {
+    cwd: root,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  const candidates = (where.stdout || '')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  return candidates.find(candidate => /\.exe$/i.test(candidate))
+    ?? candidates.find(candidate => /\.(cmd|bat)$/i.test(candidate))
+    ?? candidates[0]
+    ?? command;
+}
+
 function run(command, args = [], options = {}) {
   const capture = options.capture === true;
-  const useCmd = options.shell ?? shouldUseCmd(command);
-  const spawnCommand = useCmd ? process.env.ComSpec || 'cmd.exe' : command;
+  const resolvedCommand = resolveWindowsCommand(command);
+  const useCmd = options.shell ?? (process.platform === 'win32' && /\.(bat|cmd)$/i.test(resolvedCommand));
+  const spawnCommand = useCmd ? process.env.ComSpec || 'cmd.exe' : resolvedCommand;
   const spawnArgs = useCmd
-    ? ['/d', '/s', '/c', [command, ...args].map(quoteWindowsArg).join(' ')]
+    ? ['/d', '/c', [resolvedCommand, ...args].map(quoteWindowsArg).join(' ')]
     : args;
 
   const result = spawnSync(spawnCommand, spawnArgs, {

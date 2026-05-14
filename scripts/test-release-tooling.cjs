@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
+const releaseTools = require('./release-tools.cjs');
 
 function assert(condition, message) {
   if (!condition) {
@@ -52,5 +54,20 @@ assert(
   bumpVersionSource.includes('Latest stable release'),
   'version:bump should know the README stable-version marker',
 );
+
+const tempGitRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'aerostaff-release-tooling-git-'));
+releaseTools.run('git', ['init'], { cwd: tempGitRepo, capture: true });
+releaseTools.run('git', [
+  '-c',
+  'user.email=aerostaff@example.invalid',
+  '-c',
+  'user.name=AeroStaff Tooling',
+  'commit',
+  '--allow-empty',
+  '-m',
+  'chore: release command quoting test',
+], { cwd: tempGitRepo, capture: true });
+const gitSubject = releaseTools.capture('git', ['log', '-1', '--format=%s'], { cwd: tempGitRepo }).stdout.trim();
+assert(gitSubject === 'chore: release command quoting test', 'release tooling should preserve git commit messages with spaces');
 
 console.log('Release tooling test passed.');
