@@ -111,6 +111,8 @@ run('gh', [
   'build-release.yml',
   '--repo',
   repo,
+  '--ref',
+  branch,
   '-f',
   `ref=${sha}`,
   '-f',

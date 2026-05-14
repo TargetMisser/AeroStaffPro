@@ -49,6 +49,7 @@ runHelp('release-quick.cjs');
 
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
+assert(releaseQuickSource.includes("'--ref'"), 'release:quick should dispatch the GitHub workflow from the current branch');
 assert(bumpVersionSource.includes('README.md'), 'version:bump should update README stable version');
 assert(
   bumpVersionSource.includes('Latest stable release'),
