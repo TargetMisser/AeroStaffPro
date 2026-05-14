@@ -558,6 +558,91 @@ async function runProviderLayerTests() {
   const timeoutStatus = timeoutPayload.diagnostics.find(item => item.provider === 'staffMonitor');
   assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
 
+  const dailyCacheStorage = new Map();
+  const fixedNowMs = now.getTime();
+  const RealDate = Date;
+  class FixedDate extends RealDate {
+    constructor(...args) {
+      return args.length > 0 ? new RealDate(...args) : new RealDate(fixedNowMs);
+    }
+
+    static now() {
+      return fixedNowMs;
+    }
+
+    static parse(value) {
+      return RealDate.parse(value);
+    }
+
+    static UTC(...args) {
+      return RealDate.UTC(...args);
+    }
+  }
+  const staleSavedAt = fixedNowMs - (4 * 60 * 60 * 1000);
+  dailyCacheStorage.set('aerostaff_schedule_provider_cache_v1', JSON.stringify({
+    PSA: {
+      airportCode: 'PSA',
+      allArrivals: [],
+      allDepartures: [
+        makeProviderFlight('HV9050', todayTs + (4 * 60 * 60), 'AMS'),
+        makeProviderFlight('FR0001', todayTs - (4 * 60 * 60), 'STN'),
+      ],
+      source: 'aeroDataBox',
+      sourceLabel: 'AeroDataBox',
+      providerDiagnostics: [],
+      fetchedAt: staleSavedAt,
+      savedAt: staleSavedAt,
+    },
+  }));
+  const fr24ApiFacade = loadTsModule('src/utils/fr24api.ts', {
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => dailyCacheStorage.get(key) ?? null,
+      setItem: async (key, value) => dailyCacheStorage.set(key, value),
+    },
+    './airportSettings': {
+      getAirportAirlines: () => [],
+      getAirportInfo: code => ({ code, name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false }),
+      getStoredAirportCode: async () => 'PSA',
+      isValidAirportCode: code => code === 'PSA',
+      normalizeAirportCode: code => String(code ?? 'PSA').toUpperCase(),
+      storeDetectedAirportAirlines: async () => {},
+    },
+    './flightProviderSettings': {
+      getAeroDataBoxApiKey: async () => null,
+      getAeroDataBoxGateway: async () => 'apiMarket',
+      getAirLabsApiKey: async () => null,
+      getFlightProviderPreference: async () => 'auto',
+      getFr24ApiKey: async () => null,
+    },
+    './flightProviders': {
+      fetchFlightScheduleFromProviders: async () => ({
+        allArrivals: [],
+        allDepartures: [makeFr24LiveProviderFlight('U24000', todayTs + (2 * 60 * 60), 'ORY')],
+        source: 'fr24Api',
+        sourceLabel: 'FlightRadar24 API',
+        fetchedAt: fixedNowMs,
+        diagnostics: [],
+      }),
+      getFlightScheduleProviders: () => [],
+    },
+    __globals: {
+      Date: FixedDate,
+    },
+  });
+  const dailyCachedSchedule = await fr24ApiFacade.fetchAirportScheduleRaw('PSA');
+  const dailyCachedFlightNumbers = dailyCachedSchedule.allDepartures
+    .map(item => item.flight.identification.number.default)
+    .sort()
+    .join(',');
+  assert(
+    dailyCachedFlightNumbers.includes('HV9050') && dailyCachedFlightNumbers.includes('U24000'),
+    'schedule fetch should seed thin fresh provider results with the cached day list',
+  );
+  assert(
+    !dailyCachedFlightNumbers.includes('FR0001'),
+    'schedule fetch should prune expired cached flights while keeping the active day list',
+  );
+
   const fr24Module = loadTsModule('src/utils/flightProviders/fr24Provider.ts', {
     '../airportSettings': {
       buildFr24ScheduleUrl: airportCode => `https://fr24-public.test/${airportCode}`,

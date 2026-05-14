@@ -15,11 +15,12 @@ import {
   type FlightScheduleProviderStatus,
 } from './flightProviders';
 import { getAeroDataBoxApiKey, getAeroDataBoxGateway, getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
-import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, type FlightDirection } from './flightScheduleAdapter';
+import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, pruneExpiredFlights, type FlightDirection } from './flightScheduleAdapter';
 
 const FETCH_TIMEOUT = 90_000; // Provider-level timeouts prevent one slow source from poisoning the whole chain.
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
 const SCHEDULE_CACHE_TTL_MS = 30 * 60 * 1000;
+const SCHEDULE_DAY_CACHE_TTL_MS = 28 * 60 * 60 * 1000;
 
 export type { FlightScheduleProviderId, FlightScheduleProviderStatus };
 
@@ -82,18 +83,66 @@ function errorMessage(error: unknown): string {
   return String(error ?? 'unknown_error');
 }
 
-async function loadCachedSchedule(airportCode: string): Promise<ScheduleCacheEntry | null> {
+async function loadCachedScheduleWithin(airportCode: string, ttlMs: number): Promise<ScheduleCacheEntry | null> {
   try {
     const raw = await AsyncStorage.getItem(SCHEDULE_CACHE_KEY);
     if (!raw) return null;
     const cache = JSON.parse(raw);
     const entry = cache?.[airportCode] as ScheduleCacheEntry | undefined;
-    if (!entry || Date.now() - entry.savedAt > SCHEDULE_CACHE_TTL_MS) return null;
+    const savedAt = entry?.savedAt;
+    if (!entry || typeof savedAt !== 'number' || !Number.isFinite(savedAt) || Date.now() - savedAt > ttlMs) return null;
     if (!Array.isArray(entry.allArrivals) || !Array.isArray(entry.allDepartures)) return null;
     return entry;
   } catch {
     return null;
   }
+}
+
+async function loadCachedSchedule(airportCode: string): Promise<ScheduleCacheEntry | null> {
+  return loadCachedScheduleWithin(airportCode, SCHEDULE_CACHE_TTL_MS);
+}
+
+function withActiveDayCache<T extends {
+  allArrivals: any[];
+  allDepartures: any[];
+  sourceLabel?: string;
+  diagnostics?: FlightScheduleProviderStatus[];
+}>(payload: T, cached: ScheduleCacheEntry | null): T {
+  if (!cached) return payload;
+
+  const allArrivals = pruneExpiredFlights(
+    mergeFlightLists(cached.allArrivals, payload.allArrivals, 'arrival'),
+    'arrival',
+  );
+  const allDepartures = pruneExpiredFlights(
+    mergeFlightLists(cached.allDepartures, payload.allDepartures, 'departure'),
+    'departure',
+  );
+  const freshCount = payload.allArrivals.length + payload.allDepartures.length;
+  const mergedCount = allArrivals.length + allDepartures.length;
+  const contributed = mergedCount > freshCount;
+
+  return {
+    ...payload,
+    allArrivals,
+    allDepartures,
+    sourceLabel: contributed && payload.sourceLabel
+      ? `${payload.sourceLabel} + Cache giornaliera`
+      : payload.sourceLabel,
+    diagnostics: [
+      ...(payload.diagnostics ?? []),
+      {
+        provider: 'cache',
+        label: 'Cache giornaliera',
+        status: 'success',
+        message: contributed
+          ? 'Lista voli fusa con la cache della giornata'
+          : 'Cache della giornata verificata',
+        arrivals: cached.allArrivals.length,
+        departures: cached.allDepartures.length,
+      },
+    ],
+  };
 }
 
 function addDays(date: Date, days: number): Date {
@@ -182,6 +231,10 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
       signal: controller.signal,
       now,
     }, getFlightScheduleProviders(providerPreference)));
+    payload = dedupeSchedulePayload(withActiveDayCache(
+      payload,
+      await loadCachedScheduleWithin(airportCode, SCHEDULE_DAY_CACHE_TTL_MS),
+    ));
     await saveCachedSchedule({
       airportCode,
       allArrivals: payload.allArrivals,
@@ -193,12 +246,13 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
       savedAt: Date.now(),
     });
   } catch (error) {
-    const cached = await loadCachedSchedule(airportCode);
+    const cached = await loadCachedScheduleWithin(airportCode, SCHEDULE_DAY_CACHE_TTL_MS)
+      ?? await loadCachedSchedule(airportCode);
     if (!cached) throw error;
 
     payload = dedupeSchedulePayload({
-      allArrivals: cached.allArrivals,
-      allDepartures: cached.allDepartures,
+      allArrivals: pruneExpiredFlights(cached.allArrivals, 'arrival'),
+      allDepartures: pruneExpiredFlights(cached.allDepartures, 'departure'),
       source: cached.source ?? 'cache',
       sourceLabel: `${cached.sourceLabel ?? 'Cache voli'} (cache)`,
       fetchedAt: cached.fetchedAt,
