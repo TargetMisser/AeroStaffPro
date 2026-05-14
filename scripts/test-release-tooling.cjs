@@ -71,4 +71,7 @@ releaseTools.run('git', [
 const gitSubject = releaseTools.capture('git', ['log', '-1', '--format=%s'], { cwd: tempGitRepo }).stdout.trim();
 assert(gitSubject === 'chore: release command quoting test', 'release tooling should preserve git commit messages with spaces');
 
+const npmVersion = releaseTools.capture('npm', ['--version']).stdout.trim();
+assert(/^\d+\.\d+\.\d+/.test(npmVersion), 'release tooling should run npm commands through Windows .cmd shims');
+
 console.log('Release tooling test passed.');

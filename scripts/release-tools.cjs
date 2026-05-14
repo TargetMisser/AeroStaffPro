@@ -58,16 +58,16 @@ function run(command, args = [], options = {}) {
   const capture = options.capture === true;
   const resolvedCommand = resolveWindowsCommand(command);
   const useCmd = options.shell ?? (process.platform === 'win32' && /\.(bat|cmd)$/i.test(resolvedCommand));
-  const spawnCommand = useCmd ? process.env.ComSpec || 'cmd.exe' : resolvedCommand;
-  const spawnArgs = useCmd
-    ? ['/d', '/c', [resolvedCommand, ...args].map(quoteWindowsArg).join(' ')]
-    : args;
+  const spawnCommand = useCmd
+    ? [resolvedCommand, ...args].map(quoteWindowsArg).join(' ')
+    : resolvedCommand;
+  const spawnArgs = useCmd ? [] : args;
 
   const result = spawnSync(spawnCommand, spawnArgs, {
     cwd: options.cwd || root,
     env: { ...process.env, ...(options.env || {}) },
     encoding: 'utf8',
-    shell: false,
+    shell: Boolean(useCmd),
     stdio: capture ? ['ignore', 'pipe', 'pipe'] : options.stdio || 'inherit',
   });
 
