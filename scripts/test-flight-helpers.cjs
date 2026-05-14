@@ -118,6 +118,8 @@ assert(airlineOps.getAirlineColor('Transavia') === '#00A650', 'Transavia name sh
 assert(airlineOps.getAirlineColor('TRA') === '#00A650', 'Transavia ICAO code should use brand green');
 assert(airlineOps.getAirlineColor('HV') === '#00A650', 'Transavia IATA code should use brand green');
 assert(airlineOps.getAirlineColor('EZY') === '#FF6600', 'easyJet ICAO code should use brand orange');
+assert(airlineOps.getAirlineColor('EC') === '#FF6600', 'easyJet Europe EC code should use easyJet brand orange');
+assert(airlineOps.getAirlineDisplayName('Compagnia EC') === 'easyJet', 'generic EC airline labels should display as easyJet');
 assert(airlineOps.getAirlineColor('WMT') === '#C6006E', 'Wizz Air Malta ICAO code should use Wizz brand color');
 
 assert(typeof adapter.isFlightAirlineMatch === 'function', 'flight adapter should expose airline matching helper');
@@ -235,6 +237,29 @@ const mergedProviderArrival = adapter.mergeFlightLists([fr24ApiArrival], [staffM
 assert(
   mergedProviderArrival.length === 1,
   'merge should collapse provider duplicates when one source has airport IATA and the other has the matching airport name',
+);
+
+const easyJetVariantDepartureTs = Math.floor(new Date(2026, 4, 14, 15, 15, 0).getTime() / 1000);
+const fr24ApiEasyJetDeparture = {
+  flight: {
+    identification: { number: { default: 'U24924' } },
+    airline: { name: 'easyJet', code: { iata: 'U2', icao: 'EZY' } },
+    airport: { destination: { code: { iata: 'ORY' }, name: 'ORY' } },
+    time: { scheduled: { departure: easyJetVariantDepartureTs }, estimated: { departure: easyJetVariantDepartureTs }, real: {} },
+  },
+};
+const providerEasyJetEuropeDeparture = {
+  flight: {
+    identification: { number: { default: 'EC4924' } },
+    airline: { name: 'Compagnia EC', code: { iata: 'EC', icao: 'EJU' } },
+    airport: { destination: { code: { iata: 'ORY' }, name: 'Paris Orly' } },
+    time: { scheduled: { departure: easyJetVariantDepartureTs }, estimated: {}, real: {} },
+  },
+};
+const mergedEasyJetCodeVariants = adapter.mergeFlightLists([fr24ApiEasyJetDeparture], [providerEasyJetEuropeDeparture], 'departure');
+assert(
+  mergedEasyJetCodeVariants.length === 1,
+  'merge should collapse easyJet U2 and EC code variants for the same service',
 );
 
 const pruned = adapter.pruneExpiredFlights([scheduledOnly, delayed], 'departure', 5000, 3600);
@@ -620,6 +645,30 @@ async function runProviderLayerTests() {
     now,
   });
   assert(aeroCalls.length === aeroFirstCallCount, 'AeroDataBox provider should cache identical schedule windows');
+
+  const staffMonitorModule = loadTsModule('src/utils/flightProviders/staffMonitorProvider.ts', {
+    '../staffMonitor': {
+      fetchStaffMonitorData: async nature => nature === 'D'
+        ? [{
+            flightNumber: 'EC4924',
+            scheduledTime: '15:15',
+            estimatedTime: '15:15',
+            route: 'ORY',
+          }]
+        : [],
+    },
+  });
+  const staffMonitorResult = await staffMonitorModule.staffMonitorProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+  });
+  const staffEasyJetVariant = staffMonitorResult.allDepartures.find(
+    item => item.flight.identification.number.default === 'EC4924',
+  );
+  assert(staffEasyJetVariant, 'StaffMonitor provider should parse EC easyJet Europe departures');
+  assert(staffEasyJetVariant.flight.airline.name === 'easyJet', 'StaffMonitor EC flights should display as easyJet');
+  assert(staffEasyJetVariant.flight.airline.code.iata === 'U2', 'StaffMonitor EC flights should use the canonical easyJet IATA code');
 
   const futureOnlyStorage = new Map();
   const futureOnlyCalls = [];

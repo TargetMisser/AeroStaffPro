@@ -170,6 +170,24 @@ function normalizeFlightIdentityPart(value: unknown): string {
   return String(value).trim().toUpperCase().replace(/[^A-Z0-9]+/g, '');
 }
 
+const FLIGHT_NUMBER_PREFIX_ALIASES: Record<string, string> = {
+  EC: 'U2',
+  DS: 'U2',
+  EJU: 'U2',
+  EZS: 'U2',
+  EZY: 'U2',
+};
+
+function canonicalizeFlightNumberIdentity(value: unknown): string {
+  const normalized = normalizeFlightIdentityPart(value);
+  const match = normalized.match(/^([A-Z0-9]{2,3}?)(\d+)$/);
+  if (!match) return normalized;
+
+  const [, prefix, digits] = match;
+  const canonicalPrefix = FLIGHT_NUMBER_PREFIX_ALIASES[prefix] ?? prefix;
+  return `${canonicalPrefix}${digits}`;
+}
+
 type AirportIdentityConfidence = 'code' | 'name' | 'unknown';
 
 type FlightMergeIdentity = {
@@ -242,7 +260,7 @@ function getFlightRemoteAirportIdentity(item: any, direction: FlightDirection): 
 function getFlightMergeIdentity(item: any, direction: FlightDirection): FlightMergeIdentity {
   const remoteAirport = getFlightRemoteAirportIdentity(item, direction);
   return {
-    flightNumber: normalizeFlightIdentityPart(getFlightNumber(item)),
+    flightNumber: canonicalizeFlightNumberIdentity(getFlightNumber(item)),
     remoteAirport: remoteAirport.key || 'AIRPORT_UNKNOWN',
     remoteAirportConfidence: remoteAirport.confidence,
     serviceDate: getFlightServiceDateKey(item, direction) || 'DATE_UNKNOWN',

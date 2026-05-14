@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AirportInfo } from '../airportSettings';
+import { getAirlineDisplayName } from '../airlineOps';
 import type { FlightScheduleProvider } from './types';
 
 const AERODATABOX_API_MARKET_BASE = 'https://prod.api.market/api/v1/aedbx/aerodatabox';
@@ -167,9 +168,10 @@ function flightToScheduleItem(
 
   const localAirport = airportEndpoint(relevantMovement?.airport, airport, airportCode);
   const remoteAirport = oppositeAirportEndpoint(oppositeMovement?.airport ?? item.movement?.airport);
-  const airlineName = cleanString(item.airline?.name) ?? cleanString(item.airline?.iata) ?? 'Sconosciuta';
   const airlineIata = cleanString(item.airline?.iata)?.toUpperCase();
   const airlineIcao = cleanString(item.airline?.icao)?.toUpperCase();
+  const rawAirlineName = cleanString(item.airline?.name);
+  const airlineName = getAirlineDisplayName(rawAirlineName ?? airlineIata ?? airlineIcao, rawAirlineName ?? airlineIata ?? 'Sconosciuta');
   const realTs = /departed|arrived/i.test(status) ? (runwayTs ?? revisedTs) : undefined;
 
   return {

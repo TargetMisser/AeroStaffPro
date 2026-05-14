@@ -12,7 +12,7 @@ type AirlineMeta = {
 
 const AIRLINE_BY_FLIGHT_PREFIX: AirlineMeta[] = [
   { name: AIRLINE_DISPLAY_NAMES.ryanair, iata: 'FR', prefixes: ['FR', 'RYR'] },
-  { name: AIRLINE_DISPLAY_NAMES.easyjet, iata: 'U2', prefixes: ['U2', 'EJU', 'EZY'] },
+  { name: AIRLINE_DISPLAY_NAMES.easyjet, iata: 'U2', prefixes: ['U2', 'EC', 'DS', 'EJU', 'EZS', 'EZY'] },
   { name: AIRLINE_DISPLAY_NAMES.wizz, iata: 'W6', prefixes: ['W6', 'W4', 'W9'] },
   { name: AIRLINE_DISPLAY_NAMES.volotea, iata: 'V7', prefixes: ['V7'] },
   { name: AIRLINE_DISPLAY_NAMES.vueling, iata: 'VY', prefixes: ['VY'] },

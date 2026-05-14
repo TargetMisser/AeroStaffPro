@@ -104,6 +104,18 @@ export function getAirlineColor(name: string): HexColor {
   return '#2563EB';
 }
 
+export function getAirlineDisplayName(value: unknown, fallback = 'Sconosciuta'): string {
+  const key = canonicalAirlineKey(value);
+  if (AIRLINE_DISPLAY_NAMES[key]) return AIRLINE_DISPLAY_NAMES[key];
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const raw = String(value).trim();
+    if (raw) return raw;
+  }
+
+  return fallback;
+}
+
 export const AIRLINE_DISPLAY_NAMES: Record<string, string> = {
   'ryanair': 'Ryanair',
   'easyjet': 'easyJet',
