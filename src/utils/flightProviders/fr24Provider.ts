@@ -1,5 +1,7 @@
 import { buildFr24ScheduleUrl } from '../airportSettings';
 import type { AirportInfo } from '../airportSettings';
+import { getAirlineDisplayName } from '../airlineOps';
+import { getCanonicalFlightNumberIdentity } from '../flightScheduleAdapter';
 import type { FlightScheduleProvider } from './types';
 
 const FR24_API_BASE = 'https://fr24api.flightradar24.com/api/live/flight-positions/full';
@@ -58,8 +60,8 @@ async function fetchPublicFr24Schedule(airportCode: string, signal?: AbortSignal
   }
 
   return {
-    allArrivals: json.result?.response?.airport?.pluginData?.schedule?.arrivals?.data || [],
-    allDepartures: json.result?.response?.airport?.pluginData?.schedule?.departures?.data || [],
+    allArrivals: (json.result?.response?.airport?.pluginData?.schedule?.arrivals?.data || []).map(normalizePublicScheduleItem),
+    allDepartures: (json.result?.response?.airport?.pluginData?.schedule?.departures?.data || []).map(normalizePublicScheduleItem),
   };
 }
 
@@ -109,6 +111,36 @@ function airlineCodeFromFlightNumber(flightNumber: string): string {
   return flightNumber.toUpperCase().match(/^([A-Z0-9]{2,3}?)(?=\d)/)?.[1] ?? '';
 }
 
+function normalizeAirlineLabel(...values: unknown[]): string {
+  const identity = values
+    .filter(value => typeof value === 'string' || typeof value === 'number')
+    .map(value => String(value))
+    .join(' ');
+  return getAirlineDisplayName(identity, 'Sconosciuta');
+}
+
+function normalizePublicScheduleItem(item: any): any {
+  const flight = item?.flight;
+  const airline = flight?.airline;
+  if (!flight || !airline) return item;
+
+  return {
+    ...item,
+    flight: {
+      ...flight,
+      airline: {
+        ...airline,
+        name: normalizeAirlineLabel(
+          airline.name,
+          airline.code?.iata,
+          airline.code?.icao,
+          flight.identification?.number?.default,
+        ),
+      },
+    },
+  };
+}
+
 function officialLiveFlightToScheduleItem(
   item: Record<string, any>,
   direction: Direction,
@@ -143,7 +175,7 @@ function officialLiveFlightToScheduleItem(
         number: { default: flightNumber },
       },
       airline: {
-        name: (item.operating_as ?? item.painted_as ?? airlineCode) || 'Sconosciuta',
+        name: normalizeAirlineLabel(item.operating_as, item.painted_as, airlineCode, flightNumber),
         code: { iata: airlineCode },
       },
       aircraft: {
@@ -201,9 +233,7 @@ async function fetchOfficialFr24LiveSchedule(
 }
 
 function flightNumberKey(item: any): string {
-  return String(item.flight?.identification?.number?.default ?? '')
-    .replace(/[\s\-_]/g, '')
-    .toUpperCase();
+  return getCanonicalFlightNumberIdentity(item.flight?.identification?.number?.default);
 }
 
 function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 'arrival' | 'departure'): any {
@@ -218,6 +248,23 @@ function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 
     ...scheduleItem,
     flight: {
       ...scheduleFlight,
+      airline: {
+        ...(scheduleFlight.airline ?? {}),
+        code: {
+          ...(scheduleFlight.airline?.code ?? {}),
+          ...(liveFlight.airline?.code ?? {}),
+        },
+        name: normalizeAirlineLabel(
+          scheduleFlight.airline?.name,
+          scheduleFlight.airline?.code?.iata,
+          scheduleFlight.airline?.code?.icao,
+          liveFlight.airline?.name,
+          liveFlight.airline?.code?.iata,
+          liveFlight.airline?.code?.icao,
+          scheduleFlight.identification?.number?.default,
+          liveFlight.identification?.number?.default,
+        ),
+      },
       aircraft: {
         ...(scheduleFlight.aircraft ?? {}),
         ...(liveFlight.aircraft ?? {}),

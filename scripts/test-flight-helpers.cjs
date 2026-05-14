@@ -558,6 +558,76 @@ async function runProviderLayerTests() {
   const timeoutStatus = timeoutPayload.diagnostics.find(item => item.provider === 'staffMonitor');
   assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
 
+  const fr24Module = loadTsModule('src/utils/flightProviders/fr24Provider.ts', {
+    '../airportSettings': {
+      buildFr24ScheduleUrl: airportCode => `https://fr24-public.test/${airportCode}`,
+    },
+    __globals: {
+      fetch: async url => {
+        const value = String(url);
+        if (value.includes('flight-positions')) {
+          const isDeparture = decodeURIComponent(value).includes('outbound:PSA');
+          return {
+            ok: true,
+            text: async () => JSON.stringify({
+              data: isDeparture
+                ? [{
+                    flight: 'U24924',
+                    timestamp: '2026-05-14T13:15:00Z',
+                    dest_iata: 'ORY',
+                    operating_as: 'easyJet',
+                    reg: 'OE-TEST',
+                  }]
+                : [],
+            }),
+          };
+        }
+
+        return {
+          ok: true,
+          text: async () => JSON.stringify({
+            result: {
+              response: {
+                airport: {
+                  pluginData: {
+                    schedule: {
+                      departures: {
+                        data: [{
+                          flight: {
+                            identification: { number: { default: 'EC4924' } },
+                            airline: { name: 'Compagnia EC', code: { iata: 'EC', icao: 'EJU' } },
+                            airport: { destination: { code: { iata: 'ORY' }, name: 'Paris Orly' } },
+                            time: { scheduled: { departure: easyJetVariantDepartureTs }, estimated: {}, real: {} },
+                            status: { text: 'Scheduled', generic: { status: { color: 'gray' } } },
+                          },
+                        }],
+                      },
+                      arrivals: { data: [] },
+                    },
+                  },
+                },
+              },
+            },
+          }),
+        };
+      },
+    },
+  });
+  const fr24MergedEasyJetVariants = await fr24Module.fr24ApiProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    fr24ApiKey: 'fr24-key',
+    now,
+  });
+  assert(
+    fr24MergedEasyJetVariants.allDepartures.length === 1,
+    'FR24 provider should merge public EC easyJet schedule rows with U2 live API rows',
+  );
+  assert(
+    fr24MergedEasyJetVariants.allDepartures[0].flight.airline.name === 'easyJet',
+    'FR24 merged easyJet variants should keep a canonical easyJet airline label',
+  );
+
   const aeroStorage = new Map();
   const aeroCalls = [];
   const aeroDataBoxModule = loadTsModule('src/utils/flightProviders/aeroDataBoxProvider.ts', {

@@ -178,14 +178,14 @@ const FLIGHT_NUMBER_PREFIX_ALIASES: Record<string, string> = {
   EZY: 'U2',
 };
 
-function canonicalizeFlightNumberIdentity(value: unknown): string {
+export function getCanonicalFlightNumberIdentity(value: unknown): string {
   const normalized = normalizeFlightIdentityPart(value);
   const match = normalized.match(/^([A-Z0-9]{2,3}?)(\d+)$/);
   if (!match) return normalized;
 
   const [, prefix, digits] = match;
   const canonicalPrefix = FLIGHT_NUMBER_PREFIX_ALIASES[prefix] ?? prefix;
-  return `${canonicalPrefix}${digits}`;
+  return `${canonicalPrefix}${digits.replace(/^0+(?=\d)/, '')}`;
 }
 
 type AirportIdentityConfidence = 'code' | 'name' | 'unknown';
@@ -260,7 +260,7 @@ function getFlightRemoteAirportIdentity(item: any, direction: FlightDirection): 
 function getFlightMergeIdentity(item: any, direction: FlightDirection): FlightMergeIdentity {
   const remoteAirport = getFlightRemoteAirportIdentity(item, direction);
   return {
-    flightNumber: canonicalizeFlightNumberIdentity(getFlightNumber(item)),
+    flightNumber: getCanonicalFlightNumberIdentity(getFlightNumber(item)),
     remoteAirport: remoteAirport.key || 'AIRPORT_UNKNOWN',
     remoteAirportConfidence: remoteAirport.confidence,
     serviceDate: getFlightServiceDateKey(item, direction) || 'DATE_UNKNOWN',
