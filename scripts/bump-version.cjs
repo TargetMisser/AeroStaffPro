@@ -28,6 +28,15 @@ function assert(condition, message) {
   }
 }
 
+function updateReadmeStableVersion(nextVersion) {
+  const readmePath = 'README.md';
+  const readme = read(readmePath);
+  const stableVersionPattern = /Latest stable release:\s+\*\*v\d+\.\d+\.\d+\*\*/;
+  assert(stableVersionPattern.test(readme), 'README.md is missing the Latest stable release marker');
+  const nextReadme = readme.replace(stableVersionPattern, `Latest stable release: **v${nextVersion}**`);
+  write(readmePath, nextReadme);
+}
+
 function bumpSemver(version, mode) {
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
   assert(match, `Invalid semver version: ${version}`);
@@ -77,5 +86,7 @@ write(
     .replace(/versionCode\s+\d+/, `versionCode ${nextVersionCode}`)
     .replace(/versionName\s+"[^"]+"/, `versionName "${nextVersion}"`),
 );
+
+updateReadmeStableVersion(nextVersion);
 
 console.log(`Bumped AeroStaff Pro to v${nextVersion} (versionCode ${nextVersionCode}).`);

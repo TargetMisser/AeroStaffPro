@@ -30,7 +30,7 @@ npm run release:verify -- v2.6.63 --install
 npm run release:quick
 ```
 
-By default this bumps the patch version. It requires a clean worktree, runs release checks, runs the full test suite, runs TypeScript, commits the version bump, pushes the branch, triggers the GitHub APK release workflow, waits for it, then verifies the published APK.
+By default this bumps the patch version. It updates the README stable version, requires a clean worktree, runs release checks, runs the full test suite, runs TypeScript, commits the version bump, pushes the branch, triggers the GitHub APK release workflow, waits for it, then verifies the published APK.
 
 Other version bumps:
 

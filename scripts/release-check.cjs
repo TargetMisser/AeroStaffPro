@@ -21,6 +21,7 @@ function assert(condition, message) {
 const packageJson = readJson('package.json');
 const appJson = readJson('app.json');
 const buildGradle = read('android/app/build.gradle');
+const readme = read('README.md');
 const releaseWorkflow = read('.github/workflows/build-release.yml');
 const releaseScript = read('scripts/release-apk.sh');
 
@@ -28,6 +29,7 @@ const packageVersion = packageJson.version;
 const appVersion = appJson.expo?.version;
 const versionNameMatch = buildGradle.match(/versionName\s+"([^"]+)"/);
 const versionCodeMatch = buildGradle.match(/versionCode\s+(\d+)/);
+const readmeStableMatch = readme.match(/Latest stable release:\s+\*\*v(\d+\.\d+\.\d+)\*\*/);
 
 assert(/^\d+\.\d+\.\d+$/.test(packageVersion), `Invalid package.json version: ${packageVersion}`);
 assert(appVersion === packageVersion, `app.json version (${appVersion}) must match package.json (${packageVersion})`);
@@ -35,6 +37,8 @@ assert(versionNameMatch, 'android/app/build.gradle is missing versionName');
 assert(versionNameMatch[1] === packageVersion, `Android versionName (${versionNameMatch[1]}) must match package.json (${packageVersion})`);
 assert(versionCodeMatch, 'android/app/build.gradle is missing versionCode');
 assert(Number(versionCodeMatch[1]) > 0, 'Android versionCode must be a positive integer');
+assert(readmeStableMatch, 'README.md is missing Latest stable release');
+assert(readmeStableMatch[1] === packageVersion, `README latest stable release (${readmeStableMatch[1]}) must match package.json (${packageVersion})`);
 
 assert(releaseWorkflow.includes('Validate APK release metadata'), 'release workflow must validate APK metadata');
 assert(releaseWorkflow.includes('Create GitHub Release'), 'release workflow must create a GitHub Release');

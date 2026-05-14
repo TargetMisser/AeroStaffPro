@@ -31,6 +31,7 @@ function runHelp(scriptName) {
 const packageJson = readJson('package.json');
 const scripts = packageJson.scripts || {};
 const releaseQuickSource = fs.readFileSync(path.join(root, 'scripts', 'release-quick.cjs'), 'utf8');
+const bumpVersionSource = fs.readFileSync(path.join(root, 'scripts', 'bump-version.cjs'), 'utf8');
 
 assert(scripts['dev:doctor'] === 'node scripts/dev-doctor.cjs', 'package.json should expose dev:doctor');
 assert(scripts['release:verify'] === 'node scripts/release-verify.cjs', 'package.json should expose release:verify');
@@ -45,5 +46,11 @@ runHelp('release-verify.cjs');
 runHelp('release-quick.cjs');
 
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
+assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
+assert(bumpVersionSource.includes('README.md'), 'version:bump should update README stable version');
+assert(
+  bumpVersionSource.includes('Latest stable release'),
+  'version:bump should know the README stable-version marker',
+);
 
 console.log('Release tooling test passed.');
