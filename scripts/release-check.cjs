@@ -43,6 +43,8 @@ assert(readmeStableMatch[1] === packageVersion, `README latest stable release ($
 assert(releaseWorkflow.includes('Validate APK release metadata'), 'release workflow must validate APK metadata');
 assert(releaseWorkflow.includes('Create GitHub Release'), 'release workflow must create a GitHub Release');
 assert(releaseWorkflow.includes('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24'), 'release workflow must keep Node action compatibility guard');
+assert(releaseWorkflow.includes('git rev-parse HEAD'), 'release workflow must record the checked out source commit');
+assert(releaseWorkflow.includes('target_commitish'), 'release workflow must publish releases against the built commit');
 assert(releaseScript.includes('npm run release:check'), 'scripts/release-apk.sh must run release checks first');
 assert(releaseScript.includes('npm run test:smoke'), 'scripts/release-apk.sh must run smoke checks before Gradle');
 assert(releaseScript.includes('./gradlew clean assembleRelease'), 'scripts/release-apk.sh must build the release APK');
