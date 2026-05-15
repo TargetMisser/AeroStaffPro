@@ -50,15 +50,12 @@ Options:
 `);
 }
 
-function commandName(name) {
-  return process.platform === 'win32' ? `${name}.cmd` : name;
-}
-
 function run(command, args = [], options = {}) {
+  const needsShell = process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
   const result = spawnSync(command, args, {
     encoding: 'utf8',
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
-    shell: false,
+    shell: needsShell,
     ...options,
   });
   if (result.error) throw result.error;
@@ -134,7 +131,7 @@ async function ensureDevice({ avd, noStart }) {
 
 function installRelease(tag) {
   console.log(`Installing GitHub release ${tag}`);
-  run(commandName('npm'), ['run', 'release:verify', '--', tag, '--install']);
+  run(process.execPath, [path.join('scripts', 'release-verify.cjs'), tag, '--install']);
 }
 
 function installApk(apkPath) {
