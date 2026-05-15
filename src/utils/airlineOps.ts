@@ -7,6 +7,12 @@ export type AirlineOps = {
   gateClose: number;
 };
 
+export type DepartureGateWindow = {
+  openTs: number;
+  closeTs: number;
+  source: 'default' | 'inbound';
+};
+
 export const DEFAULT_OPS: AirlineOps = { checkInOpen: 120, checkInClose: 40, gateOpen: 30, gateClose: 20 };
 
 export const AIRLINE_OPS: Array<{ key: string; ops: AirlineOps }> = [
@@ -84,6 +90,25 @@ export function getAirlineOps(name: string): AirlineOps {
   return AIRLINE_OPS.find(item => item.key === key)?.ops
     ?? AIRLINE_OPS.find(item => key.includes(item.key))?.ops
     ?? DEFAULT_OPS;
+}
+
+export function getDepartureGateWindow(
+  departureTs: number,
+  ops: AirlineOps,
+  inboundArrivalTs?: number,
+): DepartureGateWindow {
+  const defaultOpenTs = departureTs - ops.gateOpen * 60;
+  const closeTs = departureTs - ops.gateClose * 60;
+  const inboundCanOpenGate = typeof inboundArrivalTs === 'number'
+    && Number.isFinite(inboundArrivalTs)
+    && inboundArrivalTs > defaultOpenTs
+    && inboundArrivalTs < closeTs;
+
+  return {
+    openTs: inboundCanOpenGate ? inboundArrivalTs : defaultOpenTs,
+    closeTs,
+    source: inboundCanOpenGate ? 'inbound' : 'default',
+  };
 }
 
 export const AIRLINE_COLORS: Record<string, HexColor> = {

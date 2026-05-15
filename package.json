@@ -20,6 +20,7 @@
     "release:apk": "bash ./scripts/release-apk.sh",
     "version:bump": "node scripts/bump-version.cjs",
     "dev:doctor": "node scripts/dev-doctor.cjs",
+    "qa:emulator": "node scripts/emulator-qa.cjs",
     "github:branches:audit": "node scripts/github-branch-audit.cjs"
   },
   "dependencies": {

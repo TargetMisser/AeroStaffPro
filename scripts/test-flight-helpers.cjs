@@ -121,6 +121,35 @@ assert(airlineOps.getAirlineColor('EZY') === '#FF6600', 'easyJet ICAO code shoul
 assert(airlineOps.getAirlineColor('EC') === '#FF6600', 'easyJet Europe EC code should use easyJet brand orange');
 assert(airlineOps.getAirlineDisplayName('Compagnia EC') === 'easyJet', 'generic EC airline labels should display as easyJet');
 assert(airlineOps.getAirlineColor('WMT') === '#C6006E', 'Wizz Air Malta ICAO code should use Wizz brand color');
+assert(typeof airlineOps.getDepartureGateWindow === 'function', 'airline ops should expose a gate window helper');
+const gateWindowDepartureTs = Math.floor(new Date(2026, 4, 15, 21, 30, 0).getTime() / 1000);
+const defaultGateWindow = airlineOps.getDepartureGateWindow(gateWindowDepartureTs, airlineOps.getAirlineOps('Ryanair'));
+assert(
+  defaultGateWindow.openTs === gateWindowDepartureTs - 30 * 60 && defaultGateWindow.closeTs === gateWindowDepartureTs - 20 * 60,
+  'gate window should use airline defaults without inbound data',
+);
+const inboundInsideGateWindow = airlineOps.getDepartureGateWindow(
+  gateWindowDepartureTs,
+  airlineOps.getAirlineOps('Ryanair'),
+  gateWindowDepartureTs - 25 * 60,
+);
+assert(
+  inboundInsideGateWindow.openTs === gateWindowDepartureTs - 25 * 60,
+  'gate window should use inbound arrival when it falls before gate close',
+);
+const inboundAfterGateCloseWindow = airlineOps.getDepartureGateWindow(
+  gateWindowDepartureTs,
+  airlineOps.getAirlineOps('Ryanair'),
+  gateWindowDepartureTs + 78 * 60,
+);
+assert(
+  inboundAfterGateCloseWindow.openTs < inboundAfterGateCloseWindow.closeTs,
+  'gate window should never display an inverted interval when inbound data is after gate close',
+);
+assert(
+  inboundAfterGateCloseWindow.openTs === defaultGateWindow.openTs,
+  'gate window should ignore impossible inbound arrivals after gate close',
+);
 
 assert(typeof adapter.isFlightAirlineMatch === 'function', 'flight adapter should expose airline matching helper');
 const easyJetEuropeCodeOnly = {

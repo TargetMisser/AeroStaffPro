@@ -65,6 +65,31 @@ npm run release:verify -- vX.Y.Z --install
 
 Full release docs: `docs/release-automation.md`.
 
+## Emulator QA Flow
+
+Use this when the user asks to debug with the emulator, inspect UI regressions, or verify an APK in a realistic Android runtime:
+
+```bash
+npm run qa:emulator
+```
+
+Useful variants:
+
+```bash
+npm run qa:emulator -- --install-release v2.6.66
+npm run qa:emulator -- --install-apk C:\path\to\AeroStaffPro.apk
+```
+
+What the script does:
+
+1. Starts `Medium_Phone_API_36.1` headlessly when no ADB device is connected.
+2. Optionally installs a GitHub release or local APK.
+3. Launches `com.aerostaffpro.app`, accepts the calendar permission prompt if shown, opens Home and Voli.
+4. Saves screenshots, UI dumps, and filtered logcat under `tmp/emulator-qa`.
+5. Fails with exit code `2` when it detects inverted visible time ranges such as `22:48 – 21:10`.
+
+When fixing emulator-discovered UI issues, capture the failing evidence first, add a focused regression test where possible, then rerun the relevant checks before committing.
+
 ## APK Signing And Install Failures
 
 - Release APKs must come from GitHub Actions because the valid release signing key is stored in GitHub secrets.
@@ -90,6 +115,7 @@ npm test
 npm run typecheck
 npm run release:check
 npm run release:verify -- vX.Y.Z --no-copy
+npm run qa:emulator
 npm run github:branches:audit
 ```
 

@@ -16,7 +16,7 @@ import TactilePressable from '../components/motion/TactilePressable';
 import ValueChangeFlash from '../components/motion/ValueChangeFlash';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
-import { getAirlineOps, getAirlineColor, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
+import { getAirlineOps, getAirlineColor, getDepartureGateWindow, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
@@ -598,7 +598,9 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
 
   const reg = item.flight?.aircraft?.registration;
   const inboundTs = reg ? inboundArrivals[reg] : undefined;
-  const gateOpenFromInbound = activeTab === 'departures' && ts && inboundTs ? inboundTs : undefined;
+  const gateWindow = activeTab === 'departures' && ts && ops
+    ? getDepartureGateWindow(ts, ops, inboundTs)
+    : null;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [nowTs, setNowTs] = useState(() => Date.now() / 1000);
 
@@ -654,8 +656,8 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
       || (nowTs >= ciCloseTs - 10 * 60 && nowTs < ciCloseTs);
   })() : false;
   const gateShouldPulse = activeTab === 'departures' && ts && ops ? (() => {
-    const gateOpenTs = gateOpenFromInbound ?? (ts - ops.gateOpen * 60);
-    const gateCloseTs = ts - ops.gateClose * 60;
+    const gateOpenTs = gateWindow?.openTs ?? (ts - ops.gateOpen * 60);
+    const gateCloseTs = gateWindow?.closeTs ?? (ts - ops.gateClose * 60);
     return (nowTs >= gateOpenTs - 5 * 60 && nowTs < gateOpenTs)
       || (nowTs >= gateCloseTs - 5 * 60 && nowTs < gateCloseTs);
   })() : false;
@@ -773,7 +775,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
                 </View>
               </ValueChangeFlash>
               <ValueChangeFlash
-                valueKey={`${gateOpenFromInbound ? fmtTs(gateOpenFromInbound) : fmt(ops.gateOpen)}|${fmt(ops.gateClose)}`}
+                valueKey={`${gateWindow ? fmtTs(gateWindow.openTs) : fmt(ops.gateOpen)}|${gateWindow ? fmtTs(gateWindow.closeTs) : fmt(ops.gateClose)}`}
                 enabled={isOperations}
                 style={[s.opsBadge, gatePulseStyle]}
               >
@@ -781,7 +783,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
                 <View>
                   <Text style={s.opsLabel}>{t('flightGate')}</Text>
                   <Text style={s.opsTime}>
-                    {gateOpenFromInbound ? fmtTs(gateOpenFromInbound) : fmt(ops.gateOpen)} – {fmt(ops.gateClose)}
+                    {gateWindow ? fmtTs(gateWindow.openTs) : fmt(ops.gateOpen)} – {gateWindow ? fmtTs(gateWindow.closeTs) : fmt(ops.gateClose)}
                   </Text>
                 </View>
               </ValueChangeFlash>
