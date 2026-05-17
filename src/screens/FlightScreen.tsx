@@ -41,6 +41,10 @@ import {
   loadFlightScreenCache,
   saveFlightScreenCache,
 } from '../utils/flightScreenCache';
+import {
+  shouldShowBlockingFlightLoader,
+  shouldShowFlightRefreshIndicator,
+} from '../utils/flightLoadingState';
 import { triggerMotionHaptic } from '../utils/motion';
 import {
   appendNotificationDebugEvent,
@@ -1826,6 +1830,16 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     return filterFlightsByAirlines(currentDayRawData, selectedAirlines)
       .sort(compareFlightsChronologically(timeField));
   })();
+  const hasFlightSnapshot = allArrivalsFull.length > 0 || allDeparturesFull.length > 0;
+  const showBlockingLoader = shouldShowBlockingFlightLoader({
+    isLoading: loading,
+    hasVisibleFlights: hasFlightSnapshot,
+  });
+  const showRefreshIndicator = shouldShowFlightRefreshIndicator({
+    isLoading: loading,
+    isRefreshing: refreshing,
+    hasVisibleFlights: hasFlightSnapshot,
+  });
 
   const renderFlight = useCallback(({ item, index }: { item: any; index: number }) => (
     <FlightRow
@@ -1907,18 +1921,26 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         </View>
       </View>
 
-      {flightDataSource && (
-        <View
-          style={s.sourceBadge}
-        >
-          <MaterialIcons name="hub" size={14} color={colors.primary} />
-          <Text style={s.sourceBadgeText}>
-            {t('flightDataSource')}: {flightDataSource.sourceLabel}
-          </Text>
+      {(flightDataSource || showRefreshIndicator) && (
+        <View style={s.sourceRow}>
+          {flightDataSource && (
+            <View style={s.sourceBadge}>
+              <MaterialIcons name="hub" size={14} color={colors.primary} />
+              <Text style={s.sourceBadgeText}>
+                {t('flightDataSource')}: {flightDataSource.sourceLabel}
+              </Text>
+            </View>
+          )}
+          {showRefreshIndicator && (
+            <View style={s.refreshBadge}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={s.refreshBadgeText}>{t('flightRefreshing')}</Text>
+            </View>
+          )}
         </View>
       )}
 
-      {loading ? (
+      {showBlockingLoader ? (
         <FlightLoadingState colors={colors} t={t} />
       ) : (
         <FlatList
@@ -2234,8 +2256,11 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
     controlsRow: { flexDirection: 'row', gap: 8, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
-    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: 16, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
+    sourceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: 16 },
+    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
     sourceBadgeText: { fontSize: 11, fontWeight: '800', color: c.primaryDark },
+    refreshBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(15,23,42,0.82)' : c.cardSecondary, borderWidth: 1, borderColor: operationBorderSoft },
+    refreshBadgeText: { fontSize: 11, fontWeight: '800', color: c.textSub },
     segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     segBtn: { flex: 1, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', borderRadius: isOperations ? 11 : 6 },
     segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },

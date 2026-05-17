@@ -319,6 +319,28 @@ assert(cache && cache.arrivals.length === 1 && cache.departures.length === 1, 'f
 assert(cache.providerDiagnostics?.[0]?.tomorrowDepartures === 1, 'flight screen cache should preserve provider diagnostics');
 assert(flightCache.sanitizeFlightScreenCache({ airportCode: 'FCO', savedAt: 10_000 }, 'PSA', 20_000) === null, 'flight screen cache should reject another airport');
 
+const flightLoadingState = loadTsModule('src/utils/flightLoadingState.ts');
+assert(
+  flightLoadingState.shouldShowBlockingFlightLoader({ isLoading: true, hasVisibleFlights: false }),
+  'flight screen should show the full loader during initial load with no visible flights',
+);
+assert(
+  !flightLoadingState.shouldShowBlockingFlightLoader({ isLoading: true, hasVisibleFlights: true }),
+  'flight screen should keep cached flights visible while a refresh is in progress',
+);
+assert(
+  flightLoadingState.shouldShowFlightRefreshIndicator({ isLoading: true, isRefreshing: false, hasVisibleFlights: true }),
+  'flight screen should show a compact refresh indicator during automatic background loading',
+);
+assert(
+  flightLoadingState.shouldShowFlightRefreshIndicator({ isLoading: false, isRefreshing: true, hasVisibleFlights: true }),
+  'flight screen should show a compact refresh indicator during manual refresh with visible flights',
+);
+assert(
+  !flightLoadingState.shouldShowFlightRefreshIndicator({ isLoading: true, isRefreshing: true, hasVisibleFlights: false }),
+  'flight screen should not show the compact refresh indicator when the blocking loader is needed',
+);
+
 function makeProvider(id, label, result, calls, contexts) {
   return {
     id,
