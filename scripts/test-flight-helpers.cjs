@@ -341,6 +341,16 @@ assert(
   'flight screen should not show the compact refresh indicator when the blocking loader is needed',
 );
 
+const flightSourceLabel = loadTsModule('src/utils/flightSourceLabel.ts');
+assert(
+  flightSourceLabel.formatFlightSourceLabel('FlightRadar24 API + StaffMonitor PSA + AeroDataBox + Cache giornaliera') === 'FR24 API + StaffMonitor + AeroDataBox + Cache',
+  'flight source label should be compact enough for the flights header badge',
+);
+assert(
+  flightSourceLabel.formatFlightSourceLabel('FlightRadar24 API + FlightRadar24 API + Cache giornaliera') === 'FR24 API + Cache',
+  'flight source label should dedupe repeated compact providers',
+);
+
 function makeProvider(id, label, result, calls, contexts) {
   return {
     id,

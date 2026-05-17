@@ -45,6 +45,7 @@ import {
   shouldShowBlockingFlightLoader,
   shouldShowFlightRefreshIndicator,
 } from '../utils/flightLoadingState';
+import { formatFlightSourceLabel } from '../utils/flightSourceLabel';
 import { triggerMotionHaptic } from '../utils/motion';
 import {
   appendNotificationDebugEvent,
@@ -1927,7 +1928,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             <View style={s.sourceBadge}>
               <MaterialIcons name="hub" size={14} color={colors.primary} />
               <Text style={s.sourceBadgeText}>
-                {t('flightDataSource')}: {flightDataSource.sourceLabel}
+                {t('flightDataSource')}: {formatFlightSourceLabel(flightDataSource.sourceLabel)}
               </Text>
             </View>
           )}
@@ -2256,9 +2257,9 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
     controlsRow: { flexDirection: 'row', gap: 8, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
-    sourceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: 16 },
-    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
-    sourceBadgeText: { fontSize: 11, fontWeight: '800', color: c.primaryDark },
+    sourceRow: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: 16 },
+    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%', flexShrink: 1, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
+    sourceBadgeText: { flexShrink: 1, flexWrap: 'wrap', fontSize: 11, lineHeight: 15, fontWeight: '800', color: c.primaryDark },
     refreshBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(15,23,42,0.82)' : c.cardSecondary, borderWidth: 1, borderColor: operationBorderSoft },
     refreshBadgeText: { fontSize: 11, fontWeight: '800', color: c.textSub },
     segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
