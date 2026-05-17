@@ -26,6 +26,18 @@ assert(scripts['github:branches:audit'], 'package.json should expose github:bran
 const flightScreen = read('src/screens/FlightScreen.tsx');
 assert(flightScreen.includes("from '../utils/flightScheduleAdapter'"), 'FlightScreen should use the shared flight adapter');
 assert(flightScreen.includes("from '../utils/flightScreenCache'"), 'FlightScreen should use the shared flight screen cache');
+assert(flightScreen.includes("from '../utils/flightNotificationScheduler'"), 'FlightScreen should use the shared flight notification scheduler');
+
+const flightNotificationScheduler = read('src/utils/flightNotificationScheduler.ts');
+for (const symbol of [
+  'runNotificationScheduleExclusive',
+  'scheduleShiftNotifications',
+  'schedulePinnedNotifications',
+  'cancelPreviousNotifications',
+  'cancelPinnedNotifications',
+]) {
+  assert(flightNotificationScheduler.includes(symbol), `flight notification scheduler should expose ${symbol}`);
+}
 
 const notifications = read('src/utils/notificationDiagnostics.ts');
 assert(notifications.includes('runNotificationScheduleExclusive'), 'notification scheduling should expose a serialization helper');
