@@ -396,6 +396,27 @@ function makeProviderArrival(flightNumber, arrivalTs, origin = 'LGW') {
   };
 }
 
+const calendarFlightStats = loadTsModule('src/utils/calendarFlightStats.ts');
+const calendarShiftStart = Math.floor(new Date(2026, 4, 12, 14, 0, 0).getTime() / 1000);
+const calendarShiftEnd = Math.floor(new Date(2026, 4, 12, 18, 0, 0).getTime() / 1000);
+const calendarCounts = calendarFlightStats.buildCalendarFlightCountsFromCache(
+  {
+    '2026-05-12': [{
+      title: 'Lavoro',
+      startDate: new Date(calendarShiftStart * 1000).toISOString(),
+      endDate: new Date(calendarShiftEnd * 1000).toISOString(),
+    }],
+    '2026-05-13': [{ title: 'Riposo', startDate: '2026-05-13T00:00:00.000Z', endDate: '2026-05-13T23:59:59.000Z' }],
+  },
+  [
+    makeProviderFlight('HV1001', calendarShiftStart + 900),
+    makeProviderFlight('HV1002', calendarShiftEnd + 3600),
+  ],
+  [makeProviderArrival('U21001', calendarShiftStart + 1800)],
+);
+assert(calendarCounts['2026-05-12'] === 2, 'calendar flight stats should count cached arrivals and departures inside the work shift');
+assert(!Object.prototype.hasOwnProperty.call(calendarCounts, '2026-05-13'), 'calendar flight stats should ignore rest days without work shifts');
+
 function makeFr24LiveProviderFlight(flightNumber, departureTs, destination = 'AMS') {
   const item = makeProviderFlight(flightNumber, departureTs, destination);
   item.flight._source = 'fr24_api';

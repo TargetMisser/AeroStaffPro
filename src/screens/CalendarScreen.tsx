@@ -15,7 +15,6 @@ import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import TimeCarouselPicker from '../components/TimeCarouselPicker';
 import { useAirport } from '../context/AirportContext';
 import { getAirportInfo } from '../utils/airportSettings';
-import { fetchAirportScheduleRaw } from '../utils/fr24api';
 import {
   getWritableCalendarId,
   replaceShiftForDate,
@@ -24,7 +23,9 @@ import {
 import { WIDGET_SHIFT_KEY, WIDGET_CACHE_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
+import { buildCalendarFlightCountsFromCache } from '../utils/calendarFlightStats';
 import { getCalendarStatsRange } from '../utils/calendarStatsRange';
+import { loadFlightScreenCache } from '../utils/flightScreenCache';
 import {
   getPdfExtractorHtml, parseShiftCells,
   parseShiftCellFiles,
@@ -380,27 +381,13 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       }
     } catch (e) { if (__DEV__) console.log('[calWeather]', e); }
     try {
-      const { arrivals, departures } = await fetchAirportScheduleRaw(airportCode);
-      const allF = [...arrivals, ...departures];
-      Object.keys(localData).forEach(iso => {
-        const sh = localData[iso].find(e => e.title.includes('Lavoro'));
-        if (sh) {
-          const sTS = new Date(sh.startDate).getTime() / 1000;
-          const eTS = new Date(sh.endDate).getTime() / 1000;
-          const cnt = allF.filter(f => {
-            const ts = f.flight?.time?.scheduled?.arrival || f.flight?.time?.scheduled?.departure;
-            return ts && ts >= sTS && ts <= eTS;
-          }).length;
-          if (dict[iso]) dict[iso].flightCount = cnt; else dict[iso] = { weatherText: 'N/A', weatherIconName: 'cloud-question', flightCount: cnt };
-        }
+      const cache = await loadFlightScreenCache(airportCode);
+      const counts = buildCalendarFlightCountsFromCache(localData, cache?.departures ?? [], cache?.arrivals ?? []);
+      Object.entries(counts).forEach(([iso, cnt]) => {
+        if (dict[iso]) dict[iso].flightCount = cnt;
+        else dict[iso] = { weatherText: 'N/A', weatherIconName: 'cloud-question', flightCount: cnt };
       });
-    } catch (e) {
-      if (__DEV__) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (message.startsWith('NO_FLIGHT_PROVIDER_AVAILABLE')) console.log('[calFlights]', message);
-        else console.warn('[calFlights]', e);
-      }
-    }
+    } catch (e) { if (__DEV__) console.log('[calFlightsCache]', e); }
     setDailyStats(dict);
   };
 
