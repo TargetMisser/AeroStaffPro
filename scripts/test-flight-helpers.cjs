@@ -172,6 +172,56 @@ assert(
   'airline filter should keep easyJet variants identified by code or flight number',
 );
 
+const flightExternalLinks = loadTsModule('src/utils/flightExternalLinks.ts');
+assert(
+  flightExternalLinks.buildFlightradar24FlightUrl('U20345') === 'https://www.flightradar24.com/data/flights/u20345',
+  'FR24 link builder should preserve leading zeros in published flight numbers',
+);
+assert(
+  flightExternalLinks.buildFlightradar24FlightUrl(' FR-0123 ') === 'https://www.flightradar24.com/data/flights/fr0123',
+  'FR24 link builder should normalize separators without stripping digits',
+);
+assert(flightExternalLinks.buildFlightradar24FlightUrl('N/A') === null, 'FR24 link builder should reject placeholder flight numbers');
+
+const airlineBranding = loadTsModule('src/utils/airlineBranding.ts', {
+  './airlineOps': airlineOps,
+});
+assert(airlineBranding.getAirlineBrandColor('easyjet', 'easyJet') === '#FF6600', 'airline branding should reuse known airline colors');
+assert(airlineBranding.getAirlineIataCode('transavia', 'Transavia France') === 'TO', 'airline branding should expose known IATA codes');
+assert(airlineBranding.getAirlineMonogram('Smart Aviation') === 'SA', 'airline branding should build readable fallback monograms');
+assert(airlineBranding.prettifyAirlineLabel('air dolomiti') === 'Air Dolomiti', 'airline branding should prettify stored keys');
+assert(airlineBranding.hexToRgba('#0f0', 0.5) === 'rgba(0,255,0,0.5)', 'airline branding should support short hex rgba conversion');
+assert(airlineBranding.mixHexColor('#000000', '#ffffff', 0.5) === '#808080', 'airline branding should mix hex colors deterministically');
+
+const flightNotificationSettings = loadTsModule('src/utils/flightNotificationSettings.ts', {
+  './flightScheduleAdapter': adapter,
+});
+const sanitizedNotifSettings = flightNotificationSettings.sanitizeNotificationSettings({
+  onlyTrackedAirlines: true,
+  includeArrivals: false,
+  includeDepartures: false,
+  includeShiftEnd: false,
+  sticky: true,
+  arrivalLeadMinutes: -10,
+  departureLeadMinutes: 999,
+});
+assert(
+  flightNotificationSettings.sanitizeNotificationSettings({}).includeDepartures === false,
+  'notification settings should keep the existing default of departure alerts disabled',
+);
+assert(sanitizedNotifSettings.arrivalLeadMinutes === 1, 'notification settings should clamp low lead minutes');
+assert(sanitizedNotifSettings.departureLeadMinutes === 90, 'notification settings should clamp high lead minutes');
+assert(
+  flightNotificationSettings.shouldNotifyAirline(easyJetFlightNumberOnly, sanitizedNotifSettings, ['easyjet']),
+  'notification settings should keep tracked airline matches',
+);
+assert(
+  !flightNotificationSettings.shouldNotifyAirline(easyJetFlightNumberOnly, sanitizedNotifSettings, ['wizz']),
+  'notification settings should reject non-matching tracked airlines',
+);
+assert(flightNotificationSettings.sameAirlineKeys(['easyjet', 'wizz'], ['easyjet', 'wizz']), 'airline key comparison should accept identical order');
+assert(!flightNotificationSettings.sameAirlineKeys(['wizz', 'easyjet'], ['easyjet', 'wizz']), 'airline key comparison should remain order-sensitive');
+
 const airportSettings = loadTsModule('src/utils/airportSettings.ts', {
   '@react-native-async-storage/async-storage': {
     getItem: async () => null,

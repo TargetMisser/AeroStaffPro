@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, Modal, ScrollView,
-  FlatList, TouchableOpacity, RefreshControl, Image,
+  FlatList, TouchableOpacity, RefreshControl,
   Animated, PanResponder, NativeModules, Platform, Switch, Linking,
 } from 'react-native';
 import { Easing } from 'react-native';
@@ -14,9 +14,11 @@ import BoardReveal from '../components/motion/BoardReveal';
 import CockpitFlightProgress from '../components/motion/CockpitFlightProgress';
 import TactilePressable from '../components/motion/TactilePressable';
 import ValueChangeFlash from '../components/motion/ValueChangeFlash';
+import { AirlineFilterLogo, LogoPill } from '../components/flights/AirlineLogo';
+import { EmptyFlightState, FlightLoadingState } from '../components/flights/FlightStates';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
-import { getAirlineOps, getAirlineColor, getDepartureGateWindow, AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
+import { getAirlineOps, getAirlineColor, getDepartureGateWindow, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
@@ -46,6 +48,24 @@ import {
   shouldShowFlightRefreshIndicator,
 } from '../utils/flightLoadingState';
 import { formatFlightSourceLabel } from '../utils/flightSourceLabel';
+import { buildFlightradar24FlightUrl } from '../utils/flightExternalLinks';
+import {
+  getAirlineBrandColor,
+  getAirlineIataCode,
+  hexToRgba,
+  mixHexColor,
+  prettifyAirlineLabel,
+} from '../utils/airlineBranding';
+import {
+  clamp,
+  DEFAULT_NOTIFICATION_SETTINGS,
+  MAX_NOTIF_MINUTES,
+  MIN_NOTIF_MINUTES,
+  sameAirlineKeys,
+  sanitizeNotificationSettings,
+  shouldNotifyAirline,
+  type FlightNotificationSettings,
+} from '../utils/flightNotificationSettings';
 import { triggerMotionHaptic } from '../utils/motion';
 import {
   appendNotificationDebugEvent,
@@ -63,8 +83,6 @@ const WearDataSender = Platform.OS === 'android' ? NativeModules.WearDataSender 
 
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const FLIGHT_FILTER_KEY = 'aerostaff_flight_filter_v1';
-const MIN_NOTIF_MINUTES = 1;
-const MAX_NOTIF_MINUTES = 90;
 type FlightAlertTone = 'success' | 'warning' | 'info';
 type FlightDataSourceState = {
   sourceLabel: string;
@@ -72,347 +90,10 @@ type FlightDataSourceState = {
   providerDiagnostics?: FlightScheduleProviderStatus[];
 };
 
-type FlightNotificationSettings = {
-  onlyTrackedAirlines: boolean;
-  includeArrivals: boolean;
-  includeDepartures: boolean;
-  includeShiftEnd: boolean;
-  sticky: boolean;
-  arrivalLeadMinutes: number;
-  departureLeadMinutes: number;
-};
-
-const DEFAULT_NOTIFICATION_SETTINGS: FlightNotificationSettings = {
-  onlyTrackedAirlines: true,
-  includeArrivals: true,
-  includeDepartures: false,
-  includeShiftEnd: true,
-  sticky: false,
-  arrivalLeadMinutes: 15,
-  departureLeadMinutes: 10,
-};
-
-function normalizeAirlineKey(value: unknown): string {
-  return typeof value === 'string'
-    ? value.trim().toLowerCase().replace(/\s+/g, ' ')
-    : '';
-}
-
-function buildFlightradar24FlightUrl(flightNumber: string): string | null {
-  // FR24 expects the published flight number. Do not use StaffMonitor's
-  // normalizer here: it intentionally strips leading zeros for table matching.
-  const normalized = flightNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').toLowerCase();
-  if (!normalized || normalized === 'na') return null;
-  return `https://www.flightradar24.com/data/flights/${normalized}`;
-}
-
 async function openFlightradar24Flight(flightNumber: string): Promise<void> {
   const url = buildFlightradar24FlightUrl(flightNumber);
   if (!url) return;
   await Linking.openURL(url);
-}
-
-type FlightListTab = 'arrivals' | 'departures';
-type FlightListDay = 'today' | 'tomorrow';
-
-function formatProviderDiagnostic(item: FlightScheduleProviderStatus): string {
-  if (item.status === 'success') {
-    const hasDayCounts = typeof item.todayArrivals === 'number'
-      || typeof item.todayDepartures === 'number'
-      || typeof item.tomorrowArrivals === 'number'
-      || typeof item.tomorrowDepartures === 'number';
-    if (!hasDayCounts) {
-      return `${item.label}: A ${item.arrivals ?? 0} / P ${item.departures ?? 0}`;
-    }
-    return `${item.label}: oggi A${item.todayArrivals ?? 0}/P${item.todayDepartures ?? 0}, domani A${item.tomorrowArrivals ?? 0}/P${item.tomorrowDepartures ?? 0}`;
-  }
-
-  const status = item.status === 'skipped' ? 'saltato' : 'errore';
-  const message = item.message ? ` - ${item.message.slice(0, 96)}` : '';
-  return `${item.label}: ${status}${message}`;
-}
-
-function EmptyFlightState({
-  activeDay,
-  activeTab,
-  rawDayCount,
-  sourceLabel,
-  diagnostics,
-  colors,
-  t,
-}: {
-  activeDay: FlightListDay;
-  activeTab: FlightListTab;
-  rawDayCount: number;
-  sourceLabel?: string;
-  diagnostics?: FlightScheduleProviderStatus[];
-  colors: ThemeColors;
-  t: (key: TranslationKey) => string;
-}) {
-  const hiddenByFilters = rawDayCount > 0;
-  const title = hiddenByFilters
-    ? t('flightNoFlightsFilteredTitle')
-    : activeDay === 'tomorrow'
-      ? t('flightTomorrowEmptyTitle')
-      : t('flightNoFlights');
-  const body = hiddenByFilters
-    ? t('flightNoFlightsFilteredMsg').replace('{count}', String(rawDayCount))
-    : activeDay === 'tomorrow'
-      ? t('flightTomorrowEmptyMsg')
-      : '';
-  const providerLines = activeDay === 'tomorrow'
-    ? (diagnostics ?? []).slice(0, 5).map(formatProviderDiagnostic)
-    : [];
-  const tabLabel = activeTab === 'arrivals' ? t('flightArrivals') : t('flightDepartures');
-
-  return (
-    <View style={{
-      marginTop: 32,
-      padding: 16,
-      borderRadius: 18,
-      backgroundColor: colors.card,
-      borderWidth: 1,
-      borderColor: colors.border,
-    }}>
-      <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900' }}>{title}</Text>
-      {body ? (
-        <Text style={{ color: colors.textSub, fontSize: 13, lineHeight: 19, marginTop: 8 }}>{body}</Text>
-      ) : null}
-      {activeDay === 'tomorrow' ? (
-        <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 10 }}>
-          {t('flightTomorrowEmptyContext')
-            .replace('{tab}', tabLabel)
-            .replace('{source}', sourceLabel ?? 'n/d')}
-        </Text>
-      ) : null}
-      {providerLines.length > 0 ? (
-        <View style={{ marginTop: 12, gap: 6 }}>
-          <Text style={{ color: colors.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>
-            {t('flightProviderDebugTitle')}
-          </Text>
-          {providerLines.map((line, index) => (
-            <Text key={`${line}_${index}`} style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
-              {line}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-    </View>
-  );
-}
-
-function FlightLoadingState({
-  colors,
-  t,
-}: {
-  colors: ThemeColors;
-  t: (key: TranslationKey) => string;
-}) {
-  return (
-    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 28 }}>
-      <View style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 14,
-        padding: 16,
-        borderRadius: 20,
-        backgroundColor: colors.card,
-        borderWidth: 1,
-        borderColor: colors.border,
-      }}>
-        <View style={{
-          width: 52,
-          height: 52,
-          borderRadius: 18,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors.primaryLight,
-        }}>
-          <ActivityIndicator size="small" color={colors.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900' }}>
-            {t('flightLoadingTitle')}
-          </Text>
-          <Text style={{ color: colors.textSub, fontSize: 13, lineHeight: 19, marginTop: 5 }}>
-            {t('flightLoadingMsg')}
-          </Text>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function sanitizeNotificationSettings(value: unknown): FlightNotificationSettings {
-  const raw = (value && typeof value === 'object') ? (value as Record<string, unknown>) : {};
-  const num = (field: string, fallback: number) => {
-    const v = raw[field];
-    if (typeof v !== 'number' || !Number.isFinite(v)) return fallback;
-    return clamp(Math.round(v), MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES);
-  };
-
-  return {
-    onlyTrackedAirlines: typeof raw.onlyTrackedAirlines === 'boolean'
-      ? raw.onlyTrackedAirlines
-      : DEFAULT_NOTIFICATION_SETTINGS.onlyTrackedAirlines,
-    includeArrivals: typeof raw.includeArrivals === 'boolean'
-      ? raw.includeArrivals
-      : DEFAULT_NOTIFICATION_SETTINGS.includeArrivals,
-    includeDepartures: typeof raw.includeDepartures === 'boolean'
-      ? raw.includeDepartures
-      : DEFAULT_NOTIFICATION_SETTINGS.includeDepartures,
-    includeShiftEnd: typeof raw.includeShiftEnd === 'boolean'
-      ? raw.includeShiftEnd
-      : DEFAULT_NOTIFICATION_SETTINGS.includeShiftEnd,
-    sticky: typeof raw.sticky === 'boolean'
-      ? raw.sticky
-      : DEFAULT_NOTIFICATION_SETTINGS.sticky,
-    arrivalLeadMinutes: num('arrivalLeadMinutes', DEFAULT_NOTIFICATION_SETTINGS.arrivalLeadMinutes),
-    departureLeadMinutes: num('departureLeadMinutes', DEFAULT_NOTIFICATION_SETTINGS.departureLeadMinutes),
-  };
-}
-
-function shouldNotifyAirline(
-  item: any,
-  settings: FlightNotificationSettings,
-  selectedAirlines: string[],
-): boolean {
-  if (!settings.onlyTrackedAirlines || selectedAirlines.length === 0) {
-    return true;
-  }
-  return selectedAirlines.some(key => isFlightAirlineMatch(item, key));
-}
-
-function sameAirlineKeys(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-const AIRLINE_IATA_CODES: Record<string, string> = {
-  'ryanair': 'FR',
-  'easyjet': 'U2',
-  'wizz': 'W6',
-  'volotea': 'V7',
-  'vueling': 'VY',
-  'transavia': 'TO',
-  'aer lingus': 'EI',
-  'british airways': 'BA',
-  'sas': 'SK',
-  'scandinavian': 'SK',
-  'flydubai': 'FZ',
-  'aeroitalia': 'XZ',
-  'air arabia maroc': '3O',
-  'air arabia': 'G9',
-  'air dolomiti': 'EN',
-  'buzz': 'RR',
-  'dhl': 'QY',
-  'eurowings': 'EW',
-  'ita airways': 'AZ',
-  'lufthansa': 'LH',
-};
-
-const FALLBACK_BRAND_COLORS = [
-  '#2563EB',
-  '#0EA5E9',
-  '#06B6D4',
-  '#14B8A6',
-  '#22C55E',
-  '#84CC16',
-  '#F59E0B',
-  '#F97316',
-  '#D946EF',
-  '#8B5CF6',
-] as const;
-
-function stableBrandColor(key: string): string {
-  let hash = 0;
-  for (let i = 0; i < key.length; i += 1) {
-    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
-  }
-  return FALLBACK_BRAND_COLORS[Math.abs(hash) % FALLBACK_BRAND_COLORS.length];
-}
-
-function getAirlineBrandColor(key: string, label: string): string {
-  const normalized = normalizeAirlineKey(`${key} ${label}`);
-  for (const [needle, color] of Object.entries(AIRLINE_COLORS)) {
-    if (normalized.includes(needle)) {
-      return color;
-    }
-  }
-  return stableBrandColor(normalized || key || label);
-}
-
-function getAirlineIataCode(key: string, label: string): string {
-  const normalized = normalizeAirlineKey(`${key} ${label}`);
-  for (const [needle, code] of Object.entries(AIRLINE_IATA_CODES)) {
-    if (normalized.includes(needle)) {
-      return code;
-    }
-  }
-  return '';
-}
-
-function getAirlineMonogram(label: string): string {
-  const words = label
-    .split(/[\s._-]+/)
-    .filter(Boolean);
-  if (words.length === 0) {
-    return '??';
-  }
-  return words
-    .slice(0, 2)
-    .map(part => part[0] ?? '')
-    .join('')
-    .toUpperCase()
-    .padEnd(2, '?')
-    .slice(0, 2);
-}
-
-function prettifyAirlineLabel(key: string): string {
-  return key.replace(/\b\w/g, ch => ch.toUpperCase());
-}
-
-function hexToRgba(hex: string, alpha: number): string {
-  const raw = hex.trim().replace('#', '');
-  const normalized = raw.length === 3
-    ? raw.split('').map(ch => ch + ch).join('')
-    : raw;
-  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) {
-    return `rgba(37,99,235,${alpha})`;
-  }
-  const int = parseInt(normalized, 16);
-  const r = (int >> 16) & 255;
-  const g = (int >> 8) & 255;
-  const b = int & 255;
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-function mixHexColor(hex: string, target: string, amount: number): string {
-  const parse = (value: string) => {
-    const raw = value.trim().replace('#', '');
-    const normalized = raw.length === 3
-      ? raw.split('').map(ch => ch + ch).join('')
-      : raw;
-    if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return null;
-    const int = parseInt(normalized, 16);
-    return {
-      r: (int >> 16) & 255,
-      g: (int >> 8) & 255,
-      b: int & 255,
-    };
-  };
-  const base = parse(hex);
-  const mix = parse(target);
-  if (!base || !mix) return hex;
-  const clampAmount = clamp(amount, 0, 1);
-  const toHex = (value: number) => Math.round(value).toString(16).padStart(2, '0');
-  const r = base.r + (mix.r - base.r) * clampAmount;
-  const g = base.g + (mix.g - base.g) * clampAmount;
-  const b = base.b + (mix.b - base.b) * clampAmount;
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 // Handler: mostra notifiche anche con app aperta (wrapped for Expo Go compat)
@@ -426,51 +107,6 @@ try { Notifications.setNotificationHandler({
   }),
 }); } catch (e) { if (__DEV__) console.warn('[notifHandler]', e); }
 
-
-function LogoPill({ iataCode, airlineName, color }: { iataCode: string; airlineName: string; color: string }) {
-  const [err, setErr] = useState(false);
-  const uri = `https://pics.avs.io/160/60/${(iataCode || '').toUpperCase()}.png`;
-  const initials = airlineName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
-  if (iataCode && !err) {
-    return (
-      <View style={{ width: 52, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-        <Image source={{ uri }} style={{ width: 44, height: 26 }} resizeMode="contain" onError={() => setErr(true)} />
-      </View>
-    );
-  }
-  return (
-    <View style={{ width: 52, height: 32, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.9)', justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ color, fontWeight: '800', fontSize: 11 }}>{initials}</Text>
-    </View>
-  );
-}
-
-function AirlineFilterLogo({
-  iataCode,
-  label,
-  color,
-}: {
-  iataCode: string;
-  label: string;
-  color: string;
-}) {
-  const [err, setErr] = useState(false);
-  const logoUri = iataCode ? `https://pics.avs.io/160/60/${iataCode.toUpperCase()}.png` : '';
-  const monogram = getAirlineMonogram(label);
-  if (iataCode && !err) {
-    return (
-      <View style={{ width: 44, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.94)', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
-        <Image source={{ uri: logoUri }} style={{ width: 38, height: 24 }} resizeMode="contain" onError={() => setErr(true)} />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ width: 44, height: 32, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.94)', justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ color, fontWeight: '900', fontSize: 12, letterSpacing: 0.4 }}>{monogram}</Text>
-    </View>
-  );
-}
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_TRIGGER_VELOCITY = 0.5;
