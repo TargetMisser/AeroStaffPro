@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity,
   Modal, Alert, FlatList, TextInput,
-  Linking,
+  Linking, InteractionManager,
 } from 'react-native';
 import * as SystemCalendar from 'expo-calendar';
 import * as DocumentPicker from 'expo-document-picker';
@@ -24,6 +24,7 @@ import {
 import { WIDGET_SHIFT_KEY, WIDGET_CACHE_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
+import { getCalendarStatsRange } from '../utils/calendarStatsRange';
 import {
   getPdfExtractorHtml, parseShiftCells,
   parseShiftCellFiles,
@@ -119,6 +120,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
   const [manualStartM, setManualStartM] = useState(0);
   const [manualEndH, setManualEndH] = useState(16);
   const [manualEndM, setManualEndM] = useState(0);
+  const selectedStatsRange = useMemo(() => getCalendarStatsRange(selectedDay), [selectedDay]);
 
   const getManualPrefillForSelectedDay = () => {
     const dayEvents = eventsData[selectedDay] || [];
@@ -299,12 +301,16 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
   useEffect(() => {
     if (!isFocused || airportLoading || loading) return;
-    const weekStart = getMonday(fromIsoDate(selectedDay));
-    weekStart.setHours(0, 0, 0, 0);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    fetchWeatherAndFlights(weekStart, weekEnd, eventsData);
-  }, [selectedDay, eventsData, airportCode, airportLoading, loading, weatherMap, isFocused]);
+    const task = InteractionManager.runAfterInteractions(() => {
+      const weekStart = fromIsoDate(selectedStatsRange.startIso);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = fromIsoDate(selectedStatsRange.endIso);
+      weekEnd.setDate(weekEnd.getDate() + 1);
+      weekEnd.setHours(0, 0, 0, 0);
+      fetchWeatherAndFlights(weekStart, weekEnd, eventsData);
+    });
+    return () => task.cancel();
+  }, [selectedStatsRange.key, eventsData, airportCode, airportLoading, loading, weatherMap, isFocused]);
 
   const fetchCalendar = async (silent = false) => {
     try {

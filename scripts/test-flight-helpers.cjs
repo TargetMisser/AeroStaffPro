@@ -351,6 +351,16 @@ assert(
   'flight source label should dedupe repeated compact providers',
 );
 
+const calendarStatsRange = loadTsModule('src/utils/calendarStatsRange.ts');
+assert(
+  calendarStatsRange.getCalendarStatsRange('2026-05-12').key === calendarStatsRange.getCalendarStatsRange('2026-05-17').key,
+  'calendar stats refresh key should stay stable while moving inside the same week',
+);
+assert(
+  calendarStatsRange.getCalendarStatsRange('2026-05-12').key !== calendarStatsRange.getCalendarStatsRange('2026-05-18').key,
+  'calendar stats refresh key should change only when moving to another week',
+);
+
 function makeProvider(id, label, result, calls, contexts) {
   return {
     id,
