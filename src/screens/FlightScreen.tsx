@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  View, Text, StyleSheet, ActivityIndicator, Modal, ScrollView,
+  View, Text, StyleSheet, ActivityIndicator, Modal,
   FlatList, TouchableOpacity, RefreshControl,
-  Animated, NativeModules, Platform, Switch, Linking,
+  Animated, NativeModules, Platform, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Calendar from 'expo-calendar';
@@ -15,6 +15,7 @@ import TactilePressable from '../components/motion/TactilePressable';
 import ValueChangeFlash from '../components/motion/ValueChangeFlash';
 import { LogoPill } from '../components/flights/AirlineLogo';
 import FlightFilterModal from '../components/flights/FlightFilterModal';
+import FlightNotificationSettingsModal from '../components/flights/FlightNotificationSettingsModal';
 import { EmptyFlightState, FlightLoadingState } from '../components/flights/FlightStates';
 import { SwipeableFlightCard } from '../components/flights/SwipeableFlightCard';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
@@ -57,8 +58,6 @@ import {
 import {
   clamp,
   DEFAULT_NOTIFICATION_SETTINGS,
-  MAX_NOTIF_MINUTES,
-  MIN_NOTIF_MINUTES,
   sameAirlineKeys,
   sanitizeNotificationSettings,
   type FlightNotificationSettings,
@@ -1289,154 +1288,18 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         onApplySelectedAirlines={applySelectedAirlines}
       />
 
-      <Modal
+      <FlightNotificationSettingsModal
         visible={notifSettingsVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setNotifSettingsVisible(false)}
-      >
-        <TouchableOpacity
-          style={s.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setNotifSettingsVisible(false)}
-        >
-          <View style={s.filterSheet} onStartShouldSetResponder={() => true}>
-            <View style={s.filterSheetHandle} />
-            <Text style={s.filterSheetTitle}>{t('flightNotifSettingsTitle')}</Text>
-            <Text style={s.notifSheetSub}>{t('flightNotifSettingsSub')}</Text>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={s.notifRow}>
-                <View style={s.notifRowTextWrap}>
-                  <Text style={s.notifRowTitle}>{notifsEnabled ? t('flightNotifAccessDisable') : t('flightNotifAccessEnable')}</Text>
-                  <Text style={s.notifRowSub}>{notifSummary}</Text>
-                </View>
-                <Switch
-                  value={notifsEnabled}
-                  onValueChange={(value) => { setNotificationsEnabled(value).catch(() => {}); }}
-                  trackColor={{ false: '#94A3B8', true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              <View style={s.notifDivider} />
-
-              <View style={s.notifRow}>
-                <View style={s.notifRowTextWrap}>
-                  <Text style={s.notifRowTitle}>{t('flightNotifOnlyTracked')}</Text>
-                  <Text style={s.notifRowSub}>{t('flightNotifOnlyTrackedSub')}</Text>
-                </View>
-                <Switch
-                  value={notifSettings.onlyTrackedAirlines}
-                  onValueChange={(value) => { updateNotificationSettings({ onlyTrackedAirlines: value }).catch(() => {}); }}
-                  trackColor={{ false: '#94A3B8', true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              <View style={s.notifRow}>
-                <View style={s.notifRowTextWrap}>
-                  <Text style={s.notifRowTitle}>{t('flightNotifArrivalsToggle')}</Text>
-                  <Text style={s.notifRowSub}>{t('flightNotifArrivalsToggleSub')}</Text>
-                </View>
-                <Switch
-                  value={notifSettings.includeArrivals}
-                  onValueChange={(value) => { updateNotificationSettings({ includeArrivals: value }).catch(() => {}); }}
-                  trackColor={{ false: '#94A3B8', true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              <View style={s.notifRow}>
-                <View style={s.notifRowTextWrap}>
-                  <Text style={s.notifRowTitle}>{t('flightNotifDeparturesToggle')}</Text>
-                  <Text style={s.notifRowSub}>{t('flightNotifDeparturesToggleSub')}</Text>
-                </View>
-                <Switch
-                  value={notifSettings.includeDepartures}
-                  onValueChange={(value) => { updateNotificationSettings({ includeDepartures: value }).catch(() => {}); }}
-                  trackColor={{ false: '#94A3B8', true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              <View style={s.notifRow}>
-                <View style={s.notifRowTextWrap}>
-                  <Text style={s.notifRowTitle}>{t('flightNotifShiftEndToggle')}</Text>
-                  <Text style={s.notifRowSub}>{t('flightNotifShiftEndToggleSub')}</Text>
-                </View>
-                <Switch
-                  value={notifSettings.includeShiftEnd}
-                  onValueChange={(value) => { updateNotificationSettings({ includeShiftEnd: value }).catch(() => {}); }}
-                  trackColor={{ false: '#94A3B8', true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              <View style={s.notifRow}>
-                <View style={s.notifRowTextWrap}>
-                  <Text style={s.notifRowTitle}>{t('flightNotifStickyToggle')}</Text>
-                  <Text style={s.notifRowSub}>{t('flightNotifStickyToggleSub')}</Text>
-                </View>
-                <Switch
-                  value={notifSettings.sticky}
-                  onValueChange={(value) => { updateNotificationSettings({ sticky: value }).catch(() => {}); }}
-                  trackColor={{ false: '#94A3B8', true: colors.primary }}
-                  thumbColor="#fff"
-                />
-              </View>
-
-              <View style={s.notifDivider} />
-
-              <View style={s.notifMinutesRow}>
-                <Text style={s.notifRowTitle}>{t('flightNotifArrivalLead')}</Text>
-                <View style={s.notifStepper}>
-                  <TouchableOpacity
-                    style={s.notifStepperBtn}
-                    onPress={() => updateNotificationSettings({
-                      arrivalLeadMinutes: clamp(notifSettings.arrivalLeadMinutes - 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
-                    }).catch(() => {})}
-                  >
-                    <MaterialIcons name="remove" size={18} color={colors.primaryDark} />
-                  </TouchableOpacity>
-                  <Text style={s.notifStepperValue}>{notifSettings.arrivalLeadMinutes}m</Text>
-                  <TouchableOpacity
-                    style={s.notifStepperBtn}
-                    onPress={() => updateNotificationSettings({
-                      arrivalLeadMinutes: clamp(notifSettings.arrivalLeadMinutes + 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
-                    }).catch(() => {})}
-                  >
-                    <MaterialIcons name="add" size={18} color={colors.primaryDark} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <View style={s.notifMinutesRow}>
-                <Text style={s.notifRowTitle}>{t('flightNotifDepartureLead')}</Text>
-                <View style={s.notifStepper}>
-                  <TouchableOpacity
-                    style={s.notifStepperBtn}
-                    onPress={() => updateNotificationSettings({
-                      departureLeadMinutes: clamp(notifSettings.departureLeadMinutes - 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
-                    }).catch(() => {})}
-                  >
-                    <MaterialIcons name="remove" size={18} color={colors.primaryDark} />
-                  </TouchableOpacity>
-                  <Text style={s.notifStepperValue}>{notifSettings.departureLeadMinutes}m</Text>
-                  <TouchableOpacity
-                    style={s.notifStepperBtn}
-                    onPress={() => updateNotificationSettings({
-                      departureLeadMinutes: clamp(notifSettings.departureLeadMinutes + 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
-                    }).catch(() => {})}
-                  >
-                    <MaterialIcons name="add" size={18} color={colors.primaryDark} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        notifsEnabled={notifsEnabled}
+        notifSummary={notifSummary}
+        notifSettings={notifSettings}
+        colors={colors}
+        styles={s}
+        t={t}
+        onClose={() => setNotifSettingsVisible(false)}
+        onSetNotificationsEnabled={setNotificationsEnabled}
+        onUpdateNotificationSettings={updateNotificationSettings}
+      />
 
       <Modal
         visible={Boolean(notifDialog)}

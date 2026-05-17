@@ -44,6 +44,11 @@ const flightFilterModal = read('src/components/flights/FlightFilterModal.tsx');
 assert(flightFilterModal.includes('AirlineFilterLogo'), 'Flight filter modal should render branded airline logos');
 assert(flightFilterModal.includes('getAirlineBrandColor'), 'Flight filter modal should apply airline brand colors');
 
+assert(flightScreen.includes("from '../components/flights/FlightNotificationSettingsModal'"), 'FlightScreen should use the shared flight notification settings modal');
+const flightNotificationSettingsModal = read('src/components/flights/FlightNotificationSettingsModal.tsx');
+assert(flightNotificationSettingsModal.includes('MIN_NOTIF_MINUTES'), 'Flight notification settings modal should own minute bounds');
+assert(flightNotificationSettingsModal.includes('onlyTrackedAirlines'), 'Flight notification settings modal should render tracked-airline settings');
+
 const notifications = read('src/utils/notificationDiagnostics.ts');
 assert(notifications.includes('runNotificationScheduleExclusive'), 'notification scheduling should expose a serialization helper');
 assert(notifications.includes('dedupeAeroStaffScheduledNotifications'), 'notification diagnostics should expose duplicate cleanup');
