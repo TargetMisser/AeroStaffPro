@@ -39,6 +39,11 @@ for (const symbol of [
   assert(flightNotificationScheduler.includes(symbol), `flight notification scheduler should expose ${symbol}`);
 }
 
+assert(flightScreen.includes("from '../components/flights/FlightFilterModal'"), 'FlightScreen should use the shared flight filter modal');
+const flightFilterModal = read('src/components/flights/FlightFilterModal.tsx');
+assert(flightFilterModal.includes('AirlineFilterLogo'), 'Flight filter modal should render branded airline logos');
+assert(flightFilterModal.includes('getAirlineBrandColor'), 'Flight filter modal should apply airline brand colors');
+
 const notifications = read('src/utils/notificationDiagnostics.ts');
 assert(notifications.includes('runNotificationScheduleExclusive'), 'notification scheduling should expose a serialization helper');
 assert(notifications.includes('dedupeAeroStaffScheduledNotifications'), 'notification diagnostics should expose duplicate cleanup');

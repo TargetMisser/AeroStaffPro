@@ -13,12 +13,13 @@ import BoardReveal from '../components/motion/BoardReveal';
 import CockpitFlightProgress from '../components/motion/CockpitFlightProgress';
 import TactilePressable from '../components/motion/TactilePressable';
 import ValueChangeFlash from '../components/motion/ValueChangeFlash';
-import { AirlineFilterLogo, LogoPill } from '../components/flights/AirlineLogo';
+import { LogoPill } from '../components/flights/AirlineLogo';
+import FlightFilterModal from '../components/flights/FlightFilterModal';
 import { EmptyFlightState, FlightLoadingState } from '../components/flights/FlightStates';
 import { SwipeableFlightCard } from '../components/flights/SwipeableFlightCard';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
-import { getAirlineOps, getAirlineColor, getDepartureGateWindow, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
+import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
@@ -50,11 +51,8 @@ import {
 import { formatFlightSourceLabel } from '../utils/flightSourceLabel';
 import { buildFlightradar24FlightUrl } from '../utils/flightExternalLinks';
 import {
-  getAirlineBrandColor,
-  getAirlineIataCode,
   hexToRgba,
   mixHexColor,
-  prettifyAirlineLabel,
 } from '../utils/airlineBranding';
 import {
   clamp,
@@ -1279,82 +1277,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         />
       )}
 
-      {/* Flight Filter Modal */}
-      <Modal
+      <FlightFilterModal
         visible={filterMenuVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setFilterMenuVisible(false)}
-      >
-        <TouchableOpacity
-          style={s.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setFilterMenuVisible(false)}
-        >
-          <View style={s.filterSheet} onStartShouldSetResponder={() => true}>
-            <View style={s.filterSheetHandle} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <Text style={s.filterSheetTitle}>{t('flightFilterTitle')}</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  const next = allSelected ? [] : [...airportAirlines];
-                  applySelectedAirlines(next);
-                }}
-              >
-                <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>
-                  {allSelected ? t('flightFilterDeselAll') : t('flightFilterSelAll')}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {airportAirlines.map(key => {
-                const checked = selectedAirlines.includes(key);
-                const label = AIRLINE_DISPLAY_NAMES[key] ?? prettifyAirlineLabel(key);
-                const brandColor = getAirlineBrandColor(key, label);
-                const iataCode = getAirlineIataCode(key, label);
-                const activeBg = hexToRgba(brandColor, colors.isDark ? 0.24 : 0.18);
-                const inactiveBg = colors.isDark ? 'rgba(2,6,18,0.92)' : 'rgba(255,255,255,0.92)';
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    style={[
-                      s.filterOption,
-                      {
-                        backgroundColor: checked ? activeBg : inactiveBg,
-                        borderColor: checked ? hexToRgba(brandColor, 0.72) : hexToRgba(brandColor, 0.28),
-                      },
-                      checked && s.filterOptionActive,
-                    ]}
-                    activeOpacity={0.8}
-                    onPress={() => {
-                      const next = checked
-                        ? selectedAirlines.filter(k => k !== key)
-                        : [...selectedAirlines, key];
-                      applySelectedAirlines(next);
-                    }}
-                  >
-                    <AirlineFilterLogo iataCode={iataCode} label={label} color={brandColor} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[s.filterOptionText, checked && { color: brandColor }]}>{label}</Text>
-                      <Text style={s.filterOptionSub}>
-                        {iataCode ? `IATA ${iataCode}` : key}
-                      </Text>
-                    </View>
-                    <View style={[s.filterBrandDotWrap, { backgroundColor: hexToRgba(brandColor, 0.16), borderColor: hexToRgba(brandColor, 0.45) }]}>
-                      <View style={[s.filterBrandDot, { backgroundColor: brandColor }]} />
-                    </View>
-                    <MaterialIcons
-                      name={checked ? 'check-box' : 'check-box-outline-blank'}
-                      size={22}
-                      color={checked ? brandColor : '#9CA3AF'}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
-        </TouchableOpacity>
-      </Modal>
+        allSelected={allSelected}
+        airportAirlines={airportAirlines}
+        selectedAirlines={selectedAirlines}
+        colors={colors}
+        styles={s}
+        t={t}
+        onClose={() => setFilterMenuVisible(false)}
+        onApplySelectedAirlines={applySelectedAirlines}
+      />
 
       <Modal
         visible={notifSettingsVisible}
