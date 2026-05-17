@@ -43,6 +43,7 @@ import {
   getCachedFlightProviderDiagnostics,
   type FlightProviderDiagnosticsSnapshot,
 } from '../utils/fr24api';
+import { formatProviderDiagnostic } from '../utils/flightDiagnostics';
 import {
   getStaffMonitorDebugColumns,
   getStaffMonitorDebugFlights,
@@ -1361,9 +1362,6 @@ export default function SettingsScreen() {
                         : item.status === 'skipped'
                           ? '#94A3B8'
                           : '#EF4444';
-                      const counts = item.status === 'success'
-                        ? `A:${item.arrivals ?? 0} D:${item.departures ?? 0} · oggi A:${item.todayArrivals ?? 0} D:${item.todayDepartures ?? 0} · domani A:${item.tomorrowArrivals ?? 0} D:${item.tomorrowDepartures ?? 0}`
-                        : item.message ?? item.status;
                       return (
                         <View
                           key={`${item.provider}_${index}`}
@@ -1373,7 +1371,7 @@ export default function SettingsScreen() {
                           <View style={styles.providerOptionText}>
                             <Text style={[styles.debugProviderName, { color: colors.text }]}>{item.label}</Text>
                             <Text style={[styles.debugProviderSub, { color: colors.textMuted }]}>
-                              {counts}{typeof item.durationMs === 'number' ? ` · ${item.durationMs}ms` : ''}
+                              {formatProviderDiagnostic(item)}
                             </Text>
                           </View>
                         </View>
@@ -1659,9 +1657,6 @@ export default function SettingsScreen() {
                         : item.status === 'skipped'
                           ? '#94A3B8'
                           : '#EF4444';
-                      const counts = item.status === 'success'
-                        ? `A:${item.arrivals ?? 0} D:${item.departures ?? 0} · oggi A:${item.todayArrivals ?? 0} D:${item.todayDepartures ?? 0} · domani A:${item.tomorrowArrivals ?? 0} D:${item.tomorrowDepartures ?? 0}`
-                        : item.message ?? item.status;
                       return (
                         <View
                           key={`debug_${item.provider}_${index}`}
@@ -1671,7 +1666,7 @@ export default function SettingsScreen() {
                           <View style={styles.providerOptionText}>
                             <Text style={[styles.debugProviderName, { color: colors.text }]}>{item.label}</Text>
                             <Text style={[styles.debugProviderSub, { color: colors.textMuted }]}>
-                              {counts}{typeof item.durationMs === 'number' ? ` · ${item.durationMs}ms` : ''}
+                              {formatProviderDiagnostic(item)}
                             </Text>
                           </View>
                         </View>

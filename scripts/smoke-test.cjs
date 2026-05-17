@@ -49,6 +49,17 @@ const flightNotificationSettingsModal = read('src/components/flights/FlightNotif
 assert(flightNotificationSettingsModal.includes('MIN_NOTIF_MINUTES'), 'Flight notification settings modal should own minute bounds');
 assert(flightNotificationSettingsModal.includes('onlyTrackedAirlines'), 'Flight notification settings modal should render tracked-airline settings');
 
+assert(flightScreen.includes("from '../components/flights/FlightSourceDebugModal'"), 'FlightScreen should use the shared flight source debug modal');
+const flightSourceDebugModal = read('src/components/flights/FlightSourceDebugModal.tsx');
+assert(flightSourceDebugModal.includes('formatProviderDiagnostic'), 'Flight source debug modal should use shared provider diagnostic formatting');
+assert(flightSourceDebugModal.includes('cacheMerged'), 'Flight source debug modal should expose cache merge details');
+
+const flightStates = read('src/components/flights/FlightStates.tsx');
+assert(flightStates.includes("from '../../utils/flightDiagnostics'"), 'Flight empty state should use shared flight diagnostics');
+const flightDiagnostics = read('src/utils/flightDiagnostics.ts');
+assert(flightDiagnostics.includes('getTomorrowEmptyReason'), 'flight diagnostics should explain empty tomorrow states');
+assert(flightDiagnostics.includes('formatProviderDiagnostic'), 'flight diagnostics should format provider rows consistently');
+
 const notifications = read('src/utils/notificationDiagnostics.ts');
 assert(notifications.includes('runNotificationScheduleExclusive'), 'notification scheduling should expose a serialization helper');
 assert(notifications.includes('dedupeAeroStaffScheduledNotifications'), 'notification diagnostics should expose duplicate cleanup');

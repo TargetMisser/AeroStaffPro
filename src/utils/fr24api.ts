@@ -135,6 +135,9 @@ function withActiveDayCache<T extends {
         provider: 'cache',
         label: 'Cache giornaliera',
         status: 'success',
+        mode: 'dailyMerge',
+        contributed,
+        cacheMerged: contributed,
         message: contributed
           ? 'Lista voli fusa con la cache della giornata'
           : 'Cache della giornata verificata',
@@ -262,6 +265,9 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
           provider: 'cache',
           label: 'Cache voli',
           status: 'success',
+          mode: 'fallback',
+          contributed: true,
+          cacheMerged: false,
           message: `Fallback cache: ${errorMessage(error)}`,
         },
       ],

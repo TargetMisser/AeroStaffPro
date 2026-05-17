@@ -70,6 +70,16 @@ function errorMessage(error: unknown): string {
   return String(error ?? 'unknown_error');
 }
 
+function errorCode(error: unknown): string {
+  const message = errorMessage(error).toLowerCase();
+  if (message.includes('provider_timeout')) return 'provider_timeout';
+  if (message.includes('abort')) return 'provider_aborted';
+  if (message.includes('api key') || message.includes('key non configurata')) return 'missing_api_key';
+  if (message.includes('quota') || message.includes('limit')) return 'quota_or_limit';
+  if (message.includes('http')) return 'http_error';
+  return 'provider_error';
+}
+
 function addDays(date: Date, days: number): Date {
   const next = new Date(date);
   next.setDate(next.getDate() + days);
@@ -237,6 +247,8 @@ export async function fetchFlightScheduleFromProviders(
         provider: provider.id,
         label: provider.label,
         status: 'skipped',
+        mode: 'full',
+        contributed: false,
         message: provider.unavailableMessage?.(context) ?? `Unsupported airport ${context.airportCode}`,
       });
       continue;
@@ -250,6 +262,7 @@ export async function fetchFlightScheduleFromProviders(
       const useAeroDataBoxFutureOnly = provider.id === 'aeroDataBox'
         && aggregate !== null
         && hasScheduleBackedDayCoverage(aggregate, now);
+      const mode = useAirLabsRoutesOnly ? 'routesOnly' : useAeroDataBoxFutureOnly ? 'futureOnly' : 'full';
       const messages: string[] = [];
       const providerContext: FlightScheduleProviderContext = {
         ...context,
@@ -265,10 +278,13 @@ export async function fetchFlightScheduleFromProviders(
 
       const result = await fetchProviderWithTimeout(provider, providerContext);
       const durationMs = Date.now() - startedAt;
+      const contributed = hasUsefulCoverage(result);
       diagnostics.push({
         provider: provider.id,
         label: provider.label,
         status: 'success',
+        mode,
+        contributed,
         message: messages.length > 0 ? messages.join(' | ') : undefined,
         durationMs,
         arrivals: result.allArrivals.length,
@@ -276,7 +292,7 @@ export async function fetchFlightScheduleFromProviders(
         ...buildProviderCoverage(result, now),
       });
 
-      if (!hasUsefulCoverage(result)) {
+      if (!contributed) {
         continue;
       }
 
@@ -292,6 +308,9 @@ export async function fetchFlightScheduleFromProviders(
         provider: provider.id,
         label: provider.label,
         status: 'failed',
+        mode: 'full',
+        contributed: false,
+        errorCode: errorCode(error),
         durationMs: Date.now() - startedAt,
         message: errorMessage(error),
       });

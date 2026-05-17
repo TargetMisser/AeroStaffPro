@@ -3,26 +3,14 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import type { ThemeColors } from '../../context/ThemeContext';
 import type { TranslationKey } from '../../i18n/translations';
 import type { FlightScheduleProviderStatus } from '../../utils/fr24api';
+import {
+  formatProviderDiagnostic,
+  getTomorrowEmptyReason,
+  getTomorrowEmptyReasonTranslationKey,
+} from '../../utils/flightDiagnostics';
 
 type FlightListTab = 'arrivals' | 'departures';
 type FlightListDay = 'today' | 'tomorrow';
-
-function formatProviderDiagnostic(item: FlightScheduleProviderStatus): string {
-  if (item.status === 'success') {
-    const hasDayCounts = typeof item.todayArrivals === 'number'
-      || typeof item.todayDepartures === 'number'
-      || typeof item.tomorrowArrivals === 'number'
-      || typeof item.tomorrowDepartures === 'number';
-    if (!hasDayCounts) {
-      return `${item.label}: A ${item.arrivals ?? 0} / P ${item.departures ?? 0}`;
-    }
-    return `${item.label}: oggi A${item.todayArrivals ?? 0}/P${item.todayDepartures ?? 0}, domani A${item.tomorrowArrivals ?? 0}/P${item.tomorrowDepartures ?? 0}`;
-  }
-
-  const status = item.status === 'skipped' ? 'saltato' : 'errore';
-  const message = item.message ? ` - ${item.message.slice(0, 96)}` : '';
-  return `${item.label}: ${status}${message}`;
-}
 
 export function EmptyFlightState({
   activeDay,
@@ -55,6 +43,9 @@ export function EmptyFlightState({
   const providerLines = activeDay === 'tomorrow'
     ? (diagnostics ?? []).slice(0, 5).map(formatProviderDiagnostic)
     : [];
+  const tomorrowReason = activeDay === 'tomorrow'
+    ? getTomorrowEmptyReason({ rawDayCount, activeTab, diagnostics })
+    : null;
   const tabLabel = activeTab === 'arrivals' ? t('flightArrivals') : t('flightDepartures');
 
   return (
@@ -75,6 +66,7 @@ export function EmptyFlightState({
           {t('flightTomorrowEmptyContext')
             .replace('{tab}', tabLabel)
             .replace('{source}', sourceLabel ?? 'n/d')}
+          {tomorrowReason ? `\n${t(getTomorrowEmptyReasonTranslationKey(tomorrowReason))}` : ''}
         </Text>
       ) : null}
       {providerLines.length > 0 ? (

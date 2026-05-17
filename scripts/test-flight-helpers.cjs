@@ -400,6 +400,54 @@ assert(
   flightSourceLabel.formatFlightSourceLabel('FlightRadar24 API + FlightRadar24 API + Cache giornaliera') === 'FR24 API + Cache',
   'flight source label should dedupe repeated compact providers',
 );
+const flightDiagnostics = loadTsModule('src/utils/flightDiagnostics.ts');
+const formattedFutureOnlyProvider = flightDiagnostics.formatProviderDiagnostic({
+  provider: 'aeroDataBox',
+  label: 'AeroDataBox',
+  status: 'success',
+  mode: 'futureOnly',
+  contributed: true,
+  todayArrivals: 0,
+  todayDepartures: 0,
+  tomorrowArrivals: 1,
+  tomorrowDepartures: 2,
+});
+assert(
+  formattedFutureOnlyProvider.includes('futureOnly') && formattedFutureOnlyProvider.includes('usato'),
+  'flight diagnostics should include provider mode and contribution state',
+);
+assert(
+  flightDiagnostics.getTomorrowEmptyReason({
+    rawDayCount: 2,
+    activeTab: 'departures',
+    diagnostics: [],
+  }) === 'filtered',
+  'tomorrow empty reason should detect flights hidden by airline filters',
+);
+assert(
+  flightDiagnostics.getTomorrowEmptyReason({
+    rawDayCount: 0,
+    activeTab: 'departures',
+    diagnostics: [{ provider: 'airlabs', label: 'AirLabs', status: 'skipped', message: 'AirLabs API key non configurata' }],
+  }) === 'provider_skipped',
+  'tomorrow empty reason should detect skipped future providers',
+);
+assert(
+  flightDiagnostics.getTomorrowEmptyReason({
+    rawDayCount: 0,
+    activeTab: 'departures',
+    diagnostics: [{ provider: 'aeroDataBox', label: 'AeroDataBox', status: 'success', tomorrowDepartures: 0 }],
+  }) === 'provider_empty',
+  'tomorrow empty reason should detect providers that returned no future flights',
+);
+assert(
+  flightDiagnostics.getTomorrowEmptyReason({
+    rawDayCount: 0,
+    activeTab: 'departures',
+    diagnostics: [{ provider: 'aeroDataBox', label: 'AeroDataBox', status: 'failed', message: 'quota' }],
+  }) === 'provider_failed',
+  'tomorrow empty reason should detect failed providers',
+);
 
 const calendarStatsRange = loadTsModule('src/utils/calendarStatsRange.ts');
 assert(
@@ -523,7 +571,13 @@ async function runProviderLayerTests() {
   assert(payload.sourceLabel.includes('AeroDataBox') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
   const aeroDataBoxContext = contexts.find(item => item.id === 'aeroDataBox')?.context;
   assert(aeroDataBoxContext?.aeroDataBoxMode === 'futureOnly', 'provider auto mode should ask AeroDataBox only for future coverage once today is already covered');
+  const fr24Status = payload.diagnostics.find(item => item.provider === 'fr24Api');
+  assert(fr24Status?.contributed === false, 'empty successful providers should be marked as not contributed');
+  const staffStatus = payload.diagnostics.find(item => item.provider === 'staffMonitor');
+  assert(staffStatus?.contributed === true, 'providers that add useful flights should be marked as contributed');
   const aeroDataBoxStatus = payload.diagnostics.find(item => item.provider === 'aeroDataBox');
+  assert(aeroDataBoxStatus?.mode === 'futureOnly', 'provider diagnostics should expose future-only mode');
+  assert(aeroDataBoxStatus?.contributed === true, 'future provider diagnostics should expose contribution state');
   assert(aeroDataBoxStatus?.tomorrowDepartures === 1, 'provider diagnostics should count AeroDataBox tomorrow departures');
   assert(aeroDataBoxStatus?.tomorrowArrivals === 1, 'provider diagnostics should count AeroDataBox tomorrow arrivals');
   assert(aeroDataBoxStatus?.todayDepartures === 0, 'provider diagnostics should count AeroDataBox today departures separately');
@@ -634,12 +688,13 @@ async function runProviderLayerTests() {
   assert(fallbackStatus?.tomorrowDepartures === 1, 'fallback provider diagnostics should expose tomorrow coverage');
 
   const fullCalls = [];
+  const fullContexts = [];
   const fullProviderLayer = loadTsModule('src/utils/flightProviders/index.ts', {
     './aeroDataBoxProvider': {
       aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
         allArrivals: [],
         allDepartures: [],
-      }, fullCalls),
+      }, fullCalls, fullContexts),
     },
     './airLabsProvider': {
       airLabsProvider: makeProvider('airlabs', 'AirLabs', {
@@ -651,25 +706,29 @@ async function runProviderLayerTests() {
           makeProviderFlight('HV9101', todayTs),
           makeProviderFlight('HV9102', tomorrowTs),
         ],
-      }, fullCalls),
+      }, fullCalls, fullContexts),
     },
     './staffMonitorProvider': {
       staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
         allArrivals: [],
         allDepartures: [makeProviderFlight('HV9103', todayTs)],
-      }, fullCalls),
+      }, fullCalls, fullContexts),
     },
     './fr24Provider': {
-      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', { allArrivals: [], allDepartures: [] }, fullCalls),
-      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, fullCalls),
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', { allArrivals: [], allDepartures: [] }, fullCalls, fullContexts),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, fullCalls, fullContexts),
     },
   });
-  await fullProviderLayer.fetchFlightScheduleFromProviders({
+  const fullPayload = await fullProviderLayer.fetchFlightScheduleFromProviders({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
     now,
   });
   assert(fullCalls.join(',') === 'fr24Api,staffMonitor,aeroDataBox,fr24Public,airlabs', 'provider auto mode should reserve AirLabs until live/local/schedule providers are exhausted');
+  const airLabsContext = fullContexts.find(item => item.id === 'airlabs')?.context;
+  assert(airLabsContext?.airLabsMode === 'routesOnly', 'provider auto mode should switch AirLabs to routes-only after today is covered');
+  const airLabsStatus = fullPayload.diagnostics.find(item => item.provider === 'airlabs');
+  assert(airLabsStatus?.mode === 'routesOnly', 'provider diagnostics should expose AirLabs routes-only mode');
 
   const timeoutCalls = [];
   const timeoutPayload = await providerLayer.fetchFlightScheduleFromProviders({
@@ -699,6 +758,7 @@ async function runProviderLayerTests() {
   assert(timeoutPayload.sourceLabel.includes('Fast provider'), 'provider auto mode should return the next provider after timeout');
   const timeoutStatus = timeoutPayload.diagnostics.find(item => item.provider === 'staffMonitor');
   assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
+  assert(timeoutStatus?.errorCode === 'provider_timeout', 'provider diagnostics should expose normalized timeout error codes');
 
   const dailyCacheStorage = new Map();
   const fixedNowMs = now.getTime();
@@ -784,6 +844,44 @@ async function runProviderLayerTests() {
     !dailyCachedFlightNumbers.includes('FR0001'),
     'schedule fetch should prune expired cached flights while keeping the active day list',
   );
+  const dailyCacheStatus = dailyCachedSchedule.providerDiagnostics.find(item => item.provider === 'cache');
+  assert(dailyCacheStatus?.mode === 'dailyMerge', 'daily cache diagnostics should identify merge mode');
+  assert(dailyCacheStatus?.cacheMerged === true, 'daily cache diagnostics should mark merged cache contribution');
+
+  const fallbackStorage = new Map(dailyCacheStorage);
+  const fallbackFacade = loadTsModule('src/utils/fr24api.ts', {
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => fallbackStorage.get(key) ?? null,
+      setItem: async (key, value) => fallbackStorage.set(key, value),
+    },
+    './airportSettings': {
+      getAirportAirlines: () => [],
+      getAirportInfo: code => ({ code, name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false }),
+      getStoredAirportCode: async () => 'PSA',
+      isValidAirportCode: code => code === 'PSA',
+      normalizeAirportCode: code => String(code ?? 'PSA').toUpperCase(),
+      storeDetectedAirportAirlines: async () => {},
+    },
+    './flightProviderSettings': {
+      getAeroDataBoxApiKey: async () => null,
+      getAeroDataBoxGateway: async () => 'apiMarket',
+      getAirLabsApiKey: async () => null,
+      getFlightProviderPreference: async () => 'auto',
+      getFr24ApiKey: async () => null,
+    },
+    './flightProviders': {
+      fetchFlightScheduleFromProviders: async () => {
+        throw new Error('NO_FLIGHT_PROVIDER_AVAILABLE test outage');
+      },
+      getFlightScheduleProviders: () => [],
+    },
+    __globals: {
+      Date: FixedDate,
+    },
+  });
+  const fallbackSchedule = await fallbackFacade.fetchAirportScheduleRaw('PSA');
+  const fallbackCacheStatus = fallbackSchedule.providerDiagnostics.find(item => item.provider === 'cache' && item.mode === 'fallback');
+  assert(fallbackCacheStatus?.cacheMerged === false, 'fallback cache diagnostics should identify total cache fallback instead of merge');
 
   const fr24Module = loadTsModule('src/utils/flightProviders/fr24Provider.ts', {
     '../airportSettings': {

@@ -16,6 +16,7 @@ import ValueChangeFlash from '../components/motion/ValueChangeFlash';
 import { LogoPill } from '../components/flights/AirlineLogo';
 import FlightFilterModal from '../components/flights/FlightFilterModal';
 import FlightNotificationSettingsModal from '../components/flights/FlightNotificationSettingsModal';
+import FlightSourceDebugModal from '../components/flights/FlightSourceDebugModal';
 import { EmptyFlightState, FlightLoadingState } from '../components/flights/FlightStates';
 import { SwipeableFlightCard } from '../components/flights/SwipeableFlightCard';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
@@ -500,6 +501,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const [pinnedFlightId, setPinnedFlightId] = useState<string | null>(null);
   const [inboundArrivals, setInboundArrivals] = useState<Record<string, number>>({});
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
+  const [sourceDebugVisible, setSourceDebugVisible] = useState(false);
   const [notifSettingsVisible, setNotifSettingsVisible] = useState(false);
   const [notifDialog, setNotifDialog] = useState<{ title: string; message: string; tone: FlightAlertTone } | null>(null);
   const [allArrivalsFull, setAllArrivalsFull] = useState<any[]>([]);
@@ -1232,12 +1234,18 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       {(flightDataSource || showRefreshIndicator) && (
         <View style={s.sourceRow}>
           {flightDataSource && (
-            <View style={s.sourceBadge}>
+            <TouchableOpacity
+              style={s.sourceBadge}
+              activeOpacity={0.85}
+              onPress={() => setSourceDebugVisible(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('flightSourceDebugTitle')}
+            >
               <MaterialIcons name="hub" size={14} color={colors.primary} />
               <Text style={s.sourceBadgeText}>
                 {t('flightDataSource')}: {formatFlightSourceLabel(flightDataSource.sourceLabel)}
               </Text>
-            </View>
+            </TouchableOpacity>
           )}
           {showRefreshIndicator && (
             <View style={s.refreshBadge}>
@@ -1286,6 +1294,24 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         t={t}
         onClose={() => setFilterMenuVisible(false)}
         onApplySelectedAirlines={applySelectedAirlines}
+      />
+
+      <FlightSourceDebugModal
+        visible={sourceDebugVisible}
+        activeDay={activeDay}
+        activeTab={activeTab}
+        sourceLabel={flightDataSource?.sourceLabel}
+        fetchedAt={flightDataSource?.fetchedAt}
+        diagnostics={flightDataSource?.providerDiagnostics}
+        visibleCount={currentData.length}
+        rawDayCount={currentDayRawData.length}
+        selectedAirlinesCount={selectedAirlines.length}
+        airportAirlinesCount={airportAirlines.length}
+        isRefreshing={showRefreshIndicator}
+        colors={colors}
+        t={t}
+        locale={locale}
+        onClose={() => setSourceDebugVisible(false)}
       />
 
       <FlightNotificationSettingsModal

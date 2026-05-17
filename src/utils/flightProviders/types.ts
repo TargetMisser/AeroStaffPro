@@ -7,6 +7,10 @@ export type FlightScheduleProviderStatus = {
   label: string;
   status: 'success' | 'failed' | 'skipped';
   message?: string;
+  mode?: 'full' | 'futureOnly' | 'routesOnly' | 'dailyMerge' | 'fallback';
+  contributed?: boolean;
+  cacheMerged?: boolean;
+  errorCode?: string;
   durationMs?: number;
   arrivals?: number;
   departures?: number;
