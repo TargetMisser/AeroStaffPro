@@ -60,6 +60,11 @@ const flightDiagnostics = read('src/utils/flightDiagnostics.ts');
 assert(flightDiagnostics.includes('getTomorrowEmptyReason'), 'flight diagnostics should explain empty tomorrow states');
 assert(flightDiagnostics.includes('formatProviderDiagnostic'), 'flight diagnostics should format provider rows consistently');
 
+const calendarScreen = read('src/screens/CalendarScreen.tsx');
+assert(calendarScreen.includes("useState<CalendarViewMode>('week')"), 'Calendar screen should open on week view by default');
+assert(calendarScreen.includes("(['week', 'calendar'] as const)"), 'Calendar screen should show Week before Calendar');
+assert(calendarScreen.includes('enableSwipeMonths={false}'), 'Calendar month view should not switch months by swipe');
+
 const notifications = read('src/utils/notificationDiagnostics.ts');
 assert(notifications.includes('runNotificationScheduleExclusive'), 'notification scheduling should expose a serialization helper');
 assert(notifications.includes('dedupeAeroStaffScheduledNotifications'), 'notification diagnostics should expose duplicate cleanup');

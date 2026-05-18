@@ -99,7 +99,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
   const [dailyStats, setDailyStats] = useState<Record<string, DayStats>>({});
   const [loading, setLoading] = useState(true);
   const [calId, setCalId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<CalendarViewMode>('calendar');
+  const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const hasLoadedCalendarRef = useRef(false);
 
   // Import flow state
@@ -719,7 +719,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         </View>
 
         <View style={s.viewModeRow}>
-          {(['calendar', 'week'] as const).map(mode => {
+          {(['week', 'calendar'] as const).map(mode => {
             const active = viewMode === mode;
             return (
               <TouchableOpacity
@@ -809,7 +809,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 dayComponent={renderCalendarDay}
                 onDayPress={handleDayPress}
                 onMonthChange={handleMonthChange}
-                enableSwipeMonths
+                enableSwipeMonths={false}
                 firstDay={1}
                 renderArrow={direction => (
                   <MaterialIcons
