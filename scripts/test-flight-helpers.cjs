@@ -769,6 +769,86 @@ async function runProviderLayerTests() {
   assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
   assert(timeoutStatus?.errorCode === 'provider_timeout', 'provider diagnostics should expose normalized timeout error codes');
 
+  const cooldownCalls = [];
+  const cooldownLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', { allArrivals: [], allDepartures: [] }, cooldownCalls),
+    },
+    './airLabsProvider': {
+      airLabsProvider: {
+        id: 'airlabs',
+        label: 'AirLabs',
+        supports: () => true,
+        fetch: async () => {
+          cooldownCalls.push('airlabs');
+          throw new Error('AIRLABS_HTTP_429_RATE_LIMIT');
+        },
+      },
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
+        allArrivals: [makeProviderArrival('U29320', tomorrowTs)],
+        allDepartures: [makeProviderFlight('HV9320', tomorrowTs)],
+      }, cooldownCalls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', { allArrivals: [], allDepartures: [] }, cooldownCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, cooldownCalls),
+    },
+  });
+  const cooldownContext = {
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    airLabsApiKey: 'airlabs-key',
+    now,
+  };
+  const firstCooldownPayload = await cooldownLayer.fetchFlightScheduleFromProviders(cooldownContext, [
+    cooldownLayer.getFlightScheduleProviders('airlabs')[0],
+    cooldownLayer.getFlightScheduleProviders('staffMonitor')[0],
+  ]);
+  const firstCooldownStatus = firstCooldownPayload.diagnostics.find(item => item.provider === 'airlabs');
+  assert(firstCooldownStatus?.status === 'failed', 'rate-limited provider should fail before cooldown is active');
+  assert(firstCooldownStatus?.errorCode === 'quota_or_limit', 'HTTP 429 should be normalized as quota_or_limit');
+  assert(typeof firstCooldownStatus?.cooldownUntil === 'number', 'rate-limited provider failure should expose cooldownUntil');
+
+  const secondCooldownPayload = await cooldownLayer.fetchFlightScheduleFromProviders({
+    ...cooldownContext,
+    now: new Date(now.getTime() + 60_000),
+  }, [
+    cooldownLayer.getFlightScheduleProviders('airlabs')[0],
+    cooldownLayer.getFlightScheduleProviders('staffMonitor')[0],
+  ]);
+  assert(cooldownCalls.join(',') === 'airlabs,staffMonitor,staffMonitor', 'provider cooldown should skip the failed provider without calling it again');
+  const skippedCooldownStatus = secondCooldownPayload.diagnostics.find(item => item.provider === 'airlabs');
+  assert(skippedCooldownStatus?.status === 'skipped', 'cooldown provider should be reported as skipped');
+  assert(skippedCooldownStatus?.errorCode === 'provider_cooldown', 'cooldown skip should expose provider_cooldown diagnostics');
+  assert(/cooldown/i.test(skippedCooldownStatus?.message ?? ''), 'cooldown skip should explain why the provider was skipped');
+
+  const authCalls = [];
+  const authPayload = await providerLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    fr24ApiKey: 'fr24-key',
+    now,
+  }, [
+    {
+      id: 'fr24Api',
+      label: 'FlightRadar24 API',
+      supports: () => true,
+      fetch: async () => {
+        authCalls.push('fr24Api');
+        throw new Error('FR24_API_DEPARTURES_HTTP_401');
+      },
+    },
+    makeProvider('staffMonitor', 'StaffMonitor PSA', {
+      allArrivals: [makeProviderArrival('U29321', tomorrowTs)],
+      allDepartures: [makeProviderFlight('HV9321', tomorrowTs)],
+    }, authCalls),
+  ]);
+  const authStatus = authPayload.diagnostics.find(item => item.provider === 'fr24Api');
+  assert(authStatus?.errorCode === 'auth_failed', 'HTTP 401 should be normalized as auth_failed');
+  assert(typeof authStatus?.cooldownUntil === 'number', 'auth failures should activate provider cooldown');
+
   const dailyCacheStorage = new Map();
   const fixedNowMs = now.getTime();
   const RealDate = Date;

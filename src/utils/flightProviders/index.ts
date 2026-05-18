@@ -43,6 +43,19 @@ const PROVIDERS_BY_ID = {
   staffMonitor: staffMonitorProvider,
 } satisfies Record<Exclude<FlightProviderPreference, 'auto' | 'fr24'>, FlightScheduleProvider>;
 
+type ProviderCooldown = {
+  until: number;
+  errorCode: string;
+  message: string;
+};
+
+const PROVIDER_COOLDOWNS = new Map<string, ProviderCooldown>();
+const COOLDOWNABLE_PROVIDERS = new Set<FlightScheduleProviderId>(['fr24Api', 'aeroDataBox', 'airlabs']);
+const PROVIDER_COOLDOWN_MS: Partial<Record<string, number>> = {
+  quota_or_limit: 30 * 60 * 1000,
+  auth_failed: 30 * 60 * 1000,
+};
+
 export function getFlightScheduleProviders(
   preference: FlightProviderPreference = 'auto',
 ): FlightScheduleProvider[] {
@@ -75,9 +88,101 @@ function errorCode(error: unknown): string {
   if (message.includes('provider_timeout')) return 'provider_timeout';
   if (message.includes('abort')) return 'provider_aborted';
   if (message.includes('api key') || message.includes('key non configurata')) return 'missing_api_key';
-  if (message.includes('quota') || message.includes('limit')) return 'quota_or_limit';
+  if (/(?:http|status)[_\s-]?(401|403)\b/.test(message)
+    || message.includes('unauthorized')
+    || message.includes('forbidden')
+    || message.includes('invalid api key')) {
+    return 'auth_failed';
+  }
+  if (/(?:http|status)[_\s-]?(402|429)\b/.test(message)
+    || message.includes('too many requests')
+    || message.includes('rate')
+    || message.includes('quota')
+    || message.includes('limit')) {
+    return 'quota_or_limit';
+  }
   if (message.includes('http')) return 'http_error';
   return 'provider_error';
+}
+
+function hashString(value: string): string {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function providerCredentialFingerprint(
+  provider: FlightScheduleProvider,
+  context: FlightScheduleProviderContext,
+): string {
+  if (provider.id === 'airlabs') return hashString(context.airLabsApiKey ?? 'no-key');
+  if (provider.id === 'aeroDataBox') return hashString(`${context.aeroDataBoxGateway ?? 'apiMarket'}:${context.aeroDataBoxApiKey ?? 'no-key'}`);
+  if (provider.id === 'fr24Api') return hashString(context.fr24ApiKey ?? 'no-key');
+  return 'public';
+}
+
+function providerCooldownKey(
+  provider: FlightScheduleProvider,
+  context: FlightScheduleProviderContext,
+): string | null {
+  if (!COOLDOWNABLE_PROVIDERS.has(provider.id)) return null;
+  return [
+    provider.id,
+    context.airportCode.toUpperCase(),
+    providerCredentialFingerprint(provider, context),
+  ].join(':');
+}
+
+function activeProviderCooldown(
+  provider: FlightScheduleProvider,
+  context: FlightScheduleProviderContext,
+  nowMs: number,
+): ProviderCooldown | null {
+  const key = providerCooldownKey(provider, context);
+  if (!key) return null;
+  const cooldown = PROVIDER_COOLDOWNS.get(key);
+  if (!cooldown) return null;
+  if (cooldown.until <= nowMs) {
+    PROVIDER_COOLDOWNS.delete(key);
+    return null;
+  }
+  return cooldown;
+}
+
+function setProviderCooldown(
+  provider: FlightScheduleProvider,
+  context: FlightScheduleProviderContext,
+  code: string,
+  message: string,
+  nowMs: number,
+): number | undefined {
+  const key = providerCooldownKey(provider, context);
+  const durationMs = PROVIDER_COOLDOWN_MS[code];
+  if (!key || !durationMs) return undefined;
+
+  const until = nowMs + durationMs;
+  PROVIDER_COOLDOWNS.set(key, {
+    until,
+    errorCode: code,
+    message: message.slice(0, 180),
+  });
+  return until;
+}
+
+function clearProviderCooldown(provider: FlightScheduleProvider, context: FlightScheduleProviderContext): void {
+  const key = providerCooldownKey(provider, context);
+  if (key) PROVIDER_COOLDOWNS.delete(key);
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function formatCooldownTime(until: number): string {
+  const date = new Date(until);
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -237,6 +342,7 @@ export async function fetchFlightScheduleFromProviders(
 ): Promise<FlightSchedulePayload> {
   const diagnostics: FlightScheduleProviderStatus[] = [];
   const now = context.now ?? new Date();
+  const nowMs = now.getTime();
   let aggregate: FlightScheduleProviderResult | null = null;
   let source: FlightScheduleProviderId | null = null;
   const sourceLabels: string[] = [];
@@ -250,6 +356,21 @@ export async function fetchFlightScheduleFromProviders(
         mode: 'full',
         contributed: false,
         message: provider.unavailableMessage?.(context) ?? `Unsupported airport ${context.airportCode}`,
+      });
+      continue;
+    }
+
+    const cooldown = activeProviderCooldown(provider, context, nowMs);
+    if (cooldown) {
+      diagnostics.push({
+        provider: provider.id,
+        label: provider.label,
+        status: 'skipped',
+        mode: 'full',
+        contributed: false,
+        errorCode: 'provider_cooldown',
+        cooldownUntil: cooldown.until,
+        message: `Cooldown attivo fino alle ${formatCooldownTime(cooldown.until)} dopo ${cooldown.errorCode}: ${cooldown.message}`,
       });
       continue;
     }
@@ -279,6 +400,7 @@ export async function fetchFlightScheduleFromProviders(
       const result = await fetchProviderWithTimeout(provider, providerContext);
       const durationMs = Date.now() - startedAt;
       const contributed = hasUsefulCoverage(result);
+      clearProviderCooldown(provider, context);
       diagnostics.push({
         provider: provider.id,
         label: provider.label,
@@ -304,15 +426,21 @@ export async function fetchFlightScheduleFromProviders(
         return buildPayload(aggregate, source, sourceLabels, diagnostics);
       }
     } catch (error) {
+      const code = errorCode(error);
+      const message = errorMessage(error);
+      const cooldownUntil = setProviderCooldown(provider, context, code, message, nowMs);
       diagnostics.push({
         provider: provider.id,
         label: provider.label,
         status: 'failed',
         mode: 'full',
         contributed: false,
-        errorCode: errorCode(error),
+        errorCode: code,
+        cooldownUntil,
         durationMs: Date.now() - startedAt,
-        message: errorMessage(error),
+        message: cooldownUntil
+          ? `${message} · cooldown fino alle ${formatCooldownTime(cooldownUntil)}`
+          : message,
       });
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log(`[flightProviders] ${provider.id} failed:`, error);

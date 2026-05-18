@@ -11,6 +11,7 @@ export type FlightScheduleProviderStatus = {
   contributed?: boolean;
   cacheMerged?: boolean;
   errorCode?: string;
+  cooldownUntil?: number;
   durationMs?: number;
   arrivals?: number;
   departures?: number;

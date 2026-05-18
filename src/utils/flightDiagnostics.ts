@@ -12,6 +12,15 @@ export type TomorrowEmptyReason =
 
 const FUTURE_PROVIDER_IDS = new Set(['aeroDataBox', 'airlabs', 'cache']);
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function formatCooldownTime(timestamp: number): string {
+  const date = new Date(timestamp);
+  return `${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
 function hasDayCounts(item: FlightScheduleProviderStatus): boolean {
   return typeof item.todayArrivals === 'number'
     || typeof item.todayDepartures === 'number'
@@ -52,8 +61,9 @@ export function formatProviderDiagnostic(item: FlightScheduleProviderStatus): st
 
   const status = item.status === 'skipped' ? 'saltato' : 'errore';
   const code = item.errorCode ? ` [${item.errorCode}]` : '';
+  const cooldown = typeof item.cooldownUntil === 'number' ? ` · cooldown fino ${formatCooldownTime(item.cooldownUntil)}` : '';
   const message = item.message ? ` - ${item.message.slice(0, 120)}` : '';
-  return `${item.label}: ${status}${code}${mode}${contribution}${timing}${message}`;
+  return `${item.label}: ${status}${code}${mode}${contribution}${timing}${cooldown}${message}`;
 }
 
 export function getTomorrowEmptyReason({
