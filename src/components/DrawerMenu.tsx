@@ -1,11 +1,17 @@
 import { version } from '../../package.json';
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  Animated, Easing, Modal, StyleSheet, TouchableOpacity, View,
+  Animated, Modal, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
-import { motionDurations, motionEasing, motionSpring } from '../utils/motion';
+import {
+  motionDurations,
+  motionEasing,
+  motionRecipeDurations,
+  motionRecipeSprings,
+  useReducedMotionPreference,
+} from '../utils/motion';
 import DrawerMenuPanel, {
   DRAWER_WIDTH,
   type DrawerItem,
@@ -32,56 +38,68 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
     ...(__DEV__ ? [{ id: 'DesignLab', icon: 'auto-awesome' as const, label: 'Design Lab', sublabel: 'Direzioni visuali dev-only' }] : []),
   ];
   const styles = useMemo(() => makeStyles(surfaceVariant), [surfaceVariant]);
-  const slideAnim = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotionPreference();
+  const panelProgress = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      Animated.parallel([
-        Animated.spring(slideAnim, {
-          toValue: 0,
-          ...motionSpring.panel,
-          useNativeDriver: false,
-        }),
-        Animated.timing(fadeAnim,  {
+      if (reducedMotion) {
+        Animated.timing(panelProgress, {
           toValue: 1,
-          duration: motionDurations.normal,
+          duration: motionDurations.instant,
           easing: motionEasing.board,
           useNativeDriver: true,
-        }),
-      ]).start();
+        }).start();
+        return;
+      }
+
+      Animated.spring(panelProgress, {
+        toValue: 1,
+        ...motionRecipeSprings.panel,
+        useNativeDriver: true,
+      }).start();
     } else {
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: -DRAWER_WIDTH,
-          duration: motionDurations.normal,
-          easing: motionEasing.exit,
-          useNativeDriver: false,
-        }),
-        Animated.timing(fadeAnim,  {
-          toValue: 0,
-          duration: motionDurations.quick,
-          easing: Easing.out(Easing.quad),
-          useNativeDriver: true,
-        }),
-      ]).start(({ finished }) => { if (finished) setMounted(false); });
+      Animated.timing(panelProgress, {
+        toValue: 0,
+        duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.instrument,
+        easing: motionEasing.exit,
+        useNativeDriver: true,
+      }).start(({ finished }) => { if (finished) setMounted(false); });
     }
-  }, [visible]);
+  }, [panelProgress, reducedMotion, visible]);
 
   if (!mounted && !visible) return null;
+
+  const overlayOpacity = panelProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const panelTranslateX = panelProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-DRAWER_WIDTH, 0],
+  });
+  const panelScale = panelProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [reducedMotion ? 1 : 0.965, 1],
+  });
 
   return (
     <Modal transparent visible={mounted} animationType="none" onRequestClose={onClose}>
       <View style={styles.root}>
         {/* Overlay */}
-        <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
           <TouchableOpacity style={StyleSheet.absoluteFill} onPress={onClose} activeOpacity={1} />
         </Animated.View>
 
         {/* Drawer */}
-        <Animated.View style={[styles.drawerWrapper, { left: slideAnim }]}>
+        <Animated.View
+          style={[
+            styles.drawerWrapper,
+            { transform: [{ translateX: panelTranslateX }, { scale: panelScale }] },
+          ]}
+        >
           <DrawerMenuPanel
             colors={colors}
             items={ITEMS}
@@ -104,6 +122,7 @@ function makeStyles(surfaceVariant: DrawerMenuSurfaceVariant) {
     overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,5,0,0.55)' },
     drawerWrapper: {
       position: 'absolute',
+      left: 0,
       top: 0,
       bottom: 0,
       width: DRAWER_WIDTH,

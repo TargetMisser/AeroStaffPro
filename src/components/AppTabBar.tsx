@@ -3,6 +3,13 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
 import TactilePressable from './motion/TactilePressable';
+import {
+  motionDurations,
+  motionEasing,
+  motionRecipeDurations,
+  motionRecipeSprings,
+  useReducedMotionPreference,
+} from '../utils/motion';
 
 export type AppTabId = 'Shifts' | 'Calendar' | 'Flights' | 'TravelDoc';
 
@@ -34,6 +41,11 @@ type SurfaceConfig = {
   borderColor: string;
   shadowColor: string;
   shadowOpacity: number;
+};
+
+const withMotionTokens = {
+  reducedMotionSnapMs: Math.min(motionDurations.instant, motionRecipeDurations.snap),
+  navDetentSpring: motionRecipeSprings.navDetent,
 };
 
 function getSurfaceConfig(variant: AppTabBarVariant, isDark: boolean): SurfaceConfig {
@@ -254,6 +266,7 @@ export default function AppTabBar({
 }: AppTabBarProps) {
   const surface = getSurfaceConfig(variant, isDark);
   const isOperations = variant === 'operations';
+  const reducedMotion = useReducedMotionPreference();
   const activeIndex = Math.max(0, tabs.findIndex(tab => tab.id === activeTab));
   const fallbackProgress = useRef(new Animated.Value(activeIndex)).current;
   const [trackWidth, setTrackWidth] = useState(0);
@@ -265,13 +278,22 @@ export default function AppTabBar({
   });
 
   useEffect(() => {
+    if (reducedMotion) {
+      Animated.timing(fallbackProgress, {
+        toValue: activeIndex,
+        duration: withMotionTokens.reducedMotionSnapMs,
+        easing: motionEasing.board,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
+
     Animated.spring(fallbackProgress, {
       toValue: activeIndex,
-      tension: 170,
-      friction: 18,
+      ...withMotionTokens.navDetentSpring,
       useNativeDriver: true,
     }).start();
-  }, [activeIndex, fallbackProgress]);
+  }, [activeIndex, fallbackProgress, reducedMotion]);
 
   const regularSlotWidth = trackWidth > 0 ? trackWidth / tabCount : 0;
   const opsGap = 6;
@@ -284,6 +306,16 @@ export default function AppTabBar({
   const opsDetentTranslateX = progress.interpolate({
     inputRange: tabs.map((_, index) => index),
     outputRange: tabs.map((_, index) => index * (opsSlotWidth + opsGap)),
+    extrapolate: 'clamp',
+  });
+  const detentScale = progress.interpolate({
+    inputRange: tabs.map((_, index) => index),
+    outputRange: tabs.map((_, index) => (index === activeIndex ? 1 : 0.985)),
+    extrapolate: 'clamp',
+  });
+  const indicatorTravelOpacity = progress.interpolate({
+    inputRange: tabs.map((_, index) => index),
+    outputRange: tabs.map((_, index) => (index === activeIndex ? 0.18 : 0.28)),
     extrapolate: 'clamp',
   });
 
@@ -320,10 +352,20 @@ export default function AppTabBar({
                   styles.opsDetentSelector,
                   {
                     width: opsSlotWidth,
-                    transform: [{ translateX: opsDetentTranslateX }],
+                    transform: [{ translateX: opsDetentTranslateX }, { scale: detentScale }],
                   },
                 ]}
-              />
+              >
+                <Animated.View
+                  style={[
+                    styles.opsDetentSheen,
+                    {
+                      opacity: indicatorTravelOpacity,
+                      transform: [{ translateX: reducedMotion ? 0 : 10 }, { skewX: '-16deg' }],
+                    },
+                  ]}
+                />
+              </Animated.View>
             )}
             {tabs.map((tab, index) => (
               <OperationsTab
@@ -350,12 +392,18 @@ export default function AppTabBar({
               pointerEvents="none"
               style={[
                 styles.detentSelector,
-                {
-                  width: Math.max(52, regularSlotWidth - 10),
-                  transform: [{ translateX: detentTranslateX }],
-                },
-              ]}
-            >
+                  {
+                    width: Math.max(52, regularSlotWidth - 10),
+                    transform: [{ translateX: detentTranslateX }, { scale: detentScale }],
+                  },
+                ]}
+              >
+              <Animated.View
+                style={[
+                  styles.detentSheen,
+                  { opacity: indicatorTravelOpacity },
+                ]}
+              />
               <View style={[styles.detentGlow, { backgroundColor: activeColor }]} />
             </Animated.View>
           )}
@@ -415,6 +463,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(45,212,191,0.22)',
     backgroundColor: 'rgba(45,212,191,0.10)',
     overflow: 'hidden',
+  },
+  detentSheen: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 24,
+    left: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.24)',
+    transform: [{ skewX: '-18deg' }],
   },
   detentGlow: {
     position: 'absolute',
@@ -487,6 +545,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(45,212,191,0.42)',
     backgroundColor: 'rgba(13,148,136,0.18)',
+    overflow: 'hidden',
+  },
+  opsDetentSheen: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 32,
+    left: 10,
+    backgroundColor: 'rgba(153,246,228,0.24)',
   },
   opsTabPressable: {
     flex: 1,
