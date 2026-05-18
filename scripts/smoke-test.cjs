@@ -97,6 +97,8 @@ assert(appSource.includes('GestureHandlerRootView'), 'App root should be wrapped
 assert(appSource.includes("from './src/screens/OnboardingScreen'"), 'App should expose the guided setup screen');
 assert(appSource.includes('ONBOARDING_SETUP_STORAGE_KEY'), 'App should use the shared onboarding completion key');
 assert(appSource.includes('useSafeAreaInsets'), 'App shell should read native safe-area insets');
+assert(appSource.includes('goToTabTransition'), 'App shell should centralize page transition motion');
+assert(appSource.includes('useReducedMotionPreference'), 'App shell page transitions should respect reduced motion');
 assert(!appSource.includes('paddingTop: StatusBar.currentHeight || 48'), 'Root view should not create a blank status-bar spacer');
 assert(appSource.includes('translucent'), 'StatusBar should allow the app bar surface behind the status area');
 
@@ -154,6 +156,12 @@ assert(drawerMenu.includes('panelScale'), 'Drawer menu should add depth scale du
 assert(!drawerMenu.includes('{ left: slideAnim }'), 'Drawer menu should not animate layout left');
 assert(drawerMenu.includes('useNativeDriver: true'), 'Drawer menu reveal should stay on the native driver');
 assert(drawerMenu.includes('useReducedMotionPreference'), 'Drawer menu should respect reduced-motion settings');
+
+const swipeableFlightCard = read('src/components/flights/SwipeableFlightCard.tsx');
+assert(swipeableFlightCard.includes('motionRecipeSprings'), 'Swipeable flight card should use centralized motion springs');
+assert(swipeableFlightCard.includes('useReducedMotionPreference'), 'Swipeable flight card should respect reduced motion');
+assert(swipeableFlightCard.includes('pinActionRail'), 'Swipeable flight card should expose a visible pin action rail');
+assert(swipeableFlightCard.includes('accessibilityHint'), 'Swipeable flight card should explain the swipe action');
 
 const motionAudit = read('docs/motion-inspiration-audit.md');
 for (const marker of [

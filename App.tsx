@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -34,7 +34,13 @@ import { autoScheduleNotifications } from './src/utils/autoNotifications';
 import { checkForUpdate, wasUpdateSeen, markUpdateSeen, type UpdateInfo } from './src/utils/updateChecker';
 import UpdateModal from './src/components/UpdateModal';
 import { useAirport } from './src/context/AirportContext';
-import { motionSpring } from './src/utils/motion';
+import {
+  motionDurations,
+  motionEasing,
+  motionRecipeDurations,
+  motionRecipeSprings,
+  useReducedMotionPreference,
+} from './src/utils/motion';
 import { ONBOARDING_SETUP_STORAGE_KEY, shouldShowOnboarding } from './src/utils/appSetup';
 
 installGlobalCrashHandler();
@@ -72,6 +78,7 @@ function AppInner() {
   const { t } = useLanguage();
   const { profileInitials } = useAirport();
   const insets = useSafeAreaInsets();
+  const reducedMotion = useReducedMotionPreference();
   const [activeTab, setActiveTab]   = useState<Tab>('Shifts');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [overlay, setOverlay]       = useState<OverlayScreen>(null);
@@ -138,26 +145,45 @@ function AppInner() {
     extrapolate: 'clamp',
   }), [offsetX, SCREEN_W]);
 
-  const setTabIndex = (newIdx: number) => {
+  const setTabIndex = useCallback((newIdx: number) => {
     activeIdxRef.current = newIdx;
     setActiveTab(TABS[newIdx].id);
-  };
+  }, []);
 
-  const goToTab = (newIdx: number, animated = true) => {
-    setTabIndex(newIdx);
-    const targetOffset = -newIdx * SCREEN_W;
-
+  const goToTabTransition = useCallback((targetOffset: number, animated = true, onComplete?: () => void) => {
     if (!animated) {
       offsetX.setValue(targetOffset);
+      onComplete?.();
+      return;
+    }
+
+    if (reducedMotion) {
+      Animated.timing(offsetX, {
+        toValue: targetOffset,
+        duration: motionDurations.instant,
+        easing: motionEasing.board,
+        useNativeDriver: true,
+      }).start(({ finished }) => { if (finished) onComplete?.(); });
       return;
     }
 
     Animated.spring(offsetX, {
       toValue: targetOffset,
-      ...motionSpring.panel,
+      ...motionRecipeSprings.panel,
       useNativeDriver: true,
-    }).start();
-  };
+    }).start(({ finished }) => { if (finished) onComplete?.(); });
+  }, [offsetX, reducedMotion]);
+
+  const goToTab = useCallback((newIdx: number, animated = true) => {
+    setTabIndex(newIdx);
+    const targetOffset = -newIdx * SCREEN_W;
+    goToTabTransition(targetOffset, animated);
+  }, [SCREEN_W, goToTabTransition, setTabIndex]);
+
+  const settleCurrentTab = useCallback((idx: number) => {
+    const targetOffset = -idx * SCREEN_W;
+    goToTabTransition(targetOffset, true);
+  }, [SCREEN_W, goToTabTransition]);
 
   const swipePan = useMemo(() => PanResponder.create({
     onMoveShouldSetPanResponder: (_, g) =>
@@ -180,19 +206,23 @@ function AppInner() {
 
       if (shouldMoveNext && idx < TABS.length - 1) {
         Animated.timing(offsetX, {
-          toValue: -(idx + 1) * SCREEN_W, duration: 150, useNativeDriver: true,
+          toValue: -(idx + 1) * SCREEN_W,
+          duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.snap,
+          easing: motionEasing.board,
+          useNativeDriver: true,
         }).start(() => goToTab(idx + 1, false));
       } else if (shouldMovePrevious && idx > 0) {
         Animated.timing(offsetX, {
-          toValue: -(idx - 1) * SCREEN_W, duration: 150, useNativeDriver: true,
+          toValue: -(idx - 1) * SCREEN_W,
+          duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.snap,
+          easing: motionEasing.board,
+          useNativeDriver: true,
         }).start(() => goToTab(idx - 1, false));
       } else {
-        Animated.spring(offsetX, {
-          toValue: -idx * SCREEN_W, useNativeDriver: true, tension: 120, friction: 10,
-        }).start();
+        settleCurrentTab(idx);
       }
     },
-  }), [offsetX, SCREEN_W]);
+  }), [goToTab, offsetX, reducedMotion, SCREEN_W, settleCurrentTab]);
 
   const renderOverlay = () => {
     if (overlay === 'Notepad')   return <NotepadScreen />;
