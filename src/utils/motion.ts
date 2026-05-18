@@ -34,6 +34,50 @@ export const motionSpring = {
   },
 } as const;
 
+// Cross-runtime motion recipes: keep them plain so RN Animated and Reanimated can share values.
+export const motionRecipeDurations = {
+  snap: 180,
+  instrument: 260,
+  boardReveal: 340,
+  panelTravel: 460,
+  ambient: 1400,
+} as const;
+
+export const motionRecipeEasing = {
+  materialStandard: [0.4, 0, 0.2, 1],
+  materialDecelerate: [0, 0, 0.2, 1],
+  cockpitExit: [0.4, 0, 1, 1],
+} as const;
+
+export const motionRecipeSprings = {
+  navDetent: {
+    damping: 18,
+    stiffness: 240,
+    mass: 0.9,
+  },
+  panel: {
+    damping: 24,
+    stiffness: 190,
+    mass: 1,
+  },
+  instrument: {
+    damping: 15,
+    stiffness: 280,
+    mass: 0.7,
+  },
+} as const;
+
+export const motionPatternIds = [
+  'footer-nav',
+  'drawer-reveal',
+  'flight-card-live-update',
+  'cache-loading',
+  'press-feedback',
+  'editorial-empty-state',
+] as const;
+
+export type MotionPatternId = typeof motionPatternIds[number];
+
 export type MotionHaptic = 'selection' | 'light' | 'medium' | 'success';
 
 export function getStaggerDelay(index: number, baseDelay = 42, maxDelay = 260): number {

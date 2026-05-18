@@ -23,6 +23,15 @@ assert(scripts['test:smoke'], 'package.json should expose test:smoke');
 assert(scripts['release:check'], 'package.json should expose release:check');
 assert(scripts['github:branches:audit'], 'package.json should expose github:branches:audit');
 
+const dependencies = packageJson.dependencies || {};
+assert(dependencies['react-native-reanimated'], 'package.json should include react-native-reanimated for motion prototypes');
+assert(dependencies['react-native-gesture-handler'], 'package.json should include react-native-gesture-handler for motion prototypes');
+assert(dependencies['react-native-worklets'], 'package.json should include react-native-worklets for Reanimated 4 worklets');
+
+const babelConfig = read('babel.config.js');
+assert(babelConfig.includes('babel-preset-expo'), 'babel config should keep Expo preset');
+assert(babelConfig.includes('react-native-worklets/plugin'), 'babel config should enable the Worklets plugin for Reanimated 4');
+
 const flightScreen = read('src/screens/FlightScreen.tsx');
 assert(flightScreen.includes("from '../utils/flightScheduleAdapter'"), 'FlightScreen should use the shared flight adapter');
 assert(flightScreen.includes("from '../utils/flightScreenCache'"), 'FlightScreen should use the shared flight screen cache');
@@ -83,9 +92,49 @@ assert(releaseScript.includes('npm run release:check'), 'local APK release shoul
 
 const appSource = read('App.tsx');
 assert(appSource.includes('SafeAreaProvider'), 'App root should provide safe-area insets');
+assert(appSource.includes('GestureHandlerRootView'), 'App root should be wrapped in GestureHandlerRootView');
 assert(appSource.includes('useSafeAreaInsets'), 'App shell should read native safe-area insets');
 assert(!appSource.includes('paddingTop: StatusBar.currentHeight || 48'), 'Root view should not create a blank status-bar spacer');
 assert(appSource.includes('translucent'), 'StatusBar should allow the app bar surface behind the status area');
+
+const motionSource = read('src/utils/motion.ts');
+for (const symbol of [
+  'motionRecipeDurations',
+  'motionRecipeEasing',
+  'motionRecipeSprings',
+  'motionPatternIds',
+]) {
+  assert(motionSource.includes(symbol), `motion tokens should expose ${symbol}`);
+}
+
+const cinematicMotionBoard = read('src/dev/CinematicMotionBoard.tsx');
+for (const patternId of [
+  'footer-nav',
+  'drawer-reveal',
+  'flight-card-live-update',
+  'cache-loading',
+  'press-feedback',
+  'editorial-empty-state',
+]) {
+  assert(cinematicMotionBoard.includes(patternId), `Cinematic motion board should include ${patternId}`);
+}
+
+const cinematicStory = read('.storybook/stories/cinematic-motion-board.stories.tsx');
+assert(cinematicStory.includes('CinematicMotionBoard'), 'Storybook should expose the Cinematic Motion Board');
+
+const designLab = read('src/screens/DesignLabScreen.tsx');
+assert(designLab.includes('CinematicMotionBoard'), 'Design Lab should embed the Cinematic Motion Board prototype');
+
+const motionAudit = read('docs/motion-inspiration-audit.md');
+for (const marker of [
+  'Inspiration Matrix',
+  'React Native Reanimated',
+  'gorhom/react-native-animated-tabbar',
+  'Material Motion',
+  'Apple HIG Motion',
+]) {
+  assert(motionAudit.includes(marker), `motion audit should include ${marker}`);
+}
 
 for (const file of [
   'src/components/motion/BoardReveal.tsx',

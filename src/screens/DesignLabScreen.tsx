@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
+import CinematicMotionBoard from '../dev/CinematicMotionBoard';
 import DesignDirectionPreview from '../dev/DesignDirectionPreview';
 import { DESIGN_DIRECTIONS } from '../dev/designDirections';
 
@@ -57,6 +58,17 @@ export default function DesignLabScreen() {
 
       <DesignDirectionPreview direction={selected} />
 
+      <View style={styles.motionSection}>
+        <Text style={[styles.motionKicker, { color: colors.primary }]}>MOTION LAB</Text>
+        <Text style={[styles.motionTitle, { color: colors.text }]}>Cinematic Operations</Text>
+        <Text style={[styles.motionCopy, { color: colors.textSub }]}>
+          Prototipi Reanimated/Gesture isolati: footer, drawer, card voli, cache, press
+          feedback e stati vuoti.
+        </Text>
+      </View>
+
+      <CinematicMotionBoard compact />
+
       <View style={[styles.notesCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Text style={[styles.notesTitle, { color: colors.text }]}>Perche provarla</Text>
         <Text style={[styles.notesMood, { color: colors.textSub }]}>{selected.mood}</Text>
@@ -94,6 +106,10 @@ function makeStyles(isDark: boolean) {
       paddingVertical: 13,
     },
     selectorText: { fontSize: 14, fontWeight: '900' },
+    motionSection: { gap: 5, marginTop: 4 },
+    motionKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
+    motionTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
+    motionCopy: { fontSize: 13, lineHeight: 19 },
     notesCard: {
       borderWidth: 1,
       borderRadius: 24,

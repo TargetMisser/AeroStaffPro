@@ -4,6 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { MaterialIcons } from '@expo/vector-icons';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
@@ -344,19 +345,24 @@ function ThemedAppGate() {
 // ─── Root export con ThemeProvider ───────────────────────────────────────────
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <AirportProvider>
-          <LanguageProvider>
-            <ThemedAppGate />
-          </LanguageProvider>
-        </AirportProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <AirportProvider>
+            <LanguageProvider>
+              <ThemedAppGate />
+            </LanguageProvider>
+          </AirportProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   root: {
     flex: 1,
     paddingTop: 0,
