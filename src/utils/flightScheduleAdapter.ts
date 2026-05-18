@@ -126,13 +126,68 @@ function getAirportDisplayLabel(value: unknown, preferCode = false): string | un
   return text;
 }
 
-export function getFlightAirportLabel(airport: any, fallback = 'N/A'): string {
+export type FlightAirportDisplay = {
+  code: string;
+  name?: string;
+  label: string;
+  compactLabel: string;
+  accessibilityLabel: string;
+};
+
+function formatAirportName(value: string): string {
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return trimmed;
+  if (trimmed === trimmed.toUpperCase() && /[A-Z]/.test(trimmed)) {
+    return trimmed.toLowerCase().replace(/\b[a-z]/g, letter => letter.toUpperCase());
+  }
+  return trimmed;
+}
+
+function getFlightAirportCode(airport: any): string | undefined {
   return getAirportDisplayLabel(airport?.code?.iata, true)
     ?? getAirportDisplayLabel(airport?.iata, true)
     ?? getAirportDisplayLabel(airport?.code?.icao, true)
     ?? getAirportDisplayLabel(airport?.icao, true)
-    ?? getAirportDisplayLabel(airport?.name)
-    ?? fallback;
+    ?? (REMOTE_AIRPORT_ALIASES[normalizeFlightIdentityPart(airport?.name)] ?? undefined);
+}
+
+function getAirportObjectName(airport: any): string | undefined {
+  const rawName = readUsefulAirportText(airport?.name);
+  if (!rawName) return undefined;
+
+  const normalized = normalizeFlightIdentityPart(rawName);
+  if (REMOTE_AIRPORT_ALIASES[normalized]) {
+    return REMOTE_AIRPORT_DISPLAY_NAMES[REMOTE_AIRPORT_ALIASES[normalized]];
+  }
+  if (/^[A-Z0-9]{3,4}$/.test(normalized)) {
+    return undefined;
+  }
+
+  return formatAirportName(rawName);
+}
+
+export function getFlightAirportDisplay(airport: any, fallback = 'N/A'): FlightAirportDisplay {
+  const code = getFlightAirportCode(airport) ?? '';
+  const curatedName = code ? REMOTE_AIRPORT_DISPLAY_NAMES[code] : undefined;
+  const objectName = getAirportObjectName(airport);
+  const name = curatedName ?? objectName;
+  const compactLabel = code || name || fallback;
+  const label = code && name
+    ? `${code} · ${name}`
+    : compactLabel;
+
+  return {
+    code,
+    name,
+    label,
+    compactLabel,
+    accessibilityLabel: label,
+  };
+}
+
+export function getFlightAirportLabel(airport: any, fallback = 'N/A'): string {
+  const display = getFlightAirportDisplay(airport, fallback);
+  return display.code || display.name || fallback;
 }
 
 export function getFlightScheduledTs(item: any, direction: FlightDirection): number | undefined {
@@ -221,6 +276,51 @@ const REMOTE_AIRPORT_ALIASES: Record<string, string> = {
   TIRANA: 'TIA',
   TIRANAINTERNATIONAL: 'TIA',
   LATI: 'TIA',
+};
+
+const REMOTE_AIRPORT_DISPLAY_NAMES: Record<string, string> = {
+  AMS: 'Amsterdam Schiphol',
+  BCN: 'Barcelona El Prat',
+  BER: 'Berlin Brandenburg',
+  BGY: 'Bergamo Orio al Serio',
+  BHX: 'Birmingham',
+  BLQ: 'Bologna Guglielmo Marconi',
+  BRI: 'Bari',
+  BRS: 'Bristol',
+  BVA: 'Paris Beauvais',
+  CAG: 'Cagliari',
+  CDG: 'Paris Charles de Gaulle',
+  CIA: 'Rome Ciampino',
+  CRL: 'Brussels South Charleroi',
+  CTA: 'Catania Fontanarossa',
+  DUB: 'Dublin',
+  EIN: 'Eindhoven',
+  FCO: 'Rome Fiumicino',
+  FLR: 'Florence Peretola',
+  FRA: 'Frankfurt',
+  GOT: 'Gothenburg Landvetter',
+  IBZ: 'Ibiza',
+  KRK: 'Krakow John Paul II',
+  LCY: 'London City',
+  LGW: 'London Gatwick',
+  LHR: 'London Heathrow',
+  LIN: 'Milan Linate',
+  LTN: 'London Luton',
+  MAD: 'Madrid Barajas',
+  MAN: 'Manchester',
+  MXP: 'Milan Malpensa',
+  NAP: 'Naples International',
+  OLB: 'Olbia Costa Smeralda',
+  ORY: 'Paris Orly',
+  PMI: 'Palma de Mallorca',
+  PMO: 'Palermo Falcone Borsellino',
+  PRG: 'Prague',
+  PSA: 'Pisa Galileo Galilei',
+  REG: 'Reggio Calabria',
+  SJJ: 'Sarajevo',
+  STN: 'London Stansted',
+  TIA: 'Tirana',
+  VCE: 'Venice Marco Polo',
 };
 
 function canonicalizeAirportIdentity(value: unknown): string {

@@ -88,6 +88,7 @@ assert(adapter.getFlightBestTs(departed, 'departure') === 875, 'best time should
 assert(adapter.getFlightStableKey(delayed, 'departure') === 'W45030_900', 'stable key should use flight number and scheduled time');
 
 assert(typeof adapter.getFlightAirportLabel === 'function', 'flight adapter should expose airport label helper');
+assert(typeof adapter.getFlightAirportDisplay === 'function', 'flight adapter should expose airport display helper');
 assert(
   adapter.getFlightAirportLabel({ code: { iata: 'AMS' }, name: 'Amsterdam' }) === 'AMS',
   'airport label should prefer nested IATA code',
@@ -112,6 +113,14 @@ assert(
   adapter.getFlightAirportLabel({ name: 'Amsterdam Schiphol' }) === 'AMS',
   'airport label should canonicalize common airport aliases to IATA codes',
 );
+const gatwickDisplay = adapter.getFlightAirportDisplay({ code: { iata: 'LGW' }, name: 'LGW' });
+assert(gatwickDisplay.code === 'LGW', 'airport display should expose the IATA code');
+assert(gatwickDisplay.name === 'London Gatwick', 'airport display should decode known IATA codes to readable names');
+assert(gatwickDisplay.label === 'LGW · London Gatwick', 'airport display should combine code and readable name');
+const amsterdamDisplay = adapter.getFlightAirportDisplay({ code: { iata: 'AMS' }, name: 'Amsterdam' });
+assert(amsterdamDisplay.name === 'Amsterdam Schiphol', 'airport display should prefer the curated full airport name when a code is known');
+const orlyDisplay = adapter.getFlightAirportDisplay({ name: 'PARIS ORLY' });
+assert(orlyDisplay.code === 'ORY' && orlyDisplay.name === 'Paris Orly', 'airport display should decode known airport-name aliases');
 
 const airlineOps = loadTsModule('src/utils/airlineOps.ts');
 assert(airlineOps.getAirlineColor('Transavia') === '#00A650', 'Transavia name should use brand green');

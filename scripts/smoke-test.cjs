@@ -27,6 +27,8 @@ const flightScreen = read('src/screens/FlightScreen.tsx');
 assert(flightScreen.includes("from '../utils/flightScheduleAdapter'"), 'FlightScreen should use the shared flight adapter');
 assert(flightScreen.includes("from '../utils/flightScreenCache'"), 'FlightScreen should use the shared flight screen cache');
 assert(flightScreen.includes("from '../utils/flightNotificationScheduler'"), 'FlightScreen should use the shared flight notification scheduler');
+assert(flightScreen.includes('getFlightAirportDisplay'), 'FlightScreen should render decoded airport code/name labels');
+assert(flightScreen.includes('headerAirportName'), 'FlightScreen should style decoded airport names separately from IATA codes');
 
 const flightNotificationScheduler = read('src/utils/flightNotificationScheduler.ts');
 for (const symbol of [

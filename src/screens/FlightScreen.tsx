@@ -36,6 +36,7 @@ import {
   compareFlightsChronologically,
   filterFlightsByAirlines,
   type FlightDirection,
+  getFlightAirportDisplay,
   getFlightAirportLabel,
   getFlightMergeKey,
   isFlightAirlineMatch,
@@ -131,9 +132,11 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
   const statusColor = raw === 'green' ? '#10b981' : raw === 'red' ? '#ef4444' : raw === 'yellow' ? '#f59e0b' : '#6b7280';
-  const originDest = activeTab === 'arrivals'
-    ? getFlightAirportLabel(item.flight?.airport?.origin, 'N/A')
-    : getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
+  const remoteAirport = activeTab === 'arrivals'
+    ? item.flight?.airport?.origin
+    : item.flight?.airport?.destination;
+  const airportDisplay = getFlightAirportDisplay(remoteAirport, 'N/A');
+  const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
   const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
   const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
   const duringShift = userShift && ts && (() => {
@@ -307,18 +310,21 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
           <View style={[s.airlineBrandRail, { backgroundColor: brandAccent }]} />
           <View style={s.headerLeft}>
             <LogoPill iataCode={iataCode} airlineName={airline} color={color} />
-            <View>
-              <Text style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
-              <Text style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>
+            <View style={s.headerText}>
+              <Text numberOfLines={1} style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
+              <Text numberOfLines={1} style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>
             </View>
           </View>
           <ValueChangeFlash
-            valueKey={`${time}|${originDest}`}
+            valueKey={`${time}|${airportDisplay.label}`}
             enabled={isOperations}
             style={s.headerMetaFlash}
           >
             <Text style={s.headerTime}>{time}</Text>
-            <Text style={s.headerDest}>{originDest}</Text>
+            <Text style={s.headerAirportCode}>{airportDisplay.code || airportDisplay.compactLabel}</Text>
+            {airportDisplay.name && Boolean(airportDisplay.code) && (
+              <Text numberOfLines={2} style={s.headerAirportName}>{airportDisplay.name}</Text>
+            )}
           </ValueChangeFlash>
         </LinearGradient>
         {/* Body */}
@@ -1410,12 +1416,15 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     statusText: { fontSize: 10, fontWeight: '800', letterSpacing: isOperations ? 0.6 : 0 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
     airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
-    headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
+    headerText: { flex: 1, minWidth: 0 },
     headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
     headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
-    headerMetaFlash: { alignItems: 'flex-end', borderRadius: 12, marginRight: -8, paddingHorizontal: 8, paddingVertical: 4 },
+    headerMetaFlash: { alignItems: 'flex-end', borderRadius: 12, marginRight: -8, paddingHorizontal: 8, paddingVertical: 4, maxWidth: isOperations ? 150 : 142, flexShrink: 0 },
     headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 19 : 18, lineHeight: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
     headerDest: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
+    headerAirportCode: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.86)', fontSize: isOperations ? 11 : 10, lineHeight: 13, fontWeight: '900', letterSpacing: isOperations ? 1.1 : 0.8, textAlign: 'right' },
+    headerAirportName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.72)', fontSize: isOperations ? 9 : 8.5, lineHeight: isOperations ? 10.5 : 10, textAlign: 'right' },
     cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, backgroundColor: operationPanel },
     bodyInfo: { fontSize: 11, color: c.textSub },
     bodyTime: { fontWeight: '700', color: c.text },
