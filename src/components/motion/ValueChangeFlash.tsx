@@ -3,7 +3,13 @@ import {
   Animated,
   StyleSheet,
 } from 'react-native';
-import { motionDurations, motionEasing, useReducedMotionPreference } from '../../utils/motion';
+import {
+  motionDurations,
+  motionEasing,
+  motionRecipeDurations,
+  motionRecipeSprings,
+  useReducedMotionPreference,
+} from '../../utils/motion';
 
 type ValueChangeFlashProps = {
   children: React.ReactNode;
@@ -42,21 +48,32 @@ export default function ValueChangeFlash({
     Animated.sequence([
       Animated.timing(flash, {
         toValue: 1,
-        duration: reducedMotion ? motionDurations.instant : motionDurations.quick,
+        duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.snap,
         easing: motionEasing.board,
         useNativeDriver: true,
       }),
-      Animated.timing(flash, {
+      Animated.spring(flash, {
         toValue: 0,
-        duration: reducedMotion ? motionDurations.quick : motionDurations.panel,
-        easing: motionEasing.exit,
+        ...(reducedMotion ? motionRecipeSprings.navDetent : motionRecipeSprings.instrument),
         useNativeDriver: true,
       }),
     ]).start();
   }, [enabled, flash, reducedMotion, valueKey]);
 
+  const flashScale = flash.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, reducedMotion ? 1.006 : 1.024],
+  });
+  const instrumentSheen = flash.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-60, 80],
+  });
+
   return (
-    <Animated.View style={[style, styles.wrap]}>
+    <Animated.View
+      accessibilityLiveRegion="polite"
+      style={[style, styles.wrap, { transform: [{ scale: flashScale }] }]}
+    >
       <Animated.View
         pointerEvents="none"
         style={[
@@ -65,6 +82,16 @@ export default function ValueChangeFlash({
           {
             backgroundColor: flashColor,
             opacity: flash,
+          },
+        ]}
+      />
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.instrumentSheen,
+          {
+            opacity: flash,
+            transform: [{ translateX: instrumentSheen }, { skewX: '-18deg' }],
           },
         ]}
       />
@@ -80,5 +107,14 @@ const styles = StyleSheet.create({
   },
   flash: {
     borderRadius: 999,
+  },
+  instrumentSheen: {
+    position: 'absolute',
+    top: -6,
+    bottom: -6,
+    left: 0,
+    width: 22,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.24)',
   },
 });

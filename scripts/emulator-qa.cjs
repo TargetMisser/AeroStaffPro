@@ -201,6 +201,37 @@ async function grantCalendarIfPrompt(outDir) {
   return true;
 }
 
+async function dismissBlockingOverlays(outDir) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const xml = dumpUi(outDir, `blocking-overlays-${attempt}`);
+
+    if (/Viewing full screen/.test(xml) || /text="Got it"/.test(xml)) {
+      const gotIt = findNodeCenter(xml, node =>
+        /text="Got it"/.test(node) || /resource-id="com\.android\.systemui:id\/ok"/.test(node)
+      );
+      if (tap(gotIt)) {
+        await sleep(1200);
+        continue;
+      }
+    }
+
+    if (/Aggiornamento disponibile|Update available/.test(xml)) {
+      const later = findNodeCenter(xml, node =>
+        /text="Più tardi"/.test(node)
+        || /text="Piu tardi"/.test(node)
+        || /text="Later"/.test(node)
+        || /content-desc="[^"]*(Più tardi|Piu tardi|Later)[^"]*"/.test(node)
+      );
+      if (tap(later)) {
+        await sleep(1200);
+        continue;
+      }
+    }
+
+    return;
+  }
+}
+
 function extractText(xml) {
   return [...xml.matchAll(/text="([^"]+)"/g)]
     .map(match => match[1])
@@ -251,6 +282,7 @@ async function main() {
   await sleep(8000);
   const grantedCalendar = await grantCalendarIfPrompt(args.outDir);
   if (grantedCalendar) console.log('Granted calendar permission prompt');
+  await dismissBlockingOverlays(args.outDir);
 
   screenshot(args.outDir, 'home');
   const homeXml = dumpUi(args.outDir, 'home');

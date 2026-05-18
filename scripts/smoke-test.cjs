@@ -184,4 +184,11 @@ for (const file of [
   assert(source.includes('useNativeDriver: true'), `${file} should keep animations on the native driver`);
 }
 
+const valueChangeFlash = read('src/components/motion/ValueChangeFlash.tsx');
+assert(valueChangeFlash.includes('motionRecipeDurations'), 'ValueChangeFlash should use centralized live-update motion durations');
+assert(valueChangeFlash.includes('motionRecipeSprings'), 'ValueChangeFlash should use centralized live-update motion springs');
+assert(valueChangeFlash.includes('instrumentSheen'), 'ValueChangeFlash should render an instrument-style sheen');
+assert(valueChangeFlash.includes('flashScale'), 'ValueChangeFlash should scale changed values subtly');
+assert(valueChangeFlash.includes('accessibilityLiveRegion'), 'ValueChangeFlash should announce updated values politely');
+
 console.log('Smoke test passed.');

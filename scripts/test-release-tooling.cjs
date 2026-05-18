@@ -34,6 +34,7 @@ const packageJson = readJson('package.json');
 const scripts = packageJson.scripts || {};
 const releaseQuickSource = fs.readFileSync(path.join(root, 'scripts', 'release-quick.cjs'), 'utf8');
 const bumpVersionSource = fs.readFileSync(path.join(root, 'scripts', 'bump-version.cjs'), 'utf8');
+const emulatorQaSource = fs.readFileSync(path.join(root, 'scripts', 'emulator-qa.cjs'), 'utf8');
 
 assert(scripts['dev:doctor'] === 'node scripts/dev-doctor.cjs', 'package.json should expose dev:doctor');
 assert(scripts['release:verify'] === 'node scripts/release-verify.cjs', 'package.json should expose release:verify');
@@ -46,6 +47,10 @@ assert(
 runHelp('dev-doctor.cjs');
 runHelp('release-verify.cjs');
 runHelp('release-quick.cjs');
+
+assert(emulatorQaSource.includes('dismissBlockingOverlays'), 'emulator QA should dismiss blocking update/system overlays');
+assert(emulatorQaSource.includes('Viewing full screen'), 'emulator QA should handle Android immersive-mode education overlay');
+assert(emulatorQaSource.includes('Aggiornamento disponibile'), 'emulator QA should handle in-app update modal before navigation');
 
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
