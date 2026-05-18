@@ -1,5 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
@@ -20,6 +21,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import PasswordScreen from './src/screens/PasswordScreen';
 import ArionInboxScreen from './src/screens/ArionInboxScreen';
 import DesignLabScreen from './src/screens/DesignLabScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import AppTabBar, { type AppTabBarItem, type AppTabId } from './src/components/AppTabBar';
 import ProfileSwitcherModal from './src/components/ProfileSwitcherModal';
@@ -33,11 +35,13 @@ import { checkForUpdate, wasUpdateSeen, markUpdateSeen, type UpdateInfo } from '
 import UpdateModal from './src/components/UpdateModal';
 import { useAirport } from './src/context/AirportContext';
 import { motionSpring } from './src/utils/motion';
+import { ONBOARDING_SETUP_STORAGE_KEY, shouldShowOnboarding } from './src/utils/appSetup';
 
 installGlobalCrashHandler();
 
 type Tab = AppTabId;
-type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'Settings' | 'DesignLab' | null;
+type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'Settings' | 'DesignLab' | 'Onboarding' | null;
+type SettingsInitialModal = 'providers' | 'debug' | null;
 
 const TABS: AppTabBarItem[] = [
   { id: 'Shifts',    icon: 'home',           label: 'Home'     },
@@ -59,6 +63,7 @@ const OVERLAY_TITLES: Record<NonNullable<OverlayScreen>, string> = {
   ArionInbox: 'Arion Inbox',
   Settings:  'Impostazioni',
   DesignLab: 'Design Lab',
+  Onboarding: 'Setup guidato',
 };
 
 // ─── Inner app (inside ThemeProvider) ────────────────────────────────────────
@@ -72,6 +77,7 @@ function AppInner() {
   const [overlay, setOverlay]       = useState<OverlayScreen>(null);
   const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [settingsInitialModal, setSettingsInitialModal] = useState<SettingsInitialModal>(null);
 
   const tabLabels: Record<Tab, string> = {
     Shifts: t('tabHome'), Calendar: t('tabShifts'), Flights: t('tabFlights'), TravelDoc: t('tabTravelDoc'),
@@ -80,6 +86,7 @@ function AppInner() {
     Notepad: t('overlayNotepad'), Phonebook: t('overlayPhonebook'),
     Passwords: t('overlayPasswords'), Manuals: t('overlayManuals'), ArionInbox: t('overlayArionInbox'), Settings: t('overlaySettings'),
     DesignLab: 'Design Lab',
+    Onboarding: 'Setup guidato',
   };
 
   const handleDrawerSelect = (id: string) => setOverlay(id as OverlayScreen);
@@ -98,6 +105,14 @@ function AppInner() {
       const seen = await wasUpdateSeen(info.latestVersion);
       if (!seen) setPendingUpdate(info);
     }).catch(() => {});
+
+    AsyncStorage.getItem(ONBOARDING_SETUP_STORAGE_KEY)
+      .then(value => {
+        if (shouldShowOnboarding(value)) {
+          setOverlay(current => current ?? 'Onboarding');
+        }
+      })
+      .catch(() => {});
 
   }, []);
 
@@ -185,8 +200,25 @@ function AppInner() {
     if (overlay === 'Passwords') return <PasswordScreen />;
     if (overlay === 'Manuals')   return <ManualsScreen />;
     if (overlay === 'ArionInbox') return <ArionInboxScreen />;
-    if (overlay === 'Settings')  return <SettingsScreen />;
+    if (overlay === 'Settings')  return (
+      <SettingsScreen
+        initialModal={settingsInitialModal}
+        onInitialModalConsumed={() => setSettingsInitialModal(null)}
+        onOpenOnboarding={() => setOverlay('Onboarding')}
+      />
+    );
     if (overlay === 'DesignLab' && __DEV__) return <DesignLabScreen />;
+    if (overlay === 'Onboarding') return (
+      <OnboardingScreen
+        onComplete={() => setOverlay(null)}
+        onOpenProfiles={() => setProfileModalOpen(true)}
+        onOpenFlightApis={() => {
+          setSettingsInitialModal('providers');
+          setOverlay('Settings');
+        }}
+        onOpenSettings={() => setOverlay('Settings')}
+      />
+    );
     return null;
   };
 

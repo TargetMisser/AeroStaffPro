@@ -18,6 +18,14 @@ import ShiftTimeline from '../components/ShiftTimeline';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getAirportInfo } from '../utils/airportSettings';
 import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
+import { getCachedFlightProviderDiagnostics, type FlightProviderDiagnosticsSnapshot } from '../utils/fr24api';
+import { getNotificationDebugSnapshot, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
+import {
+  buildHomeHealthChips,
+  buildHomeOperationalSummary,
+  type HomeHealthChip,
+  type HomeHealthTone,
+} from '../utils/homeOperationalStatus';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import {
   getWritableCalendarId,
@@ -36,6 +44,26 @@ enableLegacyAndroidLayoutAnimation();
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const HOME_REST_TIMING = { startHour: 12, startMinute: 0, endHour: 14, endMinute: 0, allDay: true };
 type HomeShiftKind = 'today' | 'next' | 'rest' | 'none';
+
+function healthToneColor(tone: HomeHealthTone, fallback: string): string {
+  if (tone === 'ready') return '#10B981';
+  if (tone === 'missing') return '#EF4444';
+  return fallback;
+}
+
+function healthIcon(id: HomeHealthChip['id']): keyof typeof MaterialIcons.glyphMap {
+  switch (id) {
+    case 'airport':
+      return 'local-airport';
+    case 'flights':
+      return 'radar';
+    case 'notifications':
+      return 'notifications-active';
+    case 'widget':
+    default:
+      return 'widgets';
+  }
+}
 
 // months comes from useLanguage() context
 
@@ -190,6 +218,9 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [newEndM, setNewEndM] = useState('00');
   const [uploadMode, setUploadMode] = useState<'image' | 'manual' | null>(null);
   const [pinnedFlight, setPinnedFlight] = useState<any>(null);
+  const [flightProviderStatus, setFlightProviderStatus] = useState<FlightProviderDiagnosticsSnapshot | null>(null);
+  const [notificationStatus, setNotificationStatus] = useState<NotificationDebugSnapshot | null>(null);
+  const [statusNow, setStatusNow] = useState(Date.now());
 
   const webViewRef = useRef<WebView>(null);
 
@@ -254,6 +285,27 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
 
   useEffect(() => { fetchShift(); }, []);
   useEffect(() => { fetchWeather(); }, [airportCode, weatherMap]);
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshHomeStatus = async () => {
+      const [provider, notifications] = await Promise.all([
+        getCachedFlightProviderDiagnostics(airportCode).catch(() => null),
+        getNotificationDebugSnapshot().catch(() => null),
+      ]);
+      if (!mounted) return;
+      setFlightProviderStatus(provider);
+      setNotificationStatus(notifications);
+      setStatusNow(Date.now());
+    };
+
+    refreshHomeStatus().catch(() => {});
+    const interval = setInterval(() => { refreshHomeStatus().catch(() => {}); }, 60_000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [airportCode]);
 
   useEffect(() => {
     const loadPinned = async () => {
@@ -489,6 +541,25 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const isRest = shiftEvent?.title?.includes('Riposo');
   const isWork = shiftEvent?.title?.includes('Lavoro');
   const isNextShift = isWork && shiftKind === 'next';
+  const operationalSummary = useMemo(() => buildHomeOperationalSummary({
+    loadingShift,
+    shiftKind,
+    isWork: Boolean(isWork),
+    isRest: Boolean(isRest),
+    shiftStartMs: shiftEvent ? new Date(shiftEvent.startDate).getTime() : null,
+    shiftEndMs: shiftEvent ? new Date(shiftEvent.endDate).getTime() : null,
+    nowMs: statusNow,
+    hasPinnedFlight: Boolean(pinnedFlight),
+  }), [isRest, isWork, loadingShift, pinnedFlight, shiftEvent, shiftKind, statusNow]);
+  const healthChips = useMemo(() => buildHomeHealthChips({
+    providerLabel: flightProviderStatus?.sourceLabel,
+    providerFetchedAt: flightProviderStatus?.fetchedAt,
+    notificationsEnabled: notificationStatus?.enabled ?? false,
+    pendingNotifications: notificationStatus?.pendingAeroStaff ?? 0,
+    duplicateNotifications: notificationStatus?.possibleDuplicates.length ?? 0,
+    airportCode,
+    nowMs: statusNow,
+  }), [airportCode, flightProviderStatus, notificationStatus, statusNow]);
   const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
 
   return (
@@ -527,9 +598,59 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
         </BoardReveal>
       </View>
 
+      <BoardReveal index={2} enabled={isOperations}>
+        <View style={s.operationalCard}>
+          <View style={s.operationalHeader}>
+            <View style={s.operationalTitleBlock}>
+              <Text style={s.operationalKicker}>{operationalSummary.kicker}</Text>
+              <Text style={s.operationalTitle}>{operationalSummary.title}</Text>
+              <Text style={s.operationalDetail}>{operationalSummary.detail}</Text>
+            </View>
+            <View style={[
+              s.operationalBeacon,
+              operationalSummary.tone === 'active' && s.operationalBeaconActive,
+              operationalSummary.tone === 'next' && s.operationalBeaconNext,
+              operationalSummary.tone === 'rest' && s.operationalBeaconRest,
+            ]}>
+              <MaterialIcons
+                name={operationalSummary.tone === 'active' ? 'play-arrow' : operationalSummary.tone === 'rest' ? 'hotel' : 'schedule'}
+                size={22}
+                color="#FFFFFF"
+              />
+            </View>
+          </View>
+          {operationalSummary.badges.length > 0 && (
+            <View style={s.summaryBadgeRow}>
+              {operationalSummary.badges.map(badge => (
+                <View key={badge} style={s.summaryBadge}>
+                  <MaterialIcons name="push-pin" size={12} color={colors.primaryDark} />
+                  <Text style={s.summaryBadgeText}>{badge}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+          <View style={s.healthGrid}>
+            {healthChips.map(chip => {
+              const tone = healthToneColor(chip.tone, colors.primary);
+              return (
+                <View key={chip.id} style={[s.healthChip, { borderColor: `${tone}55`, backgroundColor: `${tone}16` }]}>
+                  <MaterialIcons name={healthIcon(chip.id)} size={15} color={tone} />
+                  <View style={s.healthText}>
+                    <Text style={[s.healthLabel, { color: colors.textSub }]}>{chip.label}</Text>
+                    <Text numberOfLines={1} style={[s.healthValue, { color: chip.tone === 'missing' ? tone : colors.text }]}>
+                      {chip.value}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </BoardReveal>
+
       {/* Pinned flight */}
       {pinnedFlight && (
-        <BoardReveal index={2} enabled={isOperations}>
+        <BoardReveal index={3} enabled={isOperations}>
           <PinnedFlightCard item={pinnedFlight} colors={colors} isOperations={isOperations} />
         </BoardReveal>
       )}
@@ -537,7 +658,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       {/* Turno Attuale */}
       <Text style={s.sectionTitle}>{isNextShift ? t('homeNextShift') : t('homeCurrentShift')}</Text>
 
-      <BoardReveal index={pinnedFlight ? 3 : 2} enabled={isOperations}>
+      <BoardReveal index={pinnedFlight ? 4 : 3} enabled={isOperations}>
         <View style={s.shiftCard}>
           {loadingShift ? (
             <ActivityIndicator color={colors.primary} />
@@ -601,6 +722,24 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     dateToday: { fontSize: 10, color: isOperations ? 'rgba(153,246,228,0.72)' : 'rgba(255,255,255,0.6)', letterSpacing: 1.7, fontWeight: '800' },
     dateNum: { fontSize: 36, fontWeight: '800', color: isOperations ? c.primaryDark : '#fff', lineHeight: 40 },
     dateMonth: { fontSize: 12, color: isOperations ? c.textSub : 'rgba(255,255,255,0.7)', marginTop: 2 },
+    operationalCard: { marginHorizontal: 16, marginTop: 8, backgroundColor: operationPanel, borderRadius: isOperations ? 24 : 20, padding: 16, borderWidth: 1, borderColor: operationBorder, gap: 13, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 12, elevation: isOperations ? 0 : 3 },
+    operationalHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    operationalTitleBlock: { flex: 1, gap: 3 },
+    operationalKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.8, color: isOperations ? 'rgba(153,246,228,0.70)' : c.textMuted },
+    operationalTitle: { fontSize: isOperations ? 25 : 22, fontWeight: '900', color: c.text, letterSpacing: -0.5 },
+    operationalDetail: { fontSize: 13, lineHeight: 18, color: c.textSub },
+    operationalBeacon: { width: 48, height: 48, borderRadius: isOperations ? 16 : 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#64748B' },
+    operationalBeaconActive: { backgroundColor: '#10B981' },
+    operationalBeaconNext: { backgroundColor: c.primary },
+    operationalBeaconRest: { backgroundColor: '#0EA5E9' },
+    summaryBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    summaryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 999, borderWidth: 1, borderColor: operationBorder, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, paddingHorizontal: 9, paddingVertical: 5 },
+    summaryBadgeText: { fontSize: 11, fontWeight: '900', color: c.primaryDark },
+    healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    healthChip: { width: '48%', minWidth: 134, flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
+    healthText: { flex: 1, minWidth: 0 },
+    healthLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+    healthValue: { fontSize: 12, fontWeight: '900', marginTop: 1 },
     sectionTitle: { fontSize: 12, fontWeight: '800', color: isOperations ? 'rgba(153,246,228,0.66)' : c.textSub, letterSpacing: isOperations ? 1.6 : 0.5, marginHorizontal: 16, marginTop: 16, marginBottom: 8, textTransform: 'uppercase' },
     shiftCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: 16, padding: isOperations ? 18 : 16, flexDirection: 'row', gap: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.10, shadowRadius: 12, elevation: isOperations ? 0 : 4, minHeight: isOperations ? 104 : 90, borderWidth: 1, borderColor: operationBorder },
     shiftStrip: { width: isOperations ? 5 : 4, borderRadius: 999, backgroundColor: c.primary, marginRight: 2 },

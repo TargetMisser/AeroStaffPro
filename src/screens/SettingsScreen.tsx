@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator,
   Modal, KeyboardAvoidingView, Platform, TextInput, Linking,
@@ -212,8 +212,18 @@ type DialogState = {
   scrollable?: boolean;
 };
 
+type SettingsScreenProps = {
+  initialModal?: 'providers' | 'debug' | null;
+  onInitialModalConsumed?: () => void;
+  onOpenOnboarding?: () => void;
+};
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function SettingsScreen() {
+export default function SettingsScreen({
+  initialModal = null,
+  onInitialModalConsumed,
+  onOpenOnboarding,
+}: SettingsScreenProps = {}) {
   const { colors, mode, setMode, isLoading } = useAppTheme();
   const {
     airportCode,
@@ -263,6 +273,7 @@ export default function SettingsScreen() {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
   const [importingBackup, setImportingBackup] = useState(false);
+  const consumedInitialModal = useRef<string | null>(null);
   useEffect(() => {
     getCachedUpdateInfo().then(setUpdateInfo);
   }, []);
@@ -484,6 +495,18 @@ export default function SettingsScreen() {
     setDebugModalOpen(false);
   };
 
+  useEffect(() => {
+    if (!initialModal || consumedInitialModal.current === initialModal) {
+      return;
+    }
+
+    consumedInitialModal.current = initialModal;
+    const openInitialModal = initialModal === 'providers' ? openProviderModal : openDebugModal;
+    openInitialModal()
+      .catch(() => {})
+      .finally(() => onInitialModalConsumed?.());
+  }, [initialModal, onInitialModalConsumed]);
+
   const chooseProviderPreference = async (preference: FlightProviderPreference) => {
     setProviderPreference(preference);
     await saveFlightProviderPreference(preference);
@@ -674,6 +697,18 @@ export default function SettingsScreen() {
       {/* ── Sezione Account ── */}
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('sectionAccount')}</Text>
       <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }, colors.isDark && { elevation: 0, shadowOpacity: 0, borderWidth: 1 }]}>
+        {onOpenOnboarding && (
+          <>
+            <SettingRow
+              icon="tune"
+              label="Setup guidato"
+              sublabel="Rivedi profilo, permessi, API voli, notifiche e widget"
+              type="arrow"
+              onPress={onOpenOnboarding}
+            />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+          </>
+        )}
         <SettingRow
           icon="badge"
           label={t('profileTitle')}

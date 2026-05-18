@@ -19,6 +19,7 @@ const scripts = packageJson.scripts || {};
 
 assert(scripts.typecheck, 'package.json should expose typecheck');
 assert(scripts['test:flight-helpers'], 'package.json should expose test:flight-helpers');
+assert(scripts['test:app-setup'], 'package.json should expose test:app-setup');
 assert(scripts['test:smoke'], 'package.json should expose test:smoke');
 assert(scripts['release:check'], 'package.json should expose release:check');
 assert(scripts['github:branches:audit'], 'package.json should expose github:branches:audit');
@@ -93,6 +94,8 @@ assert(releaseScript.includes('npm run release:check'), 'local APK release shoul
 const appSource = read('App.tsx');
 assert(appSource.includes('SafeAreaProvider'), 'App root should provide safe-area insets');
 assert(appSource.includes('GestureHandlerRootView'), 'App root should be wrapped in GestureHandlerRootView');
+assert(appSource.includes("from './src/screens/OnboardingScreen'"), 'App should expose the guided setup screen');
+assert(appSource.includes('ONBOARDING_SETUP_STORAGE_KEY'), 'App should use the shared onboarding completion key');
 assert(appSource.includes('useSafeAreaInsets'), 'App shell should read native safe-area insets');
 assert(!appSource.includes('paddingTop: StatusBar.currentHeight || 48'), 'Root view should not create a blank status-bar spacer');
 assert(appSource.includes('translucent'), 'StatusBar should allow the app bar surface behind the status area');
@@ -121,6 +124,20 @@ for (const patternId of [
 
 const cinematicStory = read('.storybook/stories/cinematic-motion-board.stories.tsx');
 assert(cinematicStory.includes('CinematicMotionBoard'), 'Storybook should expose the Cinematic Motion Board');
+
+const onboardingSource = read('src/screens/OnboardingScreen.tsx');
+assert(onboardingSource.includes('buildSetupChecklist'), 'Onboarding screen should use shared setup checklist logic');
+assert(onboardingSource.includes('requestCalendarPermissionsAsync'), 'Onboarding should guide calendar permission setup');
+assert(onboardingSource.includes('requestPermissionsAsync'), 'Onboarding should guide notification permission setup');
+
+const homeScreen = read('src/screens/HomeScreen.tsx');
+assert(homeScreen.includes("from '../utils/homeOperationalStatus'"), 'Home should use shared operational status helpers');
+assert(homeScreen.includes('buildHomeOperationalSummary'), 'Home should render an operational now/next summary');
+assert(homeScreen.includes('buildHomeHealthChips'), 'Home should render lightweight app health chips');
+
+const settingsScreen = read('src/screens/SettingsScreen.tsx');
+assert(settingsScreen.includes('onOpenOnboarding'), 'Settings should expose guided setup again after first launch');
+assert(settingsScreen.includes('Setup guidato'), 'Settings should render a guided setup entry point');
 
 const designLab = read('src/screens/DesignLabScreen.tsx');
 assert(designLab.includes('CinematicMotionBoard'), 'Design Lab should embed the Cinematic Motion Board prototype');
