@@ -33,12 +33,14 @@ function runHelp(scriptName) {
 const packageJson = readJson('package.json');
 const scripts = packageJson.scripts || {};
 const releaseQuickSource = fs.readFileSync(path.join(root, 'scripts', 'release-quick.cjs'), 'utf8');
+const windowsReleaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'build-release-windows.yml'), 'utf8');
 const bumpVersionSource = fs.readFileSync(path.join(root, 'scripts', 'bump-version.cjs'), 'utf8');
 const emulatorQaSource = fs.readFileSync(path.join(root, 'scripts', 'emulator-qa.cjs'), 'utf8');
 
 assert(scripts['dev:doctor'] === 'node scripts/dev-doctor.cjs', 'package.json should expose dev:doctor');
 assert(scripts['release:verify'] === 'node scripts/release-verify.cjs', 'package.json should expose release:verify');
 assert(scripts['release:quick'] === 'node scripts/release-quick.cjs', 'package.json should expose release:quick');
+assert(scripts['runner:setup'] === 'powershell -ExecutionPolicy Bypass -File scripts/setup-local-runner.ps1', 'package.json should expose runner:setup');
 assert(
   scripts['test:release-tooling'] === 'node scripts/test-release-tooling.cjs',
   'package.json should expose test:release-tooling',
@@ -55,6 +57,10 @@ assert(emulatorQaSource.includes('Aggiornamento disponibile'), 'emulator QA shou
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
 assert(releaseQuickSource.includes("'--ref'"), 'release:quick should dispatch the GitHub workflow from the current branch');
+assert(releaseQuickSource.includes('--local-runner'), 'release:quick should expose the local runner option');
+assert(releaseQuickSource.includes('build-release-windows.yml'), 'release:quick should support the Windows local runner workflow');
+assert(windowsReleaseWorkflow.includes('runs-on: [self-hosted, Windows, X64, aerostaff]'), 'Windows workflow should target the AeroStaff self-hosted runner');
+assert(windowsReleaseWorkflow.includes('Resolve Android SDK'), 'Windows workflow should use the local Android SDK');
 assert(bumpVersionSource.includes('README.md'), 'version:bump should update README stable version');
 assert(
   bumpVersionSource.includes('Latest stable release'),

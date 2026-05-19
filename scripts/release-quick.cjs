@@ -26,18 +26,20 @@ Runs the usual AeroStaff Pro release flow:
 Options:
   --repo owner/name   GitHub repo. Default: TargetMisser/AeroStaffPro
   --install           Install the verified APK on the connected Android device/emulator
+  --local-runner      Build on the configured Windows self-hosted runner
 
 Examples:
   npm run release:quick
   npm run release:quick -- minor
-  npm run release:quick -- 2.7.0 --install`);
+  npm run release:quick -- 2.7.0 --install
+  npm run release:quick -- --local-runner`);
 }
 
 function getBumpMode(args) {
   return args.find((arg) => !arg.startsWith('--') && args[args.indexOf(arg) - 1] !== '--repo') || 'patch';
 }
 
-function findWorkflowRun(repo, startedAtIso) {
+function findWorkflowRun(repo, workflowFile, startedAtIso) {
   const startedAt = Date.parse(startedAtIso) - 15000;
 
   for (let attempt = 1; attempt <= 30; attempt += 1) {
@@ -49,7 +51,7 @@ function findWorkflowRun(repo, startedAtIso) {
         '--repo',
         repo,
         '--workflow',
-        'build-release.yml',
+        workflowFile,
         '--json',
         'databaseId,createdAt,event,status,displayTitle',
         '--limit',
@@ -81,9 +83,12 @@ if (args.includes('--help') || args.includes('-h')) {
 
 const repo = parseRepoArg(args);
 const install = args.includes('--install');
+const useLocalRunner = args.includes('--local-runner');
+const workflowFile = useLocalRunner ? 'build-release-windows.yml' : 'build-release.yml';
 const bumpMode = getBumpMode(args);
 
 console.log('Starting AeroStaff Pro quick release');
+console.log(`Release workflow: ${workflowFile}`);
 assertCleanWorktree();
 
 const branch = getCurrentBranch();
@@ -108,7 +113,7 @@ const startedAt = new Date().toISOString();
 run('gh', [
   'workflow',
   'run',
-  'build-release.yml',
+  workflowFile,
   '--repo',
   repo,
   '--ref',
@@ -119,9 +124,9 @@ run('gh', [
   `version_override=${tag}`,
 ]);
 
-const runId = findWorkflowRun(repo, startedAt);
+const runId = findWorkflowRun(repo, workflowFile, startedAt);
 if (!runId) {
-  fail(`GitHub workflow was triggered, but the run id was not found. Check: https://github.com/${repo}/actions/workflows/build-release.yml`);
+  fail(`GitHub workflow was triggered, but the run id was not found. Check: https://github.com/${repo}/actions/workflows/${workflowFile}`);
 }
 
 run('gh', ['run', 'watch', String(runId), '--repo', repo, '--exit-status']);

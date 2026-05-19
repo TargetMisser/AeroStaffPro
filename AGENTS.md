@@ -65,6 +65,18 @@ npm run release:verify -- vX.Y.Z --install
 
 Full release docs: `docs/release-automation.md`.
 
+If the local Windows runner is configured and the user wants the faster PC build, use:
+
+```bash
+npm run release:quick -- --local-runner
+```
+
+The local runner must be a GitHub self-hosted Windows x64 runner with the custom label `aerostaff`. Initial setup helper:
+
+```powershell
+npm run runner:setup -- -Start
+```
+
 ## Emulator QA Flow
 
 Use this when the user asks to debug with the emulator, inspect UI regressions, or verify an APK in a realistic Android runtime:

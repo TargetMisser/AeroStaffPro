@@ -45,3 +45,34 @@ Install after release verification:
 ```bash
 npm run release:quick -- --install
 ```
+
+## Build On The Local Windows Runner
+
+The default release still uses GitHub-hosted Linux. To build on the configured local PC runner instead:
+
+```bash
+npm run release:quick -- --local-runner
+```
+
+The local runner workflow expects a self-hosted Windows x64 runner with the custom label `aerostaff`, plus the Android SDK components already installed:
+
+```text
+platforms/android-37
+build-tools/37.0.0
+ndk/27.1.12297006
+cmake/3.22.1
+```
+
+Initial runner setup from this PC:
+
+```powershell
+npm run runner:setup -- -Start
+```
+
+For a persistent runner after reboot, run PowerShell as Administrator and use:
+
+```powershell
+npm run runner:setup -- -InstallService
+```
+
+Keep using GitHub-hosted release builds if the local runner is offline or queued.

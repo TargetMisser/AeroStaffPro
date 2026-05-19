@@ -23,6 +23,7 @@ const appJson = readJson('app.json');
 const buildGradle = read('android/app/build.gradle');
 const readme = read('README.md');
 const releaseWorkflow = read('.github/workflows/build-release.yml');
+const windowsReleaseWorkflow = read('.github/workflows/build-release-windows.yml');
 const releaseScript = read('scripts/release-apk.sh');
 
 const packageVersion = packageJson.version;
@@ -45,6 +46,9 @@ assert(releaseWorkflow.includes('Create GitHub Release'), 'release workflow must
 assert(releaseWorkflow.includes('FORCE_JAVASCRIPT_ACTIONS_TO_NODE24'), 'release workflow must keep Node action compatibility guard');
 assert(releaseWorkflow.includes('git rev-parse HEAD'), 'release workflow must record the checked out source commit');
 assert(releaseWorkflow.includes('target_commitish'), 'release workflow must publish releases against the built commit');
+assert(windowsReleaseWorkflow.includes('runs-on: [self-hosted, Windows, X64, aerostaff]'), 'Windows release workflow must target the local AeroStaff runner');
+assert(windowsReleaseWorkflow.includes('Validate APK release metadata'), 'Windows release workflow must validate APK metadata');
+assert(windowsReleaseWorkflow.includes('Create GitHub Release'), 'Windows release workflow must create a GitHub Release');
 assert(releaseScript.includes('npm run release:check'), 'scripts/release-apk.sh must run release checks first');
 assert(releaseScript.includes('npm run test:smoke'), 'scripts/release-apk.sh must run smoke checks before Gradle');
 assert(releaseScript.includes('./gradlew clean assembleRelease'), 'scripts/release-apk.sh must build the release APK');
