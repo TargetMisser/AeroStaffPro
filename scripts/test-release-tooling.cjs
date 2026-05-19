@@ -61,6 +61,7 @@ assert(releaseQuickSource.includes('--local-runner'), 'release:quick should expo
 assert(releaseQuickSource.includes('build-release-windows.yml'), 'release:quick should support the Windows local runner workflow');
 assert(windowsReleaseWorkflow.includes('runs-on: [self-hosted, Windows, X64, aerostaff]'), 'Windows workflow should target the AeroStaff self-hosted runner');
 assert(windowsReleaseWorkflow.includes('Resolve Android SDK'), 'Windows workflow should use the local Android SDK');
+assert(windowsReleaseWorkflow.includes('publish_release'), 'Windows workflow should support build-only smoke tests');
 assert(bumpVersionSource.includes('README.md'), 'version:bump should update README stable version');
 assert(
   bumpVersionSource.includes('Latest stable release'),

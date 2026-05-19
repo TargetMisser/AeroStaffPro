@@ -76,3 +76,9 @@ npm run runner:setup -- -InstallService
 ```
 
 Keep using GitHub-hosted release builds if the local runner is offline or queued.
+
+To smoke test the Windows runner without publishing a release:
+
+```powershell
+gh workflow run build-release-windows.yml --ref codex/design-lab-storybook -f ref=$(git rev-parse HEAD) -f version_override=v2.7.6 -f publish_release=false
+```

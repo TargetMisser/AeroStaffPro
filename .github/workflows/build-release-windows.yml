@@ -11,6 +11,10 @@ on:
         description: 'Tag release (es. v2.7.7). Vuoto = legge app.json'
         required: false
         default: ''
+      publish_release:
+        description: 'true = crea/aggiorna la release GitHub, false = smoke test build only'
+        required: false
+        default: 'true'
 
 permissions:
   contents: write
@@ -185,6 +189,7 @@ jobs:
           "apk=$dest" >> $env:GITHUB_ENV
 
       - name: Create GitHub Release
+        if: ${{ github.event.inputs.publish_release != 'false' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}

@@ -49,6 +49,7 @@ assert(releaseWorkflow.includes('target_commitish'), 'release workflow must publ
 assert(windowsReleaseWorkflow.includes('runs-on: [self-hosted, Windows, X64, aerostaff]'), 'Windows release workflow must target the local AeroStaff runner');
 assert(windowsReleaseWorkflow.includes('Validate APK release metadata'), 'Windows release workflow must validate APK metadata');
 assert(windowsReleaseWorkflow.includes('Create GitHub Release'), 'Windows release workflow must create a GitHub Release');
+assert(windowsReleaseWorkflow.includes('publish_release'), 'Windows release workflow must support dry-run smoke tests');
 assert(releaseScript.includes('npm run release:check'), 'scripts/release-apk.sh must run release checks first');
 assert(releaseScript.includes('npm run test:smoke'), 'scripts/release-apk.sh must run smoke checks before Gradle');
 assert(releaseScript.includes('./gradlew clean assembleRelease'), 'scripts/release-apk.sh must build the release APK');
