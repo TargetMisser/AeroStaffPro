@@ -34,6 +34,8 @@ const packageJson = readJson('package.json');
 const scripts = packageJson.scripts || {};
 const releaseQuickSource = fs.readFileSync(path.join(root, 'scripts', 'release-quick.cjs'), 'utf8');
 const windowsReleaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'build-release-windows.yml'), 'utf8');
+const setupLocalRunnerSource = fs.readFileSync(path.join(root, 'scripts', 'setup-local-runner.ps1'), 'utf8');
+const startLocalRunnerSource = fs.readFileSync(path.join(root, 'scripts', 'start-local-runner.ps1'), 'utf8');
 const bumpVersionSource = fs.readFileSync(path.join(root, 'scripts', 'bump-version.cjs'), 'utf8');
 const emulatorQaSource = fs.readFileSync(path.join(root, 'scripts', 'emulator-qa.cjs'), 'utf8');
 
@@ -65,6 +67,11 @@ assert(windowsReleaseWorkflow.includes('publish_release'), 'Windows workflow sho
 assert(
   windowsReleaseWorkflow.includes("versionCode='([^']+)'\\s+versionName='([^']+)'"),
   'Windows workflow should not parse platformBuildVersionName as the APK versionName',
+);
+assert(setupLocalRunnerSource.includes('InstallStartupTask'), 'local runner setup should support current-user autostart');
+assert(
+  startLocalRunnerSource.includes("Runner.Listener.exe") && startLocalRunnerSource.includes('Start-Process'),
+  'local runner startup launcher should avoid duplicate runner processes before starting run.cmd',
 );
 assert(bumpVersionSource.includes('README.md'), 'version:bump should update README stable version');
 assert(

@@ -71,6 +71,12 @@ npm run runner:setup -- -Start
 
 The helper defaults to `C:\gha` with work folder `_w` to keep native Android/CMake paths short enough for Windows.
 
+For autostart without admin rights, install the current-user logon task:
+
+```powershell
+npm run runner:setup -- -InstallStartupTask -Start
+```
+
 For a persistent runner after reboot, run PowerShell as Administrator and use:
 
 ```powershell

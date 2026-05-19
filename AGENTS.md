@@ -77,6 +77,12 @@ The local runner must be a GitHub self-hosted Windows x64 runner with the custom
 npm run runner:setup -- -Start
 ```
 
+Current PC autostart helper, no admin required:
+
+```powershell
+npm run runner:setup -- -InstallStartupTask -Start
+```
+
 Keep the runner root short (`C:\gha`, work `_w`) or native Android/CMake builds can hit Windows path length limits.
 
 ## Emulator QA Flow

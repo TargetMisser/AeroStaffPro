@@ -5,7 +5,8 @@ param(
   [string]$Labels = 'aerostaff',
   [string]$WorkFolder = '_w',
   [switch]$Start,
-  [switch]$InstallService
+  [switch]$InstallService,
+  [switch]$InstallStartupTask
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,8 +18,34 @@ function Require-Command {
   }
 }
 
+function Install-StartupTask {
+  param([string]$RunnerRoot)
+
+  $taskName = 'AeroStaffPro GitHub Runner'
+  $launcher = Join-Path $PSScriptRoot 'start-local-runner.ps1'
+  if (-not (Test-Path -LiteralPath $launcher)) {
+    throw "Missing startup launcher: $launcher"
+  }
+
+  $powershell = (Get-Command powershell.exe).Source
+  $argument = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`" -RunnerRoot `"$RunnerRoot`""
+  $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+
+  $action = New-ScheduledTaskAction -Execute $powershell -Argument $argument -WorkingDirectory $PSScriptRoot
+  $trigger = New-ScheduledTaskTrigger -AtLogOn -User $currentUser
+  $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable -ExecutionTimeLimit ([TimeSpan]::Zero)
+  $principal = New-ScheduledTaskPrincipal -UserId $currentUser -LogonType Interactive -RunLevel Limited
+
+  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+  Write-Host "Installed startup task '$taskName' for $currentUser."
+}
+
 Require-Command gh
 Require-Command git
+
+if ($InstallService -and $InstallStartupTask) {
+  throw 'Use either -InstallService or -InstallStartupTask, not both.'
+}
 
 Write-Host "Configuring AeroStaff Pro self-hosted runner for $Repo"
 
@@ -72,7 +99,11 @@ try {
     }
   } elseif ($Start) {
     Write-Host "Starting runner in a hidden window..."
-    Start-Process -FilePath (Join-Path $RunnerRoot 'run.cmd') -WorkingDirectory $RunnerRoot -WindowStyle Hidden
+    & (Join-Path $PSScriptRoot 'start-local-runner.ps1') -RunnerRoot $RunnerRoot
+  }
+
+  if ($InstallStartupTask) {
+    Install-StartupTask -RunnerRoot $RunnerRoot
   }
 } finally {
   Pop-Location
@@ -80,6 +111,6 @@ try {
 
 Write-Host "Runner configured."
 Write-Host "Required workflow labels: self-hosted, Windows, X64, aerostaff"
-if (-not $Start -and -not $InstallService) {
+if (-not $Start -and -not $InstallService -and -not $InstallStartupTask) {
   Write-Host "Start manually with: $RunnerRoot\run.cmd"
 }
