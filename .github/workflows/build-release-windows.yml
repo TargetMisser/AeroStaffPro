@@ -80,14 +80,15 @@ jobs:
           }
 
           $required = @(
-            (Join-Path $sdk 'platforms\android-37'),
-            (Join-Path $sdk 'build-tools\37.0.0'),
-            (Join-Path $sdk 'ndk\27.1.12297006'),
-            (Join-Path $sdk 'cmake\3.22.1')
+            @{ name = 'Android platform 37'; paths = @((Join-Path $sdk 'platforms\android-37'), (Join-Path $sdk 'platforms\android-37.0')) },
+            @{ name = 'Android build-tools 37.0.0'; paths = @((Join-Path $sdk 'build-tools\37.0.0')) },
+            @{ name = 'Android NDK 27.1.12297006'; paths = @((Join-Path $sdk 'ndk\27.1.12297006')) },
+            @{ name = 'CMake 3.22.1'; paths = @((Join-Path $sdk 'cmake\3.22.1')) }
           )
-          foreach ($path in $required) {
-            if (-not (Test-Path -LiteralPath $path)) {
-              throw "Missing Android SDK component: $path"
+          foreach ($component in $required) {
+            $found = $component.paths | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+            if (-not $found) {
+              throw "Missing $($component.name). Checked: $($component.paths -join ', ')"
             }
           }
 
