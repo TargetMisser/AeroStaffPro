@@ -159,7 +159,7 @@ jobs:
           $aapt = Join-Path $env:ANDROID_HOME 'build-tools\37.0.0\aapt.exe'
           $badging = & $aapt dump badging $apk.FullName
           $packageLine = ($badging | Select-String -Pattern "^package:").Line
-          if ($packageLine -notmatch "versionCode='([^']+)'.*versionName='([^']+)'") {
+          if ($packageLine -notmatch "versionCode='([^']+)'\s+versionName='([^']+)'") {
             throw 'Could not parse APK badging output'
           }
 
