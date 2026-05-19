@@ -1,8 +1,9 @@
 param(
   [string]$Repo = $(if ($env:AEROSTAFF_GITHUB_REPO) { $env:AEROSTAFF_GITHUB_REPO } else { 'TargetMisser/AeroStaffPro' }),
-  [string]$RunnerRoot = 'C:\aerostaff-runner\actions-runner',
+  [string]$RunnerRoot = 'C:\gha',
   [string]$RunnerName = "aerostaff-$env:COMPUTERNAME",
   [string]$Labels = 'aerostaff',
+  [string]$WorkFolder = '_w',
   [switch]$Start,
   [switch]$InstallService
 )
@@ -54,7 +55,7 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 $repoUrl = "https://github.com/$Repo"
 Push-Location $RunnerRoot
 try {
-  & .\config.cmd --unattended --url $repoUrl --token $token --name $RunnerName --labels $Labels --work _work --replace
+  & .\config.cmd --unattended --url $repoUrl --token $token --name $RunnerName --labels $Labels --work $WorkFolder --replace
   if ($LASTEXITCODE -ne 0) {
     throw "config.cmd failed with exit code $LASTEXITCODE"
   }

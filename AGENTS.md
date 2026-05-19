@@ -77,6 +77,8 @@ The local runner must be a GitHub self-hosted Windows x64 runner with the custom
 npm run runner:setup -- -Start
 ```
 
+Keep the runner root short (`C:\gha`, work `_w`) or native Android/CMake builds can hit Windows path length limits.
+
 ## Emulator QA Flow
 
 Use this when the user asks to debug with the emulator, inspect UI regressions, or verify an APK in a realistic Android runtime:

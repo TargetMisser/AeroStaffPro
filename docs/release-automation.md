@@ -69,6 +69,8 @@ Initial runner setup from this PC:
 npm run runner:setup -- -Start
 ```
 
+The helper defaults to `C:\gha` with work folder `_w` to keep native Android/CMake paths short enough for Windows.
+
 For a persistent runner after reboot, run PowerShell as Administrator and use:
 
 ```powershell
