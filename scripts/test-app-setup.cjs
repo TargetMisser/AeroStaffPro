@@ -132,4 +132,37 @@ const health = homeStatus.buildHomeHealthChips({
 assert(health.some(chip => chip.id === 'flights' && chip.tone === 'ready'), 'fresh provider data should render as ready');
 assert(health.some(chip => chip.id === 'notifications' && chip.value === '4 attive'), 'notification chip should expose scheduled count');
 
+const flightRefreshPolicy = loadTsModule('src/utils/flightRefreshPolicy.ts');
+assert(flightRefreshPolicy.FLIGHT_AUTO_REFRESH_INTERVAL_MS === 120_000, 'flight auto refresh should stay at two minutes');
+assert(flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
+  isFocused: true,
+  airportLoading: false,
+  lastRefreshAttemptAt: 0,
+  nowMs: Date.UTC(2026, 4, 19, 8, 0),
+}), 'flight screen should refresh on app foreground when no previous refresh is known');
+assert(flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
+  isFocused: true,
+  airportLoading: false,
+  lastRefreshAttemptAt: Date.UTC(2026, 4, 19, 7, 50),
+  nowMs: Date.UTC(2026, 4, 19, 8, 0),
+}), 'flight screen should refresh on app foreground when data is stale');
+assert(!flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
+  isFocused: true,
+  airportLoading: false,
+  lastRefreshAttemptAt: Date.UTC(2026, 4, 19, 7, 59, 40),
+  nowMs: Date.UTC(2026, 4, 19, 8, 0),
+}), 'flight screen should not double-refresh immediately after a recent refresh');
+assert(!flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
+  isFocused: false,
+  airportLoading: false,
+  lastRefreshAttemptAt: Date.UTC(2026, 4, 19, 7, 0),
+  nowMs: Date.UTC(2026, 4, 19, 8, 0),
+}), 'flight screen should not refresh on foreground while the tab is not focused');
+assert(!flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
+  isFocused: true,
+  airportLoading: true,
+  lastRefreshAttemptAt: Date.UTC(2026, 4, 19, 7, 0),
+  nowMs: Date.UTC(2026, 4, 19, 8, 0),
+}), 'flight screen should not refresh on foreground while airport context is loading');
+
 console.log('App setup tests passed.');

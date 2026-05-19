@@ -36,9 +36,12 @@ assert(babelConfig.includes('react-native-worklets/plugin'), 'babel config shoul
 const flightScreen = read('src/screens/FlightScreen.tsx');
 assert(flightScreen.includes("from '../utils/flightScheduleAdapter'"), 'FlightScreen should use the shared flight adapter');
 assert(flightScreen.includes("from '../utils/flightScreenCache'"), 'FlightScreen should use the shared flight screen cache');
+assert(flightScreen.includes("from '../utils/flightRefreshPolicy'"), 'FlightScreen should use the shared flight refresh policy');
 assert(flightScreen.includes("from '../utils/flightNotificationScheduler'"), 'FlightScreen should use the shared flight notification scheduler');
 assert(flightScreen.includes('getFlightAirportDisplay'), 'FlightScreen should render decoded airport code/name labels');
 assert(flightScreen.includes('headerAirportName'), 'FlightScreen should style decoded airport names separately from IATA codes');
+assert(flightScreen.includes('AppState.addEventListener'), 'FlightScreen should refresh when the app returns to foreground');
+assert(flightScreen.includes('fetchInFlightRef'), 'FlightScreen should guard against overlapping flight refreshes');
 
 const flightNotificationScheduler = read('src/utils/flightNotificationScheduler.ts');
 for (const symbol of [

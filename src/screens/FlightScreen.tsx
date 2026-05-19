@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, ActivityIndicator, Modal,
   FlatList, TouchableOpacity, RefreshControl,
-  Animated, NativeModules, Platform, Linking,
+  Animated, NativeModules, Platform, Linking, AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Calendar from 'expo-calendar';
@@ -48,6 +48,10 @@ import {
   saveFlightScreenCache,
 } from '../utils/flightScreenCache';
 import {
+  FLIGHT_AUTO_REFRESH_INTERVAL_MS,
+  shouldRefreshFlightsOnAppActive,
+} from '../utils/flightRefreshPolicy';
+import {
   shouldShowBlockingFlightLoader,
   shouldShowFlightRefreshIndicator,
 } from '../utils/flightLoadingState';
@@ -85,6 +89,10 @@ type FlightDataSourceState = {
   sourceLabel: string;
   fetchedAt: number;
   providerDiagnostics?: FlightScheduleProviderStatus[];
+};
+type FetchAllOptions = {
+  markLoading?: boolean;
+  markRefreshing?: boolean;
 };
 
 async function openFlightradar24Flight(flightNumber: string): Promise<void> {
@@ -526,6 +534,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const selectedAirlinesRef = useRef<string[]>([]);
   const notifSettingsRef = useRef<FlightNotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
+  const fetchInFlightRef = useRef(false);
+  const lastFlightRefreshAttemptAtRef = useRef(0);
 
   useEffect(() => {
     airportAirlinesRef.current = airportAirlines;
@@ -609,8 +619,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     };
   }, [activeProfile, activeProfileId, airportCode]);
 
-  const fetchAll = useCallback(async () => {
-    if (airportLoading || !isFocused) return;
+  const fetchAll = useCallback(async (options: FetchAllOptions = {}) => {
+    if (airportLoading || !isFocused || fetchInFlightRef.current) {
+      if (options.markLoading) setLoading(false);
+      if (options.markRefreshing) setRefreshing(false);
+      return;
+    }
+
+    fetchInFlightRef.current = true;
+    lastFlightRefreshAttemptAtRef.current = Date.now();
+    if (options.markLoading) setLoading(true);
+    if (options.markRefreshing) setRefreshing(true);
 
     try {
       const {
@@ -882,20 +901,40 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         if (providerUnavailable) console.log('[fetchAll]', message);
         else console.error('[fetchAll]', e);
       }
-    } finally { setLoading(false); setRefreshing(false); }
+    } finally {
+      fetchInFlightRef.current = false;
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [activeProfile, airportCode, airportLoading, applySelectedAirlines, isFocused]);
 
   useEffect(() => {
     if (airportLoading || !isFocused) return;
-    setLoading(true);
-    fetchAll();
+    fetchAll({ markLoading: true });
   }, [airportLoading, fetchAll, isFocused]);
 
   // Auto-refresh flight data every 2 minutes so status/times stay current
   useEffect(() => {
     if (airportLoading || !isFocused) return;
-    const iv = setInterval(() => { fetchAll(); }, 2 * 60 * 1000);
+    const iv = setInterval(() => { fetchAll(); }, FLIGHT_AUTO_REFRESH_INTERVAL_MS);
     return () => clearInterval(iv);
+  }, [airportLoading, fetchAll, isFocused]);
+
+  useEffect(() => {
+    if (airportLoading || !isFocused) return;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+      if (!shouldRefreshFlightsOnAppActive({
+        isFocused,
+        airportLoading,
+        lastRefreshAttemptAt: lastFlightRefreshAttemptAtRef.current,
+        nowMs: Date.now(),
+      })) {
+        return;
+      }
+      fetchAll({ markRefreshing: true });
+    });
+    return () => subscription.remove();
   }, [airportLoading, fetchAll, isFocused]);
 
   useEffect(() => {
@@ -1274,7 +1313,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             paddingTop: isOperations ? 8 : 18,
             paddingBottom: isOperations ? 176 : 120,
           }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchAll(); }} tintColor={colors.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { fetchAll({ markRefreshing: true }); }} tintColor={colors.primary} />}
           ListEmptyComponent={
             <EmptyFlightState
               activeDay={activeDay}
