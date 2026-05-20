@@ -34,11 +34,28 @@ type OcrShiftToken = {
 const DATE_REGEX = /\b(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/g;
 const SHIFT_REGEX = /\b([01]?\d|2[0-3])\s*[,.:;]\s*([0-5]\d)\s*[-–—_~|]+\s*([01]?\d|2[0-3])\s*[,.:;]\s*([0-5]\d)\b|\b(R|RIP|RIP0S0|R1P0S0|R1POSO|RIPOSO|FERIE|FER1E|F)\b/gi;
 
+function normalizeDateCandidates(text: string): string {
+  const CANDIDATE_DATE_REGEX = /\b[0-9OoQIl|]{1,2}[\/\-][0-9OoQIl|]{1,2}(?:[\/\-][0-9OoQIl|]{2,4})?\b/gi;
+  return text.replace(CANDIDATE_DATE_REGEX, (match) => {
+    return match
+      .replace(/[OoQ]/g, '0')
+      .replace(/[Il|]/g, '1');
+  });
+}
+
+function normalizeShiftCandidates(text: string): string {
+  const CANDIDATE_TIME_REGEX = /\b[0-9OoQIl|]{1,2}\s*[,.:;]\s*[0-9OoQIl|]{2}\s*[-–—_~|]+\s*[0-9OoQIl|]{1,2}\s*[,.:;]\s*[0-9OoQIl|]{2}\b/gi;
+  return text.replace(CANDIDATE_TIME_REGEX, (match) => {
+    return match
+      .replace(/[OoQ]/g, '0')
+      .replace(/[Il|]/g, '1');
+  });
+}
+
 function normalizeOcrText(text: string): string {
-  return text
-    .replace(/[OoQ]/g, '0')
-    .replace(/[Il|]/g, '1')
-    .replace(/\u00A0/g, ' ');
+  let normalized = normalizeDateCandidates(text);
+  normalized = normalizeShiftCandidates(normalized);
+  return normalized.replace(/\u00A0/g, ' ');
 }
 
 function normalizeYear(value: string | undefined, fallbackYear: number): number {

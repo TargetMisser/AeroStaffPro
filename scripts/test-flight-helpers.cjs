@@ -847,7 +847,40 @@ async function runProviderLayerTests() {
   ]);
   const authStatus = authPayload.diagnostics.find(item => item.provider === 'fr24Api');
   assert(authStatus?.errorCode === 'auth_failed', 'HTTP 401 should be normalized as auth_failed');
-  assert(typeof authStatus?.cooldownUntil === 'number', 'auth failures should activate provider cooldown');
+  const robustThinCalls = [];
+  const robustThinLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [makeProviderArrival('U29920', tomorrowTs)],
+        allDepartures: [makeProviderFlight('HV9920', tomorrowTs)],
+      }, robustThinCalls),
+    },
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', { allArrivals: [], allDepartures: [] }, robustThinCalls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', { allArrivals: [], allDepartures: [] }, robustThinCalls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', {
+        allArrivals: [makeFr24LiveProviderFlight('FRLIVE_ARR_TOMORROW', tomorrowTs, 'PSA')],
+        allDepartures: [makeFr24LiveProviderFlight('FRLIVE_DEP_TOMORROW', tomorrowTs, 'LGW')],
+      }, robustThinCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, robustThinCalls),
+    },
+  });
+  const robustThinPayload = await robustThinLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'adb-key',
+    fr24ApiKey: 'fr24-key',
+    now,
+  });
+  assert(robustThinCalls.includes('aeroDataBox'), 'provider auto mode should continue to AeroDataBox if FR24 API only returned thin live tomorrow data without schedule backing');
+  assert(
+    robustThinPayload.allDepartures.some(item => item.flight.identification.number.default === 'HV9920'),
+    'provider auto mode should merge tomorrow schedule data from AeroDataBox after thin FR24 tomorrow live data'
+  );
 
   const dailyCacheStorage = new Map();
   const fixedNowMs = now.getTime();

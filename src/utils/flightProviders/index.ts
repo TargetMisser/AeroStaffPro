@@ -29,11 +29,11 @@ const DEFAULT_PROVIDERS: FlightScheduleProvider[] = [
 ];
 
 const PROVIDER_TIMEOUT_MS: Record<FlightScheduleProviderId, number> = {
-  staffMonitor: 45_000,
-  fr24Api: 15_000,
-  aeroDataBox: 22_000,
-  fr24Public: 12_000,
-  airlabs: 15_000,
+  staffMonitor: 15_000,
+  fr24Api: 10_000,
+  aeroDataBox: 15_000,
+  fr24Public: 10_000,
+  airlabs: 12_000,
   cache: 0,
 };
 
@@ -252,14 +252,19 @@ function hasUsefulCoverage(result: FlightScheduleProviderResult): boolean {
   return result.allArrivals.length + result.allDepartures.length > 0;
 }
 
+function hasScheduleBackedTomorrowCoverage(result: FlightScheduleProviderResult, tomorrow: Date): boolean {
+  return hasScheduleBackedFlightsOnDay(result.allArrivals, 'arrival', tomorrow)
+    && hasScheduleBackedFlightsOnDay(result.allDepartures, 'departure', tomorrow);
+}
+
 function hasTodayAndTomorrowCoverage(result: FlightScheduleProviderResult, now: Date): boolean {
   const today = new Date(now);
   const tomorrow = addDays(today, 1);
-  return hasDayCoverage(result, today) && hasTomorrowListCoverage(result, tomorrow);
+  return hasScheduleBackedDayCoverage(result, today) && hasScheduleBackedTomorrowCoverage(result, tomorrow);
 }
 
 function providerTimeoutMs(provider: FlightScheduleProvider, context: FlightScheduleProviderContext): number {
-  return context.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS[provider.id] ?? 15_000;
+  return context.providerTimeoutMs ?? PROVIDER_TIMEOUT_MS[provider.id] ?? 12_000;
 }
 
 async function fetchProviderWithTimeout(

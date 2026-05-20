@@ -165,4 +165,26 @@ assert(!flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
   nowMs: Date.UTC(2026, 4, 19, 8, 0),
 }), 'flight screen should not refresh on foreground while airport context is loading');
 
+// ─── OCR Shift Parser Tests ───────────────────────────────────────────────────
+const ocrShiftParser = loadTsModule('src/utils/ocrShiftParser.ts');
+
+// Test that OCR date tokens with typical noise (O, o, Q, I, l, |) are normalized and parsed correctly
+const noisyOcrResult1 = ocrShiftParser.parseOcrShiftText('Giovedì l2/O8/2O26 RIPOSO', 2026);
+assert(noisyOcrResult1.shifts.length === 1, 'should parse exactly one shift for noisy date');
+assert(noisyOcrResult1.shifts[0].date === '2026-08-12', 'should parse date with OCR errors');
+assert(noisyOcrResult1.shifts[0].type === 'rest', 'should identify RIPOSO rest shift');
+
+// Test that alphabetical characters in non-date/non-time words are NOT corrupted
+const noisyOcrResult2 = ocrShiftParser.parseOcrShiftText('Venerdì 13/08/2026 RIPOSO a Roma', 2026);
+assert(noisyOcrResult2.shifts.length === 1, 'should parse exactly one shift');
+assert(noisyOcrResult2.shifts[0].date === '2026-08-13', 'should parse correct date');
+assert(noisyOcrResult2.shifts[0].type === 'rest', 'should identify RIPOSO even with trailing text');
+
+// Test that work shifts with noisy times (e.g., l2:3O-18:45) parse and normalize correctly
+const noisyOcrResult3 = ocrShiftParser.parseOcrShiftText('Sabato 14/08/2026 l2:3O-18:45', 2026);
+assert(noisyOcrResult3.shifts.length === 1, 'should parse shift with noisy times');
+assert(noisyOcrResult3.shifts[0].type === 'work', 'should identify work shift');
+assert(noisyOcrResult3.shifts[0].startTime === '12:30', 'should normalize start time');
+assert(noisyOcrResult3.shifts[0].endTime === '18:45', 'should normalize end time');
+
 console.log('App setup tests passed.');

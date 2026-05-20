@@ -99,6 +99,27 @@ const FALLBACK_WIDGET_THEMES: Record<ThemeMode, WidgetThemePalette> = {
     airlineText: '#FFFFFF',
     border: 'rgba(141, 163, 173, 0.24)',
   },
+  sunset: {
+    bg: '#140C07',
+    headerBg: '#21140D',
+    cardOdd: '#21140D',
+    cardEven: '#3A2114',
+    text: '#FFF7ED',
+    muted: '#A78A74',
+    accent: '#FF7A1A',
+    accentText: '#F7C873',
+    accentBg: 'rgba(255, 122, 26, 0.18)',
+    gate: '#F7C873',
+    gateBg: 'rgba(247, 200, 115, 0.16)',
+    chipBg: '#3A2114',
+    detailBg: '#3A2114',
+    pinnedBg: 'rgba(255, 122, 26, 0.18)',
+    restBg: 'rgba(16, 185, 129, 0.18)',
+    restAccent: '#34D399',
+    errorAccent: '#F87171',
+    airlineText: '#FFFFFF',
+    border: 'rgba(247, 200, 115, 0.22)',
+  },
 };
 
 function widgetColor(value: string | undefined, fallback: WidgetColor): WidgetColor {

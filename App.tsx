@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
@@ -10,6 +10,8 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
 import { LanguageProvider, useLanguage } from './src/context/LanguageContext';
 import { AirportProvider } from './src/context/AirportContext';
+import { saveThemeWidgetSnapshot } from './src/utils/themeMode';
+import { refreshShiftWidgetTheme } from './src/widgets/widgetThemeSync';
 import HomeScreen from './src/screens/HomeScreen';
 import TraveldocScreen from './src/screens/TraveldocScreen';
 import FlightScreen from './src/screens/FlightScreen';
@@ -132,6 +134,20 @@ function AppInner() {
     });
     return () => sub.remove();
   }, [drawerOpen, overlay]);
+
+  // ─── Sincronizzazione tema widget all'avvio/ripristino ───────────────────────
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        saveThemeWidgetSnapshot(mode, colors)
+          .then(() => {
+            refreshShiftWidgetTheme(mode).catch(() => {});
+          })
+          .catch(() => {});
+      }
+    });
+    return () => sub.remove();
+  }, [colors, mode]);
 
   // ─── Swipe con drag live tra tab ─────────────────────────────────────────────
   const SCREEN_W = Dimensions.get('window').width;
