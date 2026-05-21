@@ -2,7 +2,7 @@
   "expo": {
     "name": "AeroStaff Pro",
     "slug": "AeroStaffPro",
-    "version": "2.7.7",
+    "version": "2.7.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
