@@ -144,7 +144,7 @@ jobs:
         shell: pwsh
         run: |
           cd android
-          & .\gradlew.bat ':app:assembleRelease' '--no-daemon' '-Pandroid.overridePathCheck=true'
+          & .\gradlew.bat ':app:assembleRelease' '-Pandroid.overridePathCheck=true'
         env:
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m"
 
