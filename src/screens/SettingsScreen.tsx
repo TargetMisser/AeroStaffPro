@@ -104,6 +104,14 @@ const THEME_OPTIONS: ThemeOption[] = [
     previewBg: '#0B1114',
     previewAccent: '#2DD4BF',
   },
+  {
+    id: 'sunset',
+    label: 'Sunset Premium',
+    sublabel: 'Tema caldo, arancio bruciato e accenti cargo-luxury',
+    icon: 'wb-twilight',
+    previewBg: '#140C07',
+    previewAccent: '#FF7A1A',
+  },
 ];
 
 function ThemeCard({ option, selected, onSelect, activeLabel }: {
@@ -242,12 +250,16 @@ export default function SettingsScreen({
       ? t('themeLight')
       : opt.id === 'dark'
         ? t('themeDark')
-        : t('themeOperations'),
+        : opt.id === 'operations'
+          ? t('themeOperations')
+          : t('themeSunset'),
     sublabel: opt.id === 'light'
       ? t('themeLightSub')
       : opt.id === 'dark'
         ? t('themeDarkSub')
-        : t('themeOperationsSub'),
+        : opt.id === 'operations'
+          ? t('themeOperationsSub')
+          : t('themeSunsetSub'),
   }));
   const [aeroDataBoxInput, setAeroDataBoxInput] = useState('');
   const [aeroDataBoxGateway, setAeroDataBoxGateway] = useState<AeroDataBoxGateway>('apiMarket');

@@ -115,6 +115,31 @@ const OPERATIONS: ThemeColors = {
   isDark:         true,
 };
 
+// ─── Tema Sunset Premium ──────────────────────────────────────────────────────
+const SUNSET: ThemeColors = {
+  bg:             '#140C07',
+  card:           '#21140D',
+  cardSecondary:  '#3A2114',
+  text:           '#FFF7ED',
+  textSub:        '#E6CDB6',
+  textMuted:      'rgba(167,138,116,0.72)',
+  primary:        '#FF7A1A',
+  primaryDark:    '#F7C873',
+  primaryLight:   'rgba(255,122,26,0.18)',
+  glass:          '#21140D',
+  glassBorder:    'rgba(247,200,115,0.22)',
+  glassStrong:    '#3A2114',
+  border:         'rgba(247,200,115,0.22)',
+  appBar:         'rgba(20,12,7,0.96)',
+  tabBar:         '#1A0F09',
+  tabIconActive:  '#FF7A1A',
+  tabIconInactive:'rgba(230,205,182,0.48)',
+  tabLabelActive: '#FF7A1A',
+  pillActive:     'rgba(255,122,26,0.18)',
+  statusBar:      'light-content',
+  isDark:         true,
+};
+
 // ─── Context ──────────────────────────────────────────────────────────────────
 type ThemeContextValue = {
   mode:      ThemeMode;
@@ -150,9 +175,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const colors: ThemeColors = mode === 'operations'
     ? OPERATIONS
-    : mode === 'dark'
-      ? DARK
-      : LIGHT;
+    : mode === 'sunset'
+      ? SUNSET
+      : mode === 'dark'
+        ? DARK
+        : LIGHT;
   const isLoading = !ready;
 
   useEffect(() => {

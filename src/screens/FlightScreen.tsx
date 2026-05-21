@@ -236,7 +236,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   })() : false;
 
   useEffect(() => {
-    if (!checkinShouldPulse && !gateShouldPulse) {
+    if (!checkinShouldPulse && !gateShouldPulse && !isPinned) {
       pulseAnim.stopAnimation();
       pulseAnim.setValue(0);
       return;
@@ -244,13 +244,13 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
 
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 520, useNativeDriver: false }),
-        Animated.timing(pulseAnim, { toValue: 0, duration: 520, useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 750, useNativeDriver: false }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 750, useNativeDriver: false }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, [checkinShouldPulse, gateShouldPulse, pulseAnim]);
+  }, [checkinShouldPulse, gateShouldPulse, isPinned, pulseAnim]);
 
   const checkinPulseStyle = checkinShouldPulse
     ? {
@@ -272,6 +272,15 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
         }),
       }
     : null;
+  const pinnedPulseStyle = isPinned
+    ? {
+        borderWidth: 2,
+        borderColor: pulseAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: ['#F59E0B', '#FFF7ED'],
+        }),
+      }
+    : null;
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -287,10 +296,10 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
         compact={isOperations}
         onToggle={() => isPinned ? onUnpin() : onPin(item)}
       >
+        <Animated.View style={pinnedPulseStyle ?? undefined}>
         <TactilePressable
           animatedStyle={[
             s.card,
-            isPinned && s.cardPinned,
             { marginBottom: 0 },
             isOperations && {
               borderLeftColor: brandAccent,
@@ -482,6 +491,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
           )}
         </View>
         </TactilePressable>
+        </Animated.View>
       </SwipeableFlightCard>
     </BoardReveal>
   );
