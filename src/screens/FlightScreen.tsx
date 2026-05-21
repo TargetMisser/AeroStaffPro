@@ -511,7 +511,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     activeProfileId,
     setSelectedAirlines: persistSelectedAirlines,
   } = useAirport();
-  const isOperations = mode === 'operations';
+  const isOperations = colors.isDark;
   const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

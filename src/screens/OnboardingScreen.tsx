@@ -65,7 +65,7 @@ export default function OnboardingScreen({
   const [providerState, setProviderState] = useState<FlightProviderSettingsState | null>(null);
   const [notificationDebug, setNotificationDebug] = useState<NotificationDebugSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const isOperations = mode === 'operations';
+  const isOperations = colors.isDark;
   const stylesForTheme = useMemo(() => makeStyles(isOperations), [isOperations]);
 
   const refresh = useCallback(async () => {

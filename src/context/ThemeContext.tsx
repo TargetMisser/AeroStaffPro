@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import {
   getStoredThemeMode,
   saveThemeMode,
@@ -65,33 +66,8 @@ const LIGHT: ThemeColors = {
   isDark:         false,
 };
 
-// ─── Tema Scuro ───────────────────────────────────────────────────────────────
+// ─── Tema Scuro (Operations Board) ───────────────────────────────────────────
 const DARK: ThemeColors = {
-  bg:             '#0A0A0C',
-  card:           '#1C1C1E',
-  cardSecondary:  '#2C2C2E',
-  text:           '#FFFFFF',
-  textSub:        'rgba(235,235,245,0.75)',
-  textMuted:      'rgba(235,235,245,0.38)',
-  primary:        '#FF9A42',
-  primaryDark:    '#F47B16',
-  primaryLight:   'rgba(255,154,66,0.20)',
-  glass:          '#1C1C1E',
-  glassBorder:    'transparent',
-  glassStrong:    '#2C2C2E',
-  border:         'rgba(255,255,255,0.11)',
-  appBar:         '#0A0A0C',
-  tabBar:         '#111113',
-  tabIconActive:  '#FF9A42',
-  tabIconInactive:'rgba(235,235,245,0.35)',
-  tabLabelActive: '#FF9A42',
-  pillActive:     'rgba(255,154,66,0.18)',
-  statusBar:      'light-content',
-  isDark:         true,
-};
-
-// ─── Tema Operations Board ───────────────────────────────────────────────────
-const OPERATIONS: ThemeColors = {
   bg:             '#0B1114',
   card:           '#111A1F',
   cardSecondary:  '#19262D',
@@ -115,31 +91,6 @@ const OPERATIONS: ThemeColors = {
   isDark:         true,
 };
 
-// ─── Tema Sunset Premium ──────────────────────────────────────────────────────
-const SUNSET: ThemeColors = {
-  bg:             '#140C07',
-  card:           '#21140D',
-  cardSecondary:  '#3A2114',
-  text:           '#FFF7ED',
-  textSub:        '#E6CDB6',
-  textMuted:      'rgba(167,138,116,0.72)',
-  primary:        '#FF7A1A',
-  primaryDark:    '#F7C873',
-  primaryLight:   'rgba(255,122,26,0.18)',
-  glass:          '#21140D',
-  glassBorder:    'rgba(247,200,115,0.22)',
-  glassStrong:    '#3A2114',
-  border:         'rgba(247,200,115,0.22)',
-  appBar:         'rgba(20,12,7,0.96)',
-  tabBar:         '#1A0F09',
-  tabIconActive:  '#FF7A1A',
-  tabIconInactive:'rgba(230,205,182,0.48)',
-  tabLabelActive: '#FF7A1A',
-  pillActive:     'rgba(255,122,26,0.18)',
-  statusBar:      'light-content',
-  isDark:         true,
-};
-
 // ─── Context ──────────────────────────────────────────────────────────────────
 type ThemeContextValue = {
   mode:      ThemeMode;
@@ -159,6 +110,7 @@ const ThemeContext = createContext<ThemeContextValue>({
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>('light');
   const [ready, setReady] = useState(false);
+  const [activeTheme, setActiveTheme] = useState<'light' | 'dark'>('light');
 
   // Carica preferenza salvata
   useEffect(() => {
@@ -173,13 +125,41 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     await saveThemeMode(m);
   }, []);
 
-  const colors: ThemeColors = mode === 'operations'
-    ? OPERATIONS
-    : mode === 'sunset'
-      ? SUNSET
-      : mode === 'dark'
-        ? DARK
-        : LIGHT;
+  // Determina e aggiorna il tema attivo per la modalità automatica
+  useEffect(() => {
+    if (mode === 'auto') {
+      const determineAuto = () => {
+        const hour = new Date().getHours();
+        if (hour >= 8 && hour < 20) {
+          return 'light';
+        }
+        return 'dark';
+      };
+
+      setActiveTheme(determineAuto());
+
+      // Controlla ogni 30 secondi se l'ora è cambiata
+      const interval = setInterval(() => {
+        setActiveTheme(determineAuto());
+      }, 30000);
+
+      // Ascolta il ritorno in primo piano dell'app
+      const appStateSub = AppState.addEventListener('change', (nextState) => {
+        if (nextState === 'active') {
+          setActiveTheme(determineAuto());
+        }
+      });
+
+      return () => {
+        clearInterval(interval);
+        appStateSub.remove();
+      };
+    } else {
+      setActiveTheme(mode);
+    }
+  }, [mode]);
+
+  const colors: ThemeColors = activeTheme === 'dark' ? DARK : LIGHT;
   const isLoading = !ready;
 
   useEffect(() => {

@@ -279,13 +279,9 @@ function AppInner() {
 
 
   const appBarTitle = overlay ? overlayTitles[overlay] : 'AeroStaff Pro';
-  const surfaceVariant = mode === 'operations' ? 'operations' : 'solid';
-  const isOperations = mode === 'operations';
-  const tabInactiveColor = mode === 'operations'
-    ? colors.tabIconInactive
-    : colors.isDark
-      ? 'rgba(235,239,245,0.78)'
-      : colors.tabIconInactive;
+  const surfaceVariant = colors.isDark ? 'operations' : 'solid';
+  const isOperations = colors.isDark;
+  const tabInactiveColor = colors.tabIconInactive;
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
 
   return (

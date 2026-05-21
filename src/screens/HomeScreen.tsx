@@ -196,7 +196,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const { colors, mode } = useAppTheme();
   const { airportCode } = useAirport();
   const { t, months, locale, weatherMap } = useLanguage();
-  const isOperations = mode === 'operations';
+  const isOperations = colors.isDark;
   const [timelineKey, setTimelineKey] = React.useState(0);
   React.useEffect(() => { if (isFocused) setTimelineKey(k => k + 1); }, [isFocused]);
   const HOME_SHIFT_TITLES = { work: 'Lavoro', rest: 'Riposo' };
