@@ -791,18 +791,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         const fmtOff = (dep: number, off: number) => fmtT(dep - off * 60);
         const nowHH = fmtT(Date.now() / 1000);
         const nowSec = Date.now() / 1000;
-        const activeWidgetShift = shiftToday && nowSec <= shiftToday.end
+        const activeWidgetShift = (shiftToday && nowSec <= shiftToday.end)
           ? { date: todayIso, ...shiftToday, isNext: false }
-          : shiftToday && nowSec > shiftToday.end && nextShift && nextShift.start > nowSec
+          : ((!shiftToday || nowSec > shiftToday.end) && nextShift && nextShift.start > nowSec)
             ? { ...nextShift, isNext: true }
             : null;
 
         let widgetData: WidgetData;
-        if (isRestDay) {
-          widgetData = { state: 'rest' };
-        } else if (!activeWidgetShift) {
-          widgetData = { state: 'no_shift' };
-        } else {
+        if (activeWidgetShift) {
           const shiftLabel = `${activeWidgetShift.isNext ? 'Domani ' : ''}${fmtT(activeWidgetShift.start)} – ${fmtT(activeWidgetShift.end)}`;
           const pinnedRawW = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
           let pinnedFn: string | null = null;
@@ -856,6 +852,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           widgetData = wFlights.length === 0
             ? { state: 'work_empty', shiftLabel, updatedAt: nowHH }
             : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH };
+        } else if (isRestDay) {
+          widgetData = { state: 'rest' };
+        } else {
+          widgetData = { state: 'no_shift' };
         }
         await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));
         if (Platform.OS === 'android') {

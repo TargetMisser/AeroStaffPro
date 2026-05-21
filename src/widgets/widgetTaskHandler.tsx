@@ -84,13 +84,13 @@ function resolveWidgetShift(shiftData: WidgetShiftData): ResolvedWidgetShift | '
   const nextShift = shiftData.nextShift ?? null;
 
   if (shiftData.date === todayIso) {
-    if (shiftData.isRestDay) return 'rest';
     if (currentShift && now <= currentShift.end) {
       return { shift: currentShift, shiftLabel: `${fmtTs(currentShift.start)} – ${fmtTs(currentShift.end)}` };
     }
-    if (currentShift && now > currentShift.end && nextShift && nextShift.date === tomorrowIso && nextShift.start > now) {
+    if ((!currentShift || now > currentShift.end) && nextShift && nextShift.date === tomorrowIso && nextShift.start > now) {
       return { shift: nextShift, shiftLabel: `Domani ${fmtTs(nextShift.start)} – ${fmtTs(nextShift.end)}` };
     }
+    if (shiftData.isRestDay) return 'rest';
     return null;
   }
 

@@ -260,20 +260,22 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
 
       const now = Date.now() / 1000;
       let widgetData: WidgetData = { state: 'no_shift' };
-      if (isRestDay) {
-        widgetData = { state: 'rest' };
-      } else if (shiftToday && now <= shiftToday.end) {
+      const currentShift = shiftToday ? { date: todayIso, ...shiftToday } : null;
+
+      if (currentShift && now <= currentShift.end) {
         widgetData = {
           state: 'work_empty',
-          shiftLabel: formatWidgetShiftLabel({ date: todayIso, ...shiftToday }, false),
+          shiftLabel: formatWidgetShiftLabel(currentShift, false),
           updatedAt: '',
         };
-      } else if (shiftToday && now > shiftToday.end && nextShift && nextShift.start > now) {
+      } else if ((!currentShift || now > currentShift.end) && nextShift && nextShift.start > now) {
         widgetData = {
           state: 'work_empty',
           shiftLabel: formatWidgetShiftLabel(nextShift, true),
           updatedAt: '',
         };
+      } else if (isRestDay) {
+        widgetData = { state: 'rest' };
       }
 
       await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));

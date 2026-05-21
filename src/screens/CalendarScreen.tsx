@@ -21,7 +21,7 @@ import {
   replaceShiftsForRange,
 } from '../utils/shiftCalendar';
 import { WIDGET_SHIFT_KEY, WIDGET_CACHE_KEY } from '../widgets/widgetTaskHandler';
-import type { WidgetShiftData } from '../widgets/widgetTaskHandler';
+import type { WidgetShiftData, WidgetData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { buildCalendarFlightCountsFromCache } from '../utils/calendarFlightStats';
 import { getCalendarStatsRange } from '../utils/calendarStatsRange';
@@ -220,13 +220,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       // Invalidate flight cache so widget fetches fresh flights next update
       const now = Date.now() / 1000;
       const fmt = (ts: number) => new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-      const noFlightData = isRestDay
-        ? { state: 'rest' }
-        : shiftToday && now <= shiftToday.end
-          ? { state: 'work_empty', shiftLabel: `${fmt(shiftToday.start)} – ${fmt(shiftToday.end)}`, updatedAt: '' }
-          : shiftToday && now > shiftToday.end && nextShift && nextShift.start > now
-            ? { state: 'work_empty', shiftLabel: `Domani ${fmt(nextShift.start)} – ${fmt(nextShift.end)}`, updatedAt: '' }
-            : { state: 'no_shift' };
+      
+      let noFlightData: WidgetData;
+      if (shiftToday && now <= shiftToday.end) {
+        noFlightData = { state: 'work_empty', shiftLabel: `${fmt(shiftToday.start)} – ${fmt(shiftToday.end)}`, updatedAt: '' };
+      } else if ((!shiftToday || now > shiftToday.end) && nextShift && nextShift.start > now) {
+        noFlightData = { state: 'work_empty', shiftLabel: `Domani ${fmt(nextShift.start)} – ${fmt(nextShift.end)}`, updatedAt: '' };
+      } else if (isRestDay) {
+        noFlightData = { state: 'rest' };
+      } else {
+        noFlightData = { state: 'no_shift' };
+      }
+
       await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(noFlightData));
       requestShiftWidgetUpdate(noFlightData as any).catch(() => {});
     } catch {}
