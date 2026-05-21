@@ -77,7 +77,7 @@ npm run github:branches:audit
 
 APK files are published in [GitHub Releases](https://github.com/TargetMisser/AeroStaffPro/releases).
 
-Latest stable release: **v2.7.9**
+Latest stable release: **v2.7.10**
 
 To install the Android app:
 
