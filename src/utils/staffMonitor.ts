@@ -219,6 +219,77 @@ function parseSection(sectionHTML: string): StaffMonitorFlight[] {
   return results;
 }
 
+function parseXmlSection(xmlStr: string): StaffMonitorFlight[] {
+  const results: StaffMonitorFlight[] = [];
+  const flightRegex = /<FLIGHT\b[\s\S]*?(?:\/>|<\/FLIGHT>)/gi;
+  
+  let match: RegExpExecArray | null;
+  while ((match = flightRegex.exec(xmlStr)) !== null) {
+    const flightBlock = match[0];
+    const openTagMatch = /<FLIGHT\s+([^>]+)/i.exec(flightBlock);
+    if (!openTagMatch) continue;
+    const flightAttrsStr = openTagMatch[1];
+    
+    const getAttr = (attrs: string, name: string): string => {
+      const rx = new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`, 'i');
+      const m = rx.exec(attrs);
+      return m ? m[1].trim() : '';
+    };
+    
+    const code = getAttr(flightAttrsStr, 'code');
+    const num = getAttr(flightAttrsStr, 'number');
+    if (!code || !num) continue;
+    
+    const rawFlight = code + num;
+    const flightNumber = normalizeFlightNumber(rawFlight);
+    if (!flightNumber) continue;
+    
+    const aircraftType = getAttr(flightAttrsStr, 'aircraftType') || undefined;
+    const trafficType = getAttr(flightAttrsStr, 'flightTypeDescr') || undefined;
+    const registration = getAttr(flightAttrsStr, 'aircraftReg') || undefined;
+    const route = getAttr(flightAttrsStr, 'city') || undefined;
+    
+    const schedTime = getAttr(flightAttrsStr, 'schedulate');
+    const scheduledTime = schedTime ? schedTime.slice(0, 5) : undefined;
+    
+    const expTime = getAttr(flightAttrsStr, 'expect');
+    const estimatedTime = expTime ? expTime.slice(0, 5) : undefined;
+    
+    const status = getAttr(flightAttrsStr, 'state') || undefined;
+    const stand = getAttr(flightAttrsStr, 'stand') || undefined;
+    const checkin = getAttr(flightAttrsStr, 'checkin') || undefined;
+    const gate = getAttr(flightAttrsStr, 'gate') || undefined;
+    
+    let belt = undefined;
+    const conveyorMatch = /<CONVEYOR\s+([^>]+)/i.exec(flightBlock);
+    if (conveyorMatch) {
+      const conveyorAttrsStr = conveyorMatch[1];
+      belt = getAttr(conveyorAttrsStr, 'code') || undefined;
+    }
+    
+    results.push({
+      flightNumber,
+      aircraftType,
+      trafficType,
+      registration,
+      route,
+      scheduledTime,
+      estimatedTime,
+      status,
+      stand,
+      checkin,
+      gate,
+      belt
+    });
+  }
+  
+  if (results.length > 0) {
+    _lastDebugColumns = 'XML Parsed';
+    devLog(`[staffMonitor] XML parsed successfully: ${results.length} flights`);
+  }
+  return results;
+}
+
 // ─── AsyncStorage flight cache (20-min TTL) ──────────────────────────────────────
 const SM_CACHE_KEY = 'sm_flights_v2';
 
@@ -422,9 +493,10 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
       return [];
     }
 
-    if (__DEV__) console.log(`[staffMonitor] nature=${nature} HTML sample:\n`, html.slice(0, 2000));
+    const isXml = /<FLIGHTS/i.test(html);
+    if (__DEV__) console.log(`[staffMonitor] nature=${nature} ${isXml ? 'XML' : 'HTML'} sample:\n`, html.slice(0, 2000));
 
-    const results = parseSection(html);
+    const results = isXml ? parseXmlSection(html) : parseSection(html);
 
     const summary = results.length === 0
       ? 'nessun volo parsato'
