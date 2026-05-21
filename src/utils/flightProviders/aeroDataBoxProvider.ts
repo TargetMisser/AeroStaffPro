@@ -248,7 +248,7 @@ function buildScheduleUrl(gateway: AeroDataBoxGateway, airportCode: string, from
     airportCode,
     toLocalMinute(from),
     toLocalMinute(to),
-  ].map(encodeURIComponent).join('/');
+  ].map(s => encodeURIComponent(s).replace(/%3A/g, ':')).join('/');
   const params = new URLSearchParams({
     direction: 'Both',
     withLeg: 'true',
