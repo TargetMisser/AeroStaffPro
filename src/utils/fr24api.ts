@@ -233,6 +233,7 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
       fr24ApiKey,
       signal: controller.signal,
       now,
+      preference: providerPreference,
     }, getFlightScheduleProviders(providerPreference)));
     payload = dedupeSchedulePayload(withActiveDayCache(
       payload,
