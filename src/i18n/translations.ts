@@ -242,6 +242,7 @@ const it = {
   flightNotifDepartureLead: 'Minuti prima partenza',
   // Phonebook
   phonebookTitle: 'Rubrica', contactAdd: 'Aggiungi',
+  contactA11yCall: 'Chiama', contactA11yEdit: 'Modifica', contactA11yDelete: 'Elimina',
   contactSearch: 'Cerca nome o numero...', contactAll: 'Tutti',
   contactModalNew: 'Nuovo contatto', contactModalEdit: 'Modifica contatto',
   contactNameLabel: 'Nome *', contactNamePh: 'es. OPS Malpensa',
@@ -540,6 +541,7 @@ const en: typeof it = {
   flightNotifDepartureLead: 'Minutes before departure',
   // Phonebook
   phonebookTitle: 'Phonebook', contactAdd: 'Add',
+  contactA11yCall: 'Call', contactA11yEdit: 'Edit', contactA11yDelete: 'Delete',
   contactSearch: 'Search name or number...', contactAll: 'All',
   contactModalNew: 'New contact', contactModalEdit: 'Edit contact',
   contactNameLabel: 'Name *', contactNamePh: 'e.g. OPS Malpensa',
