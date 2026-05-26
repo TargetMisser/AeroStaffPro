@@ -973,7 +973,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
             {/* Header fisso */}
             <View style={[s.modalHeader, { paddingHorizontal: 24, paddingTop: 24 }]}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calAddShiftTitle')}</Text>
-              <TouchableOpacity onPress={() => setManualModalOpen(false)}>
+              <TouchableOpacity onPress={() => setManualModalOpen(false)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel={t('close')} accessible>
                 <MaterialIcons name="close" size={24} color={colors.textSub} />
               </TouchableOpacity>
             </View>
@@ -1082,7 +1082,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calImportTitle')}</Text>
               {importStep !== 'saving' && (
-                <TouchableOpacity onPress={() => { setImportModalVisible(false); setImportStep('idle'); setImportFileCount(0); }}>
+                <TouchableOpacity onPress={() => { setImportModalVisible(false); setImportStep('idle'); setImportFileCount(0); }} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel={t('close')} accessible>
                   <MaterialIcons name="close" size={24} color={colors.textSub} />
                 </TouchableOpacity>
               )}
