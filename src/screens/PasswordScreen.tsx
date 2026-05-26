@@ -39,6 +39,8 @@ async function loadPasswords(): Promise<PasswordEntry[]> {
     if (legacy) {
       const parsed: PasswordEntry[] = JSON.parse(legacy);
       await SecureStore.setItemAsync(PASSWORDS_KEY, legacy);
+      const masked = parsed.map(e => ({ ...e, password: '***', notes: '***' }));
+      await AsyncStorage.setItem(PASSWORDS_KEY, JSON.stringify(masked));
       await AsyncStorage.removeItem(PASSWORDS_KEY);
       return parsed;
     }
