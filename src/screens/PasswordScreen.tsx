@@ -15,14 +15,27 @@ const PIN_ENABLED_KEY = 'aerostaff_pin_enabled_v1';
 
 // ── Secure helpers — all sensitive data goes through the OS keychain ──────────
 async function getSecurePin(): Promise<string | null> {
-  try { return await SecureStore.getItemAsync(PIN_KEY); }
-  catch { return AsyncStorage.getItem(PIN_KEY); }
+  try {
+    const secure = await SecureStore.getItemAsync(PIN_KEY);
+    if (secure) return secure;
+  } catch {}
+  try {
+    const legacy = await AsyncStorage.getItem(PIN_KEY);
+    if (legacy) {
+      await SecureStore.setItemAsync(PIN_KEY, legacy);
+      await AsyncStorage.setItem(PIN_KEY, '***MASKED***');
+      await AsyncStorage.removeItem(PIN_KEY);
+      return legacy;
+    }
+  } catch {}
+  return null;
 }
 async function setSecurePin(pin: string): Promise<void> {
   await SecureStore.setItemAsync(PIN_KEY, pin);
 }
 async function deleteSecurePin(): Promise<void> {
   await SecureStore.deleteItemAsync(PIN_KEY).catch(() => {});
+  await AsyncStorage.setItem(PIN_KEY, '***MASKED***').catch(() => {});
   await AsyncStorage.removeItem(PIN_KEY).catch(() => {});
 }
 
@@ -39,6 +52,7 @@ async function loadPasswords(): Promise<PasswordEntry[]> {
     if (legacy) {
       const parsed: PasswordEntry[] = JSON.parse(legacy);
       await SecureStore.setItemAsync(PASSWORDS_KEY, legacy);
+      await AsyncStorage.setItem(PASSWORDS_KEY, '***MASKED***');
       await AsyncStorage.removeItem(PASSWORDS_KEY);
       return parsed;
     }

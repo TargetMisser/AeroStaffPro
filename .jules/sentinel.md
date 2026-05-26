@@ -1,0 +1,4 @@
+## 2026-05-18 - Secure Wipe of Legacy Plaintext Secrets
+**Vulnerability:** When migrating sensitive data (like `PASSWORDS_KEY` and `PIN_KEY`) from unencrypted `AsyncStorage` to encrypted `SecureStore`, the application simply called `AsyncStorage.removeItem()` after the transfer.
+**Learning:** In underlying database-backed storage systems (such as SQLite on Android), deleting an item simply marks the row as deleted without actually overwriting the data on disk. This leaves the plaintext secrets recoverable via disk forensics or root access until the database vacuum or overwrite occurs.
+**Prevention:** When migrating sensitive data out of plaintext storage, perform a "secure wipe" by explicitly overwriting the sensitive data with masked values (e.g., `'***MASKED***'`) using `AsyncStorage.setItem()` before calling `AsyncStorage.removeItem()`.

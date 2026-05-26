@@ -35,6 +35,7 @@ async function importLegacySensitiveData(data: Record<string, unknown>): Promise
   const legacyPasswords = data[PASSWORDS_KEY];
   if (typeof legacyPasswords === 'string' && legacyPasswords.trim()) {
     await SecureStore.setItemAsync(PASSWORDS_KEY, legacyPasswords);
+    await AsyncStorage.setItem(PASSWORDS_KEY, '***MASKED***').catch(() => {});
     await AsyncStorage.removeItem(PASSWORDS_KEY).catch(() => {});
     imported += 1;
   }
@@ -42,6 +43,7 @@ async function importLegacySensitiveData(data: Record<string, unknown>): Promise
   const legacyPin = data[PIN_KEY];
   if (typeof legacyPin === 'string' && legacyPin.trim()) {
     await SecureStore.setItemAsync(PIN_KEY, legacyPin);
+    await AsyncStorage.setItem(PIN_KEY, '***MASKED***').catch(() => {});
     await AsyncStorage.removeItem(PIN_KEY).catch(() => {});
     hasImportedPin = true;
     imported += 1;
