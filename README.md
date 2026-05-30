@@ -16,9 +16,11 @@ AeroStaff Pro is a React Native app for airport shift work. It keeps the things 
 ## Interface Preview
 
 <p align="center">
-  <img src="assets/demo_home.png" width="380" alt="Home Screen Dashboard" />
+  <img src="assets/demo_home.png" width="260" alt="Home Screen Dashboard" />
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/demo_flights.png" width="380" alt="Flights List View" />
+  <img src="assets/demo_flights.png" width="260" alt="Flights List View" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/demo_calendar.png" width="260" alt="Calendar Shifts View" />
 </p>
 
 ## Development Note
