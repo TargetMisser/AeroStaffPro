@@ -231,6 +231,42 @@ assert(
 assert(flightNotificationSettings.sameAirlineKeys(['easyjet', 'wizz'], ['easyjet', 'wizz']), 'airline key comparison should accept identical order');
 assert(!flightNotificationSettings.sameAirlineKeys(['wizz', 'easyjet'], ['easyjet', 'wizz']), 'airline key comparison should remain order-sensitive');
 
+const easyjetOverlapMode = loadTsModule('src/utils/easyjetOverlapMode.ts', {
+  './flightScheduleAdapter': adapter,
+});
+
+const todayNoon = new Date();
+todayNoon.setHours(12, 0, 0, 0);
+const todayNoonTs = Math.floor(todayNoon.getTime() / 1000);
+
+const flightA = {
+  flight: {
+    identification: { number: { default: 'U24810' } },
+    airline: { name: 'easyJet', code: { iata: 'U2' } },
+    time: { scheduled: { arrival: todayNoonTs }, estimated: {}, real: {} },
+  },
+};
+
+const flightB = {
+  flight: {
+    identification: { number: { default: 'U24812' } },
+    airline: { name: 'easyJet', code: { iata: 'U2' } },
+    time: { scheduled: { arrival: todayNoonTs + 1800 }, estimated: {}, real: {} },
+  },
+};
+
+const flightC = {
+  flight: {
+    identification: { number: { default: 'W61234' } },
+    airline: { name: 'Wizz Air', code: { iata: 'W6' } },
+    time: { scheduled: { arrival: todayNoonTs + 600 }, estimated: {}, real: {} },
+  },
+};
+
+const result = easyjetOverlapMode.checkEasyJetOverlap([flightA, flightB, flightC]);
+assert(result.isActive === true, 'overlap mode should be active when two easyJet flights overlap');
+assert(result.overlappingFlights.length === 2, 'should identify the overlapping easyJet flights');
+
 const airportSettings = loadTsModule('src/utils/airportSettings.ts', {
   '@react-native-async-storage/async-storage': {
     getItem: async () => null,

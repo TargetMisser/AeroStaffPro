@@ -4,6 +4,7 @@ import { getAirlineOps } from './airlineOps';
 import { getFlightAirportLabel } from './flightScheduleAdapter';
 import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
 import { shouldNotifyAirline, type FlightNotificationSettings } from './flightNotificationSettings';
+import { isFlightEasyJet } from './easyjetOverlapMode';
 import {
   appendNotificationDebugEvent,
   buildNotificationData,
@@ -49,7 +50,12 @@ export async function scheduleShiftNotifications(
         const flightNumber = item.flight?.identification?.number?.default || 'N/A';
         const airline = item.flight?.airline?.name || 'Sconosciuta';
         const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
-        const arrivalTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+        const isEasyJet = isFlightEasyJet(item);
+        const arrivalTime = new Date(ts * 1000).toLocaleTimeString(locale, {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: isEasyJet ? '2-digit' : undefined,
+        });
 
         const id = await Notifications.scheduleNotificationAsync({
           content: {
@@ -178,7 +184,12 @@ export async function schedulePinnedNotifications(
       const ts = getBestArrivalTs(item);
       if (!ts) return;
       const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
-      const arrTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+      const isEasyJet = isFlightEasyJet(item);
+      const arrTime = new Date(ts * 1000).toLocaleTimeString(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: isEasyJet ? '2-digit' : undefined,
+      });
       const secsUntil = ts - settings.arrivalLeadMinutes * 60 - now;
       if (secsUntil > 0) {
         const id = await Notifications.scheduleNotificationAsync({

@@ -20,6 +20,9 @@ import { getAirportInfo } from '../utils/airportSettings';
 import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import { getCachedFlightProviderDiagnostics, type FlightProviderDiagnosticsSnapshot } from '../utils/fr24api';
 import { getNotificationDebugSnapshot, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
+import { loadFlightScreenCache } from '../utils/flightScreenCache';
+import { checkEasyJetOverlap } from '../utils/easyjetOverlapMode';
+import { showOrUpdateEasyJetOverlapNotification } from '../utils/pinnedFlightOngoingNotification';
 import {
   buildHomeHealthChips,
   buildHomeOperationalSummary,
@@ -192,6 +195,112 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
 // Performance optimization: memoize flatlist item to prevent unnecessary re-renders
 const PinnedFlightCard = React.memo(PinnedFlightCardComponent);
 
+function EasyJetOverlapMonitor({ overlappingFlights, tickerMs, colors, t, locale }: {
+  overlappingFlights: any[];
+  tickerMs: number;
+  colors: ThemeColors;
+  t: any;
+  locale: string;
+}) {
+  const formatTimeWithSeconds = (ts?: number) => {
+    if (!ts) return 'N/A';
+    return new Date(ts * 1000).toLocaleTimeString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+  };
+
+  const formatCountdown = (ts?: number) => {
+    if (!ts) return '';
+    const diffMs = ts * 1000 - tickerMs;
+    if (diffMs <= 0) {
+      return 'Arrivato';
+    }
+    const diffSecs = Math.floor(diffMs / 1000);
+    const hrs = Math.floor(diffSecs / 3600);
+    const mins = Math.floor((diffSecs % 3600) / 60);
+    const secs = diffSecs % 60;
+
+    if (hrs > 0) {
+      return `Tra ${hrs}h ${mins}m ${secs}s`;
+    }
+    return `Tra ${mins}m ${secs}s`;
+  };
+
+  return (
+    <View style={{
+      marginHorizontal: 16, marginTop: 16,
+      borderRadius: 24, overflow: 'hidden',
+      backgroundColor: colors.isDark ? 'rgba(255, 102, 0, 0.08)' : 'rgba(255, 102, 0, 0.04)',
+      borderWidth: 1.5, borderColor: '#FF660055',
+      padding: 16,
+    }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <MaterialCommunityIcons name="radar" size={20} color="#FF6600" />
+          <Text style={{ fontSize: 13, fontWeight: '900', color: '#FF6600', letterSpacing: 1.2, textTransform: 'uppercase' }}>
+            easyJet Overlap Active
+          </Text>
+        </View>
+        <View style={{ backgroundColor: '#FF660022', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12 }}>
+          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FF6600' }}>Aggiornato al secondo</Text>
+        </View>
+      </View>
+
+      <Text style={{ fontSize: 12, color: colors.textSub, marginBottom: 16, lineHeight: 18 }}>
+        Rilevata fascia oraria con più voli easyJet in arrivo sovrapposti. Monitoraggio in tempo reale attivo.
+      </Text>
+
+      {/* Flight rows */}
+      <View style={{ gap: 12 }}>
+        {overlappingFlights.map((item, idx) => {
+          const flightNumber = item.flight?.identification?.number?.default || 'N/A';
+          const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
+          
+          const scheduledTs = item.flight?.time?.scheduled?.arrival;
+          const estimatedTs = item.flight?.time?.estimated?.arrival;
+          const realTs = item.flight?.time?.real?.arrival;
+          const when = realTs || estimatedTs || scheduledTs;
+
+          const landed = !!realTs;
+          const countdown = landed ? 'Atterrato' : formatCountdown(when);
+          const timeStr = formatTimeWithSeconds(when);
+
+          return (
+            <View key={idx} style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              backgroundColor: colors.isDark ? 'rgba(2,8,12,0.48)' : colors.card,
+              borderRadius: 16, padding: 12,
+              borderWidth: 1, borderColor: colors.isDark ? 'rgba(255, 102, 0, 0.2)' : 'rgba(255, 102, 0, 0.1)',
+            }}>
+              <View style={{ flex: 1, gap: 4 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ backgroundColor: '#FF6600', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
+                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>{flightNumber}</Text>
+                  </View>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>da {origin}</Text>
+                </View>
+                <Text style={{ fontSize: 10, color: colors.textSub }}>
+                  {landed ? 'Atterrato' : 'Stima arrivo'}
+                </Text>
+              </View>
+
+              <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>{timeStr}</Text>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: landed ? '#10B981' : '#FF6600', textTransform: 'uppercase' }}>
+                  {countdown}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const { colors, mode } = useAppTheme();
   const { airportCode } = useAirport();
@@ -221,6 +330,8 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [flightProviderStatus, setFlightProviderStatus] = useState<FlightProviderDiagnosticsSnapshot | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<NotificationDebugSnapshot | null>(null);
   const [statusNow, setStatusNow] = useState(Date.now());
+  const [easyJetOverlap, setEasyJetOverlap] = useState<{ isActive: boolean; overlappingFlights: any[] }>({ isActive: false, overlappingFlights: [] });
+  const [secondsTicker, setSecondsTicker] = useState(Date.now());
 
   const webViewRef = useRef<WebView>(null);
 
@@ -291,14 +402,22 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   useEffect(() => {
     let mounted = true;
     const refreshHomeStatus = async () => {
-      const [provider, notifications] = await Promise.all([
+      const [provider, notifications, cache] = await Promise.all([
         getCachedFlightProviderDiagnostics(airportCode).catch(() => null),
         getNotificationDebugSnapshot().catch(() => null),
+        loadFlightScreenCache(airportCode).catch(() => null),
       ]);
       if (!mounted) return;
       setFlightProviderStatus(provider);
       setNotificationStatus(notifications);
       setStatusNow(Date.now());
+      if (cache) {
+        const overlapResult = checkEasyJetOverlap(cache.arrivals);
+        setEasyJetOverlap(overlapResult);
+        if (overlapResult.isActive) {
+          showOrUpdateEasyJetOverlapNotification(overlapResult.overlappingFlights, true).catch(() => {});
+        }
+      }
     };
 
     refreshHomeStatus().catch(() => {});
@@ -308,6 +427,16 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       clearInterval(interval);
     };
   }, [airportCode]);
+
+  useEffect(() => {
+    if (!easyJetOverlap.isActive) return;
+
+    const tickerInterval = setInterval(() => {
+      setSecondsTicker(Date.now());
+    }, 1000);
+
+    return () => clearInterval(tickerInterval);
+  }, [easyJetOverlap.isActive]);
 
   useEffect(() => {
     const loadPinned = async () => {
@@ -654,6 +783,19 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       {pinnedFlight && (
         <BoardReveal index={3} enabled={isOperations}>
           <PinnedFlightCard item={pinnedFlight} colors={colors} isOperations={isOperations} />
+        </BoardReveal>
+      )}
+
+      {/* EasyJet Overlap Monitor */}
+      {easyJetOverlap.isActive && (
+        <BoardReveal index={3} enabled={isOperations}>
+          <EasyJetOverlapMonitor
+            overlappingFlights={easyJetOverlap.overlappingFlights}
+            tickerMs={secondsTicker}
+            colors={colors}
+            t={t}
+            locale={locale}
+          />
         </BoardReveal>
       )}
 

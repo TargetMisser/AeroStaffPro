@@ -32,6 +32,7 @@ import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
+import { isFlightEasyJet } from '../utils/easyjetOverlapMode';
 import {
   compareFlightsChronologically,
   filterFlightsByAirlines,
@@ -146,7 +147,12 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const airportDisplay = getFlightAirportDisplay(remoteAirport, 'N/A');
   const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
   const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
-  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+  const isEasyJet = isFlightEasyJet(item);
+  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
+  }) : 'N/A';
   const duringShift = userShift && ts && (() => {
     if (activeTab === 'arrivals') return ts >= userShift.start && ts <= userShift.end;
     const opsData = getAirlineOps(airlineIdentity);
@@ -167,7 +173,11 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
   const fmtTs = (t: number) =>
-    new Date(t * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    new Date(t * 1000).toLocaleTimeString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
+    });
 
   const reg = item.flight?.aircraft?.registration;
   const inboundTs = reg ? inboundArrivals[reg] : undefined;
