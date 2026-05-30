@@ -509,10 +509,30 @@ async function fetchAirLabsRoutePredictions(
   apiKey: string,
   targetDate: Date,
   signal?: AbortSignal,
+  preference?: string,
 ): Promise<any[]> {
   const cacheKey = `${airportCode}:${direction}:${toLocalIso(targetDate)}:${apiKeyFingerprint(apiKey)}`;
   const cached = await loadCachedFlights(AIRLABS_ROUTES_CACHE_KEY, cacheKey, AIRLABS_ROUTES_CACHE_TTL_MS);
   if (cached) return cached;
+
+  if (preference === 'auto') {
+    const lastNetCallKey = `aerostaff_airlabs_last_net_call:${airportCode}:${direction}`;
+    try {
+      const lastNetCallStr = await AsyncStorage.getItem(lastNetCallKey);
+      const lastNetCall = lastNetCallStr ? Number(lastNetCallStr) : 0;
+      const nowMs = Date.now();
+      if (nowMs - lastNetCall < 6 * 60 * 60 * 1000) {
+        // Cooldown di rete attivo. Proviamo ad usare la cache rilassata (24 ore).
+        const relaxedCached = await loadCachedFlights(AIRLABS_ROUTES_CACHE_KEY, cacheKey, 24 * 60 * 60 * 1000);
+        if (relaxedCached && relaxedCached.length > 0) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.log(`[airLabsProvider] Cooldown di rete attivo. Uso cache rilassata (24h) per evitare chiamata di rete AirLabs.`);
+          }
+          return relaxedCached;
+        }
+      }
+    } catch {}
+  }
 
   const paramName = direction === 'arrivals' ? 'arr_iata' : 'dep_iata';
   const res = await fetch(buildAirLabsRoutesUrl(paramName, airportCode, apiKey), {
@@ -557,6 +577,14 @@ async function fetchAirLabsRoutePredictions(
     flights,
     flights.length > 0 ? AIRLABS_ROUTES_CACHE_TTL_MS : AIRLABS_EMPTY_ROUTES_CACHE_TTL_MS,
   );
+
+  if (preference === 'auto' && flights.length > 0) {
+    const lastNetCallKey = `aerostaff_airlabs_last_net_call:${airportCode}:${direction}`;
+    try {
+      await AsyncStorage.setItem(lastNetCallKey, String(Date.now()));
+    } catch {}
+  }
+
   return flights;
 }
 
@@ -578,7 +606,7 @@ export const airLabsProvider: FlightScheduleProvider = {
   label: 'AirLabs',
   supports: ({ airLabsApiKey }) => Boolean(airLabsApiKey),
   unavailableMessage: () => 'AirLabs API key non configurata',
-  fetch: async ({ airportCode, airLabsApiKey, airLabsMode = 'full', signal, now = new Date() }) => {
+  fetch: async ({ airportCode, airLabsApiKey, airLabsMode = 'full', signal, now = new Date(), preference }) => {
     if (!airLabsApiKey) throw new Error('AIRLABS_API_KEY_MISSING');
 
     const tomorrow = addDays(now, 1);
@@ -588,8 +616,8 @@ export const airLabsProvider: FlightScheduleProvider = {
     const [departuresResult, arrivalsResult, routeDeparturesResult, routeArrivalsResult] = await Promise.allSettled([
       useLiveSchedules ? fetchAirLabsDirection(airportCode, 'departures', airLabsApiKey, now, signal) : Promise.resolve([]),
       useLiveSchedules ? fetchAirLabsDirection(airportCode, 'arrivals', airLabsApiKey, now, signal) : Promise.resolve([]),
-      fetchAirLabsRoutePredictions(airportCode, 'departures', airLabsApiKey, tomorrow, signal),
-      fetchAirLabsRoutePredictions(airportCode, 'arrivals', airLabsApiKey, tomorrow, signal),
+      fetchAirLabsRoutePredictions(airportCode, 'departures', airLabsApiKey, tomorrow, signal, preference),
+      fetchAirLabsRoutePredictions(airportCode, 'arrivals', airLabsApiKey, tomorrow, signal, preference),
     ]);
 
     const liveDepartures = departuresResult.status === 'fulfilled' ? departuresResult.value : [];

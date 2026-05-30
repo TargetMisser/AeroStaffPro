@@ -382,6 +382,7 @@ export async function fetchFlightScheduleFromProviders(
 
     const startedAt = Date.now();
     try {
+      const preference = context.preference ?? 'auto';
       const useAirLabsRoutesOnly = provider.id === 'airlabs'
         && aggregate !== null
         && hasScheduleBackedDayCoverage(aggregate, now);

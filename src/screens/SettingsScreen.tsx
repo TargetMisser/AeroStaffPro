@@ -91,26 +91,18 @@ const THEME_OPTIONS: ThemeOption[] = [
   {
     id: 'dark',
     label: 'Scuro',
-    sublabel: 'Ideale di notte, riduce affaticamento',
-    icon: 'dark-mode',
-    previewBg: '#0F172A',
-    previewAccent: '#FF9A42',
-  },
-  {
-    id: 'operations',
-    label: 'Operations Board',
-    sublabel: 'Tema control room con UI piu tecnica',
+    sublabel: 'Tema control room con UI tecnica',
     icon: 'dashboard',
     previewBg: '#0B1114',
     previewAccent: '#2DD4BF',
   },
   {
-    id: 'sunset',
-    label: 'Sunset Premium',
-    sublabel: 'Tema caldo, arancio bruciato e accenti cargo-luxury',
-    icon: 'wb-twilight',
-    previewBg: '#140C07',
-    previewAccent: '#FF7A1A',
+    id: 'auto',
+    label: 'Automatico',
+    sublabel: 'Cambia in base all\'orario',
+    icon: 'brightness-auto',
+    previewBg: '#111827',
+    previewAccent: '#10B981',
   },
 ];
 
@@ -250,16 +242,12 @@ export default function SettingsScreen({
       ? t('themeLight')
       : opt.id === 'dark'
         ? t('themeDark')
-        : opt.id === 'operations'
-          ? t('themeOperations')
-          : t('themeSunset'),
+        : t('themeAuto'),
     sublabel: opt.id === 'light'
       ? t('themeLightSub')
       : opt.id === 'dark'
         ? t('themeDarkSub')
-        : opt.id === 'operations'
-          ? t('themeOperationsSub')
-          : t('themeSunsetSub'),
+        : t('themeAutoSub'),
   }));
   const [aeroDataBoxInput, setAeroDataBoxInput] = useState('');
   const [aeroDataBoxGateway, setAeroDataBoxGateway] = useState<AeroDataBoxGateway>('apiMarket');

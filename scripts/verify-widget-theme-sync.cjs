@@ -22,7 +22,7 @@ assertFile('src/widgets/widgetTheme.ts');
 assertFile('src/widgets/widgetThemeSync.tsx');
 
 const themeMode = read('src/utils/themeMode.ts');
-assert(themeMode.includes("'operations'"), 'theme mode helper should support operations theme');
+assert(themeMode.includes("'auto'"), 'theme mode helper should support auto theme');
 assert(themeMode.includes('THEME_STORAGE_KEY'), 'theme storage key should be shared');
 assert(themeMode.includes('THEME_WIDGET_SNAPSHOT_KEY'), 'widget theme snapshot key should be shared');
 assert(themeMode.includes('getStoredThemeMode'), 'stored theme mode reader should be exported');
@@ -32,7 +32,7 @@ assert(themeMode.includes('saveThemeWidgetSnapshot'), 'theme snapshot writer sho
 const widgetTheme = read('src/widgets/widgetTheme.ts');
 assert(widgetTheme.includes('getWidgetThemePalette'), 'widget palette resolver should be exported');
 assert(widgetTheme.includes('getStoredWidgetThemeProps'), 'widget async theme props reader should be exported');
-assert(widgetTheme.includes('operations'), 'widget palette should include operations theme');
+assert(widgetTheme.includes('dark'), 'widget palette should include dark theme');
 assert(widgetTheme.includes('themeSnapshot'), 'widget palette should support app color snapshots');
 
 const shiftWidget = read('src/widgets/ShiftWidget.tsx');

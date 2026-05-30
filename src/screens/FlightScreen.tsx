@@ -32,6 +32,7 @@ import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
+import { isFlightEasyJet } from '../utils/easyjetOverlapMode';
 import {
   compareFlightsChronologically,
   filterFlightsByAirlines,
@@ -146,7 +147,12 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const airportDisplay = getFlightAirportDisplay(remoteAirport, 'N/A');
   const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
   const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
-  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+  const isEasyJet = isFlightEasyJet(item);
+  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
+  }) : 'N/A';
   const duringShift = userShift && ts && (() => {
     if (activeTab === 'arrivals') return ts >= userShift.start && ts <= userShift.end;
     const opsData = getAirlineOps(airlineIdentity);
@@ -167,7 +173,11 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
   const fmtTs = (t: number) =>
-    new Date(t * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    new Date(t * 1000).toLocaleTimeString(locale, {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
+    });
 
   const reg = item.flight?.aircraft?.registration;
   const inboundTs = reg ? inboundArrivals[reg] : undefined;
@@ -511,7 +521,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     activeProfileId,
     setSelectedAirlines: persistSelectedAirlines,
   } = useAirport();
-  const isOperations = mode === 'operations';
+  const isOperations = colors.isDark;
   const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -791,18 +801,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         const fmtOff = (dep: number, off: number) => fmtT(dep - off * 60);
         const nowHH = fmtT(Date.now() / 1000);
         const nowSec = Date.now() / 1000;
-        const activeWidgetShift = shiftToday && nowSec <= shiftToday.end
+        const activeWidgetShift = (shiftToday && nowSec <= shiftToday.end)
           ? { date: todayIso, ...shiftToday, isNext: false }
-          : shiftToday && nowSec > shiftToday.end && nextShift && nextShift.start > nowSec
+          : ((!shiftToday || nowSec > shiftToday.end) && nextShift && nextShift.start > nowSec)
             ? { ...nextShift, isNext: true }
             : null;
 
         let widgetData: WidgetData;
-        if (isRestDay) {
-          widgetData = { state: 'rest' };
-        } else if (!activeWidgetShift) {
-          widgetData = { state: 'no_shift' };
-        } else {
+        if (activeWidgetShift) {
           const shiftLabel = `${activeWidgetShift.isNext ? 'Domani ' : ''}${fmtT(activeWidgetShift.start)} – ${fmtT(activeWidgetShift.end)}`;
           const pinnedRawW = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
           let pinnedFn: string | null = null;
@@ -856,6 +862,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           widgetData = wFlights.length === 0
             ? { state: 'work_empty', shiftLabel, updatedAt: nowHH }
             : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH };
+        } else if (isRestDay) {
+          widgetData = { state: 'rest' };
+        } else {
+          widgetData = { state: 'no_shift' };
         }
         await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));
         if (Platform.OS === 'android') {

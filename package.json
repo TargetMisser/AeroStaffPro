@@ -1,6 +1,6 @@
 {
   "name": "aerostaff-pro",
-  "version": "2.7.8",
+  "version": "2.7.15",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
@@ -22,6 +22,7 @@
     "version:bump": "node scripts/bump-version.cjs",
     "dev:doctor": "node scripts/dev-doctor.cjs",
     "runner:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-runner.ps1",
+    "runner:optimize": "powershell -ExecutionPolicy Bypass -File scripts/optimize-windows-defender.ps1",
     "qa:emulator": "node scripts/emulator-qa.cjs",
     "github:branches:audit": "node scripts/github-branch-audit.cjs"
   },

@@ -35,7 +35,7 @@ export type WidgetThemeProps = {
   themeSnapshot?: ThemeSnapshotColors | null;
 };
 
-const FALLBACK_WIDGET_THEMES: Record<ThemeMode, WidgetThemePalette> = {
+const FALLBACK_WIDGET_THEMES: Record<'light' | 'dark', WidgetThemePalette> = {
   light: {
     bg: '#F2F2F7',
     headerBg: '#FFFFFF',
@@ -58,27 +58,6 @@ const FALLBACK_WIDGET_THEMES: Record<ThemeMode, WidgetThemePalette> = {
     border: 'rgba(60, 60, 67, 0.12)',
   },
   dark: {
-    bg: '#120700',
-    headerBg: '#1E0E02',
-    cardOdd: '#1E0E02',
-    cardEven: '#160900',
-    text: '#FFF5EE',
-    muted: '#A07850',
-    accent: '#F47B16',
-    accentText: '#FF9A42',
-    accentBg: '#3A1800',
-    gate: '#60A5FA',
-    gateBg: '#0C1830',
-    chipBg: '#2A1800',
-    detailBg: '#1C0A00',
-    pinnedBg: '#2A1000',
-    restBg: '#10341F',
-    restAccent: '#34D399',
-    errorAccent: '#EF4444',
-    airlineText: '#FFFFFF',
-    border: 'rgba(255, 255, 255, 0.11)',
-  },
-  operations: {
     bg: '#0B1114',
     headerBg: '#061112',
     cardOdd: '#111A1F',
@@ -98,27 +77,6 @@ const FALLBACK_WIDGET_THEMES: Record<ThemeMode, WidgetThemePalette> = {
     errorAccent: '#F87171',
     airlineText: '#FFFFFF',
     border: 'rgba(141, 163, 173, 0.24)',
-  },
-  sunset: {
-    bg: '#140C07',
-    headerBg: '#21140D',
-    cardOdd: '#21140D',
-    cardEven: '#3A2114',
-    text: '#FFF7ED',
-    muted: '#A78A74',
-    accent: '#FF7A1A',
-    accentText: '#F7C873',
-    accentBg: 'rgba(255, 122, 26, 0.18)',
-    gate: '#F7C873',
-    gateBg: 'rgba(247, 200, 115, 0.16)',
-    chipBg: '#3A2114',
-    detailBg: '#3A2114',
-    pinnedBg: 'rgba(255, 122, 26, 0.18)',
-    restBg: 'rgba(16, 185, 129, 0.18)',
-    restAccent: '#34D399',
-    errorAccent: '#F87171',
-    airlineText: '#FFFFFF',
-    border: 'rgba(247, 200, 115, 0.22)',
   },
 };
 
@@ -167,7 +125,10 @@ export function getWidgetThemePalette(
   if (themeSnapshot) {
     return paletteFromSnapshot(themeSnapshot);
   }
-  return FALLBACK_WIDGET_THEMES[themeMode] ?? FALLBACK_WIDGET_THEMES.light;
+  const resolvedMode = themeMode === 'auto'
+    ? (new Date().getHours() >= 8 && new Date().getHours() < 20 ? 'light' : 'dark')
+    : themeMode;
+  return FALLBACK_WIDGET_THEMES[resolvedMode] ?? FALLBACK_WIDGET_THEMES.light;
 }
 
 export async function getStoredWidgetThemeProps(modeOverride?: ThemeMode): Promise<WidgetThemeProps> {

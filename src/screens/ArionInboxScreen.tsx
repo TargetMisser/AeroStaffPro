@@ -19,7 +19,7 @@ export default function ArionInboxScreen() {
   const [canGoForward, setCanGoForward] = useState(false);
   const [error, setError] = useState<WebLoadError | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const isOperations = mode === 'operations';
+  const isOperations = colors.isDark;
 
   const openExternal = () => {
     Linking.openURL(ARION_INBOX_URL).catch(() => {});

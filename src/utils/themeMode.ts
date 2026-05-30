@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type ThemeMode = 'light' | 'dark' | 'operations' | 'sunset';
+export type ThemeMode = 'light' | 'dark' | 'auto';
 
 export const THEME_STORAGE_KEY = 'aerostaff_theme_mode';
 export const THEME_WIDGET_SNAPSHOT_KEY = 'aerostaff_theme_widget_snapshot_v1';
@@ -29,7 +29,7 @@ export type ThemeWidgetSnapshot = {
 };
 
 export function isThemeMode(value: unknown): value is ThemeMode {
-  return value === 'light' || value === 'dark' || value === 'operations' || value === 'sunset';
+  return value === 'light' || value === 'dark' || value === 'auto';
 }
 
 export function pickThemeSnapshotColors(colors: ThemeSnapshotColors): ThemeSnapshotColors {
@@ -57,6 +57,10 @@ export async function getStoredThemeMode(defaultMode: ThemeMode = 'light'): Prom
     if (stored === 'weather') {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, defaultMode).catch(() => {});
       return defaultMode;
+    }
+    if (stored === 'operations' || stored === 'sunset') {
+      await AsyncStorage.setItem(THEME_STORAGE_KEY, 'dark').catch(() => {});
+      return 'dark';
     }
     return isThemeMode(stored) ? stored : defaultMode;
   } catch {

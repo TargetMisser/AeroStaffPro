@@ -248,7 +248,7 @@ function buildScheduleUrl(gateway: AeroDataBoxGateway, airportCode: string, from
     airportCode,
     toLocalMinute(from),
     toLocalMinute(to),
-  ].map(encodeURIComponent).join('/');
+  ].map(s => encodeURIComponent(s).replace(/%3A/g, ':')).join('/');
   const params = new URLSearchParams({
     direction: 'Both',
     withLeg: 'true',
@@ -296,7 +296,15 @@ async function fetchWindow(
   const body = await res.text();
 
   if (!res.ok) {
-    throw new Error(`AERODATABOX_HTTP_${res.status}`);
+    let detail = '';
+    try {
+      const parsed = JSON.parse(body);
+      detail = parsed.message || parsed.error || parsed.errorMessage || parsed.description || body;
+    } catch {
+      detail = body;
+    }
+    const cleanDetail = (detail || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+    throw new Error(`AERODATABOX_HTTP_${res.status} (${gateway}): ${cleanDetail || 'Nessun dettaglio'}`);
   }
 
   let json: any;

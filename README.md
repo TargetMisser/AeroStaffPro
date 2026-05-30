@@ -13,6 +13,14 @@ AeroStaff Pro is a React Native app for airport shift work. It keeps the things 
 - Stores operational notes, contacts, manuals, passwords, and useful links.
 - Includes notification controls for flight and shift reminders.
 
+## Interface Preview
+
+<p align="center">
+  <img src="assets/demo_home.png" width="380" alt="Home Screen Dashboard" />
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="assets/demo_flights.png" width="380" alt="Flights List View" />
+</p>
+
 ## Development Note
 
 This is not an AI app. AeroStaff Pro does not include a chatbot, language model, AI decision-making, or AI features for end users.
@@ -77,7 +85,7 @@ npm run github:branches:audit
 
 APK files are published in [GitHub Releases](https://github.com/TargetMisser/AeroStaffPro/releases).
 
-Latest stable release: **v2.7.8**
+Latest stable release: **v2.7.15**
 
 To install the Android app:
 
