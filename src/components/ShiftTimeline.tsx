@@ -152,7 +152,14 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
               <Text style={[s.title, { color: colors.primaryDark }]}>Voli nel Turno</Text>
               <Text style={[s.subtitle, { color: colors.textSub }]}>{fmtTime(startSec)} – {fmtTime(endSec)}</Text>
             </View>
-            <TouchableOpacity onPress={onClose} style={s.closeBtn}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={s.closeBtn}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel="Chiudi / Close"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <MaterialIcons name="close" size={22} color={colors.textSub} />
             </TouchableOpacity>
           </View>
