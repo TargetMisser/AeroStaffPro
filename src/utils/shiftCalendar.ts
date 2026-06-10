@@ -138,8 +138,20 @@ export async function deleteShiftEventsInRange(
   start: Date,
   end: Date,
 ): Promise<number> {
-  const events = await Calendar.getEventsAsync([calendarId], start, end);
-  const shiftEvents = events.filter(event => isShiftEventTitle(event.title));
+  /* expo-calendar's Android query only returns events fully contained in the
+     window (Instances.BEGIN >= start AND Instances.END <= end), so a night
+     shift running past midnight - or an all-day rest stored in UTC - is
+     invisible to an exact-day query and survives the replace, piling up
+     duplicates on every edit. Query a day past the end, then keep only the
+     shift events that actually START inside the requested range: a shift
+     belongs to the day it starts on. */
+  const queryEnd = new Date(end.getTime() + 24 * 60 * 60 * 1000);
+  const events = await Calendar.getEventsAsync([calendarId], start, queryEnd);
+  const shiftEvents = events.filter(event => {
+    if (!isShiftEventTitle(event.title)) return false;
+    const startsAt = new Date(event.startDate).getTime();
+    return startsAt >= start.getTime() && startsAt <= end.getTime();
+  });
 
   await Promise.all(
     shiftEvents.map(event => Calendar.deleteEventAsync(event.id).catch(() => {})),

@@ -534,7 +534,12 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
       const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
       const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
-      const events = await Calendar.getEventsAsync([cal.id], yesterdayStart, tomorrowEnd);
+      /* Query a day past the end: expo-calendar's Android query only returns
+         events fully contained in the window, so a night shift starting
+         tomorrow evening would otherwise be invisible. Selection below
+         already filters by start date. */
+      const queryEnd = new Date(tomorrowEnd.getTime() + 24 * 60 * 60 * 1000);
+      const events = await Calendar.getEventsAsync([cal.id], yesterdayStart, queryEnd);
       const workEvents = events
         .filter(e => e.title.includes('Lavoro'))
         .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
