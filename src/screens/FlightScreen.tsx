@@ -1346,6 +1346,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             />
           }
           showsVerticalScrollIndicator={false}
+          // Performance optimization: reduces memory footprint by keeping fewer items off-screen rendered
+          windowSize={5}
         />
       )}
 
