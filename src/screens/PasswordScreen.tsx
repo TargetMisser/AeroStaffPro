@@ -8,6 +8,7 @@ import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { secureWipeAsyncStorageItem } from '../utils/secureWipe';
 
 const PASSWORDS_KEY   = 'aerostaff_passwords_v1';
 const PIN_KEY         = 'aerostaff_pin_v1';
@@ -15,15 +16,28 @@ const PIN_ENABLED_KEY = 'aerostaff_pin_enabled_v1';
 
 // ── Secure helpers — all sensitive data goes through the OS keychain ──────────
 async function getSecurePin(): Promise<string | null> {
-  try { return await SecureStore.getItemAsync(PIN_KEY); }
-  catch { return AsyncStorage.getItem(PIN_KEY); }
+  try {
+    const secure = await SecureStore.getItemAsync(PIN_KEY);
+    if (secure) return secure;
+  } catch {}
+  // Migration: a PIN saved by old versions lives in plaintext AsyncStorage.
+  // Move it to SecureStore and securely wipe the plaintext copy.
+  try {
+    const legacy = await AsyncStorage.getItem(PIN_KEY);
+    if (legacy) {
+      await SecureStore.setItemAsync(PIN_KEY, legacy);
+      await secureWipeAsyncStorageItem(PIN_KEY);
+      return legacy;
+    }
+  } catch {}
+  return null;
 }
 async function setSecurePin(pin: string): Promise<void> {
   await SecureStore.setItemAsync(PIN_KEY, pin);
 }
 async function deleteSecurePin(): Promise<void> {
   await SecureStore.deleteItemAsync(PIN_KEY).catch(() => {});
-  await AsyncStorage.removeItem(PIN_KEY).catch(() => {});
+  await secureWipeAsyncStorageItem(PIN_KEY);
 }
 
 // Passwords are stored encrypted in SecureStore.
@@ -39,7 +53,7 @@ async function loadPasswords(): Promise<PasswordEntry[]> {
     if (legacy) {
       const parsed: PasswordEntry[] = JSON.parse(legacy);
       await SecureStore.setItemAsync(PASSWORDS_KEY, legacy);
-      await AsyncStorage.removeItem(PASSWORDS_KEY);
+      await secureWipeAsyncStorageItem(PASSWORDS_KEY);
       return parsed;
     }
   } catch {}
