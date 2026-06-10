@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
+import { secureWipeAsyncStorageItem } from './secureWipe';
 
 const BACKUP_VERSION = 2;
 
@@ -35,14 +36,14 @@ async function importLegacySensitiveData(data: Record<string, unknown>): Promise
   const legacyPasswords = data[PASSWORDS_KEY];
   if (typeof legacyPasswords === 'string' && legacyPasswords.trim()) {
     await SecureStore.setItemAsync(PASSWORDS_KEY, legacyPasswords);
-    await AsyncStorage.removeItem(PASSWORDS_KEY).catch(() => {});
+    await secureWipeAsyncStorageItem(PASSWORDS_KEY);
     imported += 1;
   }
 
   const legacyPin = data[PIN_KEY];
   if (typeof legacyPin === 'string' && legacyPin.trim()) {
     await SecureStore.setItemAsync(PIN_KEY, legacyPin);
-    await AsyncStorage.removeItem(PIN_KEY).catch(() => {});
+    await secureWipeAsyncStorageItem(PIN_KEY);
     hasImportedPin = true;
     imported += 1;
   }
