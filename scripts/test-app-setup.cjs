@@ -187,4 +187,37 @@ assert(noisyOcrResult3.shifts[0].type === 'work', 'should identify work shift');
 assert(noisyOcrResult3.shifts[0].startTime === '12:30', 'should normalize start time');
 assert(noisyOcrResult3.shifts[0].endTime === '18:45', 'should normalize end time');
 
+// ─── Update Checker Version Fallback Tests ───────────────────────────────────
+const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const asyncStorageMock = {
+  getItem: async () => null,
+  setItem: async () => {},
+  removeItem: async () => {},
+};
+
+// Without a native build version (web, tests) APP_VERSION must fall back to
+// the tooling-maintained constant, which must match package.json.
+const updateCheckerNoNative = loadTsModule('src/utils/updateChecker.ts', {
+  'expo-application': { nativeApplicationVersion: null },
+  '@react-native-async-storage/async-storage': asyncStorageMock,
+});
+assert(
+  updateCheckerNoNative.FALLBACK_APP_VERSION === packageVersion,
+  `FALLBACK_APP_VERSION (${updateCheckerNoNative.FALLBACK_APP_VERSION}) should match package.json version (${packageVersion})`,
+);
+assert(
+  updateCheckerNoNative.APP_VERSION === packageVersion,
+  'APP_VERSION should fall back to the package.json version when the native version is unavailable',
+);
+
+// With a native build version available, it must win over the fallback.
+const updateCheckerNative = loadTsModule('src/utils/updateChecker.ts', {
+  'expo-application': { nativeApplicationVersion: '9.9.9' },
+  '@react-native-async-storage/async-storage': asyncStorageMock,
+});
+assert(
+  updateCheckerNative.APP_VERSION === '9.9.9',
+  'APP_VERSION should prefer the native application version when available',
+);
+
 console.log('App setup tests passed.');

@@ -1,7 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { nativeApplicationVersion } from 'expo-application';
 
-export const APP_VERSION = nativeApplicationVersion ?? '2.6.16';
+/**
+ * Fallback for environments where the native build version is unavailable
+ * (web, tests). Kept in sync with package.json by scripts/bump-version.cjs
+ * and enforced by scripts/release-check.cjs — do not edit by hand.
+ */
+export const FALLBACK_APP_VERSION = '2.7.15';
+
+export const APP_VERSION = nativeApplicationVersion ?? FALLBACK_APP_VERSION;
 const REPO = 'targetmisser/aerostaffpro';
 const CHECK_KEY = 'aerostaff_update_check_v1';
 const SEEN_KEY = 'aerostaff_update_seen_v1';
