@@ -7,7 +7,7 @@ const it = {
   overlayNotepad: 'Blocco Note', overlayPhonebook: 'Rubrica', overlayPasswords: 'Password',
   overlayManuals: 'Manuali DCS', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Impostazioni',
   // Common
-  cancel: 'Annulla', save: 'Salva', delete: 'Elimina', remove: 'Rimuovi', error: 'Errore',
+  close: 'Chiudi', refresh: 'Aggiorna', cancel: 'Annulla', save: 'Salva', delete: 'Elimina', remove: 'Rimuovi', error: 'Errore',
   confirm: 'Conferma', ok: 'OK', add: 'Aggiungi', yes: 'Sì', no: 'No',
   profileTitle: 'Profili aeroporto',
   profileSubtitle: 'Salva aeroporto e compagnie diverse, poi cambia profilo con un tap.',
@@ -304,7 +304,7 @@ const en: typeof it = {
   overlayNotepad: 'Notepad', overlayPhonebook: 'Phonebook', overlayPasswords: 'Password',
   overlayManuals: 'DCS Manuals', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Settings',
   // Common
-  cancel: 'Cancel', save: 'Save', delete: 'Delete', remove: 'Remove', error: 'Error',
+  close: 'Close', refresh: 'Refresh', cancel: 'Cancel', save: 'Save', delete: 'Delete', remove: 'Remove', error: 'Error',
   confirm: 'Confirm', ok: 'OK', add: 'Add', yes: 'Yes', no: 'No',
   profileTitle: 'Airport profiles',
   profileSubtitle: 'Save different airports and airline sets, then switch profiles with one tap.',

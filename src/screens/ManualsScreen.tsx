@@ -359,7 +359,7 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
           autoCapitalize="none"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityRole="button" accessibilityLabel="Chiudi / Close" accessible>
             <MaterialIcons name="close" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
