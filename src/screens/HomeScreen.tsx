@@ -334,6 +334,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [secondsTicker, setSecondsTicker] = useState(Date.now());
 
   const webViewRef = useRef<WebView>(null);
+  const hasLoadedShiftRef = useRef(false);
 
   const toLocalIso = (date: Date): string => {
     const year = date.getFullYear();
@@ -396,7 +397,17 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
     } catch {}
   };
 
-  useEffect(() => { fetchShift(); }, []);
+  /* Every tab screen stays mounted (App.tsx renders them side by side), so a
+     mount-only fetch would leave the Home — and the widget it pushes — stuck
+     on stale data after shifts are edited in the Calendar tab or the day
+     rolls over while the process stays alive. Re-read the calendar on every
+     focus, and refresh silently once a minute while the tab is visible. */
+  useEffect(() => {
+    if (!isFocused) return;
+    fetchShift(hasLoadedShiftRef.current);
+    const interval = setInterval(() => { fetchShift(true); }, 60_000);
+    return () => clearInterval(interval);
+  }, [isFocused]);
   useEffect(() => { fetchWeather(); }, [airportCode, weatherMap]);
 
   useEffect(() => {
@@ -509,7 +520,10 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const fetchShift = async (silent = false) => {
     if (!silent) setLoadingShift(true);
     try {
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      /* Silent refreshes must not pop the system permission dialog */
+      const { status } = silent
+        ? await Calendar.getCalendarPermissionsAsync()
+        : await Calendar.requestCalendarPermissionsAsync();
       if (status !== 'granted') { setLoadingShift(false); return; }
       const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
       const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
@@ -567,7 +581,10 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
         isRestDay: !!todayRest && !todayWork,
         nextShift: tomorrowWork ? toWidgetShiftWindow(tomorrowWork, toLocalIso(tomorrowStart)) : null,
       });
-    } catch (e) { if (__DEV__) console.error('[shift]', e); } finally { setLoadingShift(false); }
+    } catch (e) { if (__DEV__) console.error('[shift]', e); } finally {
+      hasLoadedShiftRef.current = true;
+      setLoadingShift(false);
+    }
   };
 
   const fetchWeather = async () => {
