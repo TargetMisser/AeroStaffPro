@@ -273,13 +273,13 @@ function ContactRowComponent({ contact, onEdit, onDelete }: ContactRowProps) {
         <Text style={rowStyles.number} numberOfLines={1}>{contact.number}</Text>
         {!!contact.note && <Text style={rowStyles.note}>{contact.note}</Text>}
       </View>
-      <TouchableOpacity style={[rowStyles.callBtn, { backgroundColor: color }]} onPress={call}>
+      <TouchableOpacity style={[rowStyles.callBtn, { backgroundColor: color }]} onPress={call} accessible={true} accessibilityRole="button" accessibilityLabel={t('contactA11yCall')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <MaterialIcons name="call" size={18} color="#fff" />
       </TouchableOpacity>
-      <TouchableOpacity style={rowStyles.editBtn} onPress={() => onEdit(contact)}>
+      <TouchableOpacity style={rowStyles.editBtn} onPress={() => onEdit(contact)} accessible={true} accessibilityRole="button" accessibilityLabel={t('contactA11yEdit')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <MaterialIcons name="edit" size={18} color={colors.textSub} />
       </TouchableOpacity>
-      <TouchableOpacity style={rowStyles.editBtn} onPress={confirmDelete}>
+      <TouchableOpacity style={rowStyles.editBtn} onPress={confirmDelete} accessible={true} accessibilityRole="button" accessibilityLabel={t('contactA11yDelete')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
         <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
       </TouchableOpacity>
     </View>
