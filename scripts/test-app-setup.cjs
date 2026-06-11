@@ -220,4 +220,67 @@ assert(
   'APP_VERSION should prefer the native application version when available',
 );
 
-console.log('App setup tests passed.');
+// ─── Shift Calendar Night-Shift Replacement Tests ────────────────────────────
+// The Android implementation of expo-calendar getEventsAsync only returns
+// events FULLY CONTAINED in the query window (BEGIN >= start AND END <= end).
+// The mock reproduces that semantic so a regression to exact-day queries
+// makes night shifts (and UTC-stored all-day rests) invisible again.
+(async () => {
+  const storedEvents = [
+    { // night shift: starts June 10th 22:00, ends June 11th 06:00
+      id: 'night-10',
+      title: 'Lavoro',
+      startDate: new Date(2026, 5, 10, 22, 0).toISOString(),
+      endDate: new Date(2026, 5, 11, 6, 0).toISOString(),
+    },
+    { // previous-day night shift: starts June 9th 22:00, ends June 10th 06:00
+      id: 'night-09',
+      title: 'Lavoro',
+      startDate: new Date(2026, 5, 9, 22, 0).toISOString(),
+      endDate: new Date(2026, 5, 10, 6, 0).toISOString(),
+    },
+    { // unrelated personal event on the same day must never be touched
+      id: 'personal-10',
+      title: 'Dentista',
+      startDate: new Date(2026, 5, 10, 10, 0).toISOString(),
+      endDate: new Date(2026, 5, 10, 11, 0).toISOString(),
+    },
+  ];
+  const deletedIds = [];
+  const calendarMock = {
+    getEventsAsync: async (_calendarIds, start, end) => storedEvents.filter(event =>
+      new Date(event.startDate).getTime() >= new Date(start).getTime()
+      && new Date(event.endDate).getTime() <= new Date(end).getTime(),
+    ),
+    deleteEventAsync: async id => { deletedIds.push(id); },
+    createEventAsync: async () => 'created-id',
+  };
+  const shiftCalendar = loadTsModule('src/utils/shiftCalendar.ts', {
+    'expo-calendar': calendarMock,
+    'react-native': { Platform: { OS: 'android' } },
+  });
+
+  await shiftCalendar.replaceShiftForDate({
+    calendarId: '1',
+    date: '2026-06-10',
+    type: 'rest',
+  });
+
+  assert(
+    deletedIds.includes('night-10'),
+    'replacing a day must delete a night shift that starts on that day even though it ends past midnight',
+  );
+  assert(
+    !deletedIds.includes('night-09'),
+    'replacing a day must not delete the previous day\'s night shift that ends that morning',
+  );
+  assert(
+    !deletedIds.includes('personal-10'),
+    'replacing a day must never delete non-shift calendar events',
+  );
+
+  console.log('App setup tests passed.');
+})().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

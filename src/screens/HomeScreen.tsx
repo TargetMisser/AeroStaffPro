@@ -334,6 +334,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [secondsTicker, setSecondsTicker] = useState(Date.now());
 
   const webViewRef = useRef<WebView>(null);
+  const hasLoadedShiftRef = useRef(false);
 
   const toLocalIso = (date: Date): string => {
     const year = date.getFullYear();
@@ -396,7 +397,17 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
     } catch {}
   };
 
-  useEffect(() => { fetchShift(); }, []);
+  /* Every tab screen stays mounted (App.tsx renders them side by side), so a
+     mount-only fetch would leave the Home — and the widget it pushes — stuck
+     on stale data after shifts are edited in the Calendar tab or the day
+     rolls over while the process stays alive. Re-read the calendar on every
+     focus, and refresh silently once a minute while the tab is visible. */
+  useEffect(() => {
+    if (!isFocused) return;
+    fetchShift(hasLoadedShiftRef.current);
+    const interval = setInterval(() => { fetchShift(true); }, 60_000);
+    return () => clearInterval(interval);
+  }, [isFocused]);
   useEffect(() => { fetchWeather(); }, [airportCode, weatherMap]);
 
   useEffect(() => {
@@ -509,7 +520,10 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const fetchShift = async (silent = false) => {
     if (!silent) setLoadingShift(true);
     try {
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      /* Silent refreshes must not pop the system permission dialog */
+      const { status } = silent
+        ? await Calendar.getCalendarPermissionsAsync()
+        : await Calendar.requestCalendarPermissionsAsync();
       if (status !== 'granted') { setLoadingShift(false); return; }
       const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
       const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
@@ -520,7 +534,12 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
       const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
       const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
-      const events = await Calendar.getEventsAsync([cal.id], yesterdayStart, tomorrowEnd);
+      /* Query a day past the end: expo-calendar's Android query only returns
+         events fully contained in the window, so a night shift starting
+         tomorrow evening would otherwise be invisible. Selection below
+         already filters by start date. */
+      const queryEnd = new Date(tomorrowEnd.getTime() + 24 * 60 * 60 * 1000);
+      const events = await Calendar.getEventsAsync([cal.id], yesterdayStart, queryEnd);
       const workEvents = events
         .filter(e => e.title.includes('Lavoro'))
         .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
@@ -567,7 +586,10 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
         isRestDay: !!todayRest && !todayWork,
         nextShift: tomorrowWork ? toWidgetShiftWindow(tomorrowWork, toLocalIso(tomorrowStart)) : null,
       });
-    } catch (e) { if (__DEV__) console.error('[shift]', e); } finally { setLoadingShift(false); }
+    } catch (e) { if (__DEV__) console.error('[shift]', e); } finally {
+      hasLoadedShiftRef.current = true;
+      setLoadingShift(false);
+    }
   };
 
   const fetchWeather = async () => {
