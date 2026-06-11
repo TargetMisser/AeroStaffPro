@@ -26,11 +26,14 @@ const releaseWorkflow = read('.github/workflows/build-release.yml');
 const windowsReleaseWorkflow = read('.github/workflows/build-release-windows.yml');
 const releaseScript = read('scripts/release-apk.sh');
 
+const updateChecker = read('src/utils/updateChecker.ts');
+
 const packageVersion = packageJson.version;
 const appVersion = appJson.expo?.version;
 const versionNameMatch = buildGradle.match(/versionName\s+"([^"]+)"/);
 const versionCodeMatch = buildGradle.match(/versionCode\s+(\d+)/);
 const readmeStableMatch = readme.match(/Latest stable release:\s+\*\*v(\d+\.\d+\.\d+)\*\*/);
+const fallbackVersionMatch = updateChecker.match(/FALLBACK_APP_VERSION = '(\d+\.\d+\.\d+)'/);
 
 assert(/^\d+\.\d+\.\d+$/.test(packageVersion), `Invalid package.json version: ${packageVersion}`);
 assert(appVersion === packageVersion, `app.json version (${appVersion}) must match package.json (${packageVersion})`);
@@ -40,6 +43,8 @@ assert(versionCodeMatch, 'android/app/build.gradle is missing versionCode');
 assert(Number(versionCodeMatch[1]) > 0, 'Android versionCode must be a positive integer');
 assert(readmeStableMatch, 'README.md is missing Latest stable release');
 assert(readmeStableMatch[1] === packageVersion, `README latest stable release (${readmeStableMatch[1]}) must match package.json (${packageVersion})`);
+assert(fallbackVersionMatch, 'src/utils/updateChecker.ts is missing the FALLBACK_APP_VERSION marker');
+assert(fallbackVersionMatch[1] === packageVersion, `updateChecker FALLBACK_APP_VERSION (${fallbackVersionMatch[1]}) must match package.json (${packageVersion})`);
 
 assert(releaseWorkflow.includes('Validate APK release metadata'), 'release workflow must validate APK metadata');
 assert(releaseWorkflow.includes('Create GitHub Release'), 'release workflow must create a GitHub Release');
