@@ -43,6 +43,7 @@ import {
   isFlightAirlineMatch,
   mergeFlightLists,
   pruneExpiredFlights,
+  pruneUnseenFlights,
 } from '../utils/flightScheduleAdapter';
 import {
   loadFlightScreenCache,
@@ -680,14 +681,23 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       }
       // Accumula voli: fonde i dati freschi con quelli in cache e conserva solo
       // i voli non più vecchi di 1 ora dall'orario migliore disponibile.
+      // I voli in cache che NESSUNA fonte conferma da più di 2 ore decadono
+      // (cancellati o mai esistiti): senza eviction la cache si auto-rinnova
+      // e i voli fantasma sopravvivono fino al loro orario previsto.
       let cachedArrs: any[] = [], cachedDeps: any[] = [];
       try {
         const cache = await loadFlightScreenCache(airportCode);
-        cachedArrs = cache?.arrivals ?? [];
-        cachedDeps = cache?.departures ?? [];
+        const stampLegacy = (item: any) =>
+          (typeof item?._seenAtMs === 'number' ? item : { ...item, _seenAtMs: cache?.savedAt ?? Date.now() });
+        cachedArrs = (cache?.arrivals ?? []).map(stampLegacy);
+        cachedDeps = (cache?.departures ?? []).map(stampLegacy);
       } catch {}
-      const mergedArrs = pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival');
-      const mergedDeps = pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure');
+      const mergedArrs = pruneUnseenFlights(
+        pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival'),
+      );
+      const mergedDeps = pruneUnseenFlights(
+        pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure'),
+      );
       const sourceState: FlightDataSourceState = {
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
@@ -696,10 +706,15 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);
       setFlightDataSource(sourceState);
+      // I voli sintetizzati dalla tabella rotte AirLabs sono stime di orario,
+      // non voli osservati: mostrali pure come fallback, ma non persisterli
+      // in cache, così spariscono al primo fetch buono invece di restare
+      // come fantasmi per ore.
+      const isPersistable = (item: any) => item?.flight?._source !== 'airlabs_routes';
       saveFlightScreenCache({
         airportCode,
-        arrivals: mergedArrs,
-        departures: mergedDeps,
+        arrivals: mergedArrs.filter(isPersistable),
+        departures: mergedDeps.filter(isPersistable),
         sourceLabel: sourceState.sourceLabel,
         fetchedAt: sourceState.fetchedAt,
         providerDiagnostics: sourceState.providerDiagnostics,

@@ -339,6 +339,80 @@ assert(
   'merge should not collapse the same flight number on a different route',
 );
 
+// ─── Ghost flight eviction (unconfirmed cached flights must decay) ──────────
+const ghostNowMs = Date.UTC(2026, 5, 12, 8, 0, 0);
+const ghostFlight = {
+  flight: {
+    identification: { number: { default: 'FR9999' } },
+    airline: { name: 'Ryanair' },
+    airport: { destination: { code: { iata: 'STN' }, name: 'London Stansted' } },
+    time: { scheduled: { departure: Math.floor(ghostNowMs / 1000) + 10 * 3600 }, estimated: {}, real: {} },
+  },
+};
+const confirmedFlight = {
+  flight: {
+    identification: { number: { default: 'BA0617' } },
+    airline: { name: 'British Airways' },
+    airport: { destination: { code: { iata: 'LGW' }, name: 'London Gatwick' } },
+    time: { scheduled: { departure: Math.floor(ghostNowMs / 1000) + 11 * 3600 }, estimated: {}, real: {} },
+  },
+};
+
+const stampedMerge = adapter.mergeFlightLists([], [ghostFlight, confirmedFlight], 'departure', ghostNowMs);
+assert(
+  stampedMerge.every(item => item._seenAtMs === ghostNowMs),
+  'merge should stamp fresh flights with the time a provider confirmed them',
+);
+
+// 2.5 hours later only BA0617 is still reported by the providers
+const laterMs = ghostNowMs + 2.5 * 60 * 60 * 1000;
+const decayedMerge = adapter.mergeFlightLists(stampedMerge, [confirmedFlight], 'departure', laterMs);
+const ghostAfterMerge = decayedMerge.find(item => item.flight.identification.number.default === 'FR9999');
+assert(ghostAfterMerge && ghostAfterMerge._seenAtMs === ghostNowMs, 'cached-only flights should keep their original confirmation stamp');
+
+const unseenPruned = adapter.pruneUnseenFlights(decayedMerge, laterMs);
+assert(
+  !unseenPruned.some(item => item.flight.identification.number.default === 'FR9999'),
+  'a flight no provider has confirmed for over two hours should be evicted even with a future schedule',
+);
+assert(
+  unseenPruned.some(item => item.flight.identification.number.default === 'BA0617'),
+  'flights still reported by providers must survive the unseen eviction',
+);
+assert(
+  adapter.pruneUnseenFlights(stampedMerge, ghostNowMs + 60 * 60 * 1000).length === 2,
+  'recently confirmed flights must not be evicted',
+);
+assert(
+  adapter.pruneUnseenFlights([{ flight: { identification: { number: { default: 'XX1' } } } }], laterMs).length === 1,
+  'flights without a confirmation stamp (legacy cache) must be kept',
+);
+
+// ─── StaffMonitor clock anchoring around midnight ────────────────────────────
+const staffMonitorProviderModule = loadTsModule('src/utils/flightProviders/staffMonitorProvider.ts');
+const lateNight = new Date(2026, 5, 12, 0, 30, 0);   // 00:30 local
+const yesterdayLate = Math.floor(new Date(2026, 5, 11, 23, 50, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('23:50', lateNight) === yesterdayLate,
+  'at 00:30 a 23:50 monitor time is yesterday evening, not a ghost flight tonight',
+);
+const todayEarly = Math.floor(new Date(2026, 5, 12, 0, 10, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('00:10', lateNight) === todayEarly,
+  'at 00:30 a 00:10 monitor time is twenty minutes ago today',
+);
+const todayMorning = Math.floor(new Date(2026, 5, 12, 6, 15, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('06:15', lateNight) === todayMorning,
+  'upcoming morning flights stay anchored to today',
+);
+const beforeMidnight = new Date(2026, 5, 12, 23, 50, 0);
+const tomorrowEarly = Math.floor(new Date(2026, 5, 13, 0, 10, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('00:10', beforeMidnight) === tomorrowEarly,
+  'at 23:50 a 00:10 monitor time is tomorrow just after midnight',
+);
+
 const easyJetArrivalScheduledTs = Math.floor(new Date(2026, 4, 12, 17, 35, 0).getTime() / 1000);
 const easyJetArrivalEstimatedTs = Math.floor(new Date(2026, 4, 12, 17, 32, 0).getTime() / 1000);
 const fr24ApiArrival = {

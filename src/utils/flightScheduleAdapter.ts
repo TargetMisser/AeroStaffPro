@@ -435,7 +435,12 @@ export function getFlightMergeKey(item: any, direction: FlightDirection): string
   ].join('_');
 }
 
-export function mergeFlightLists(cached: any[], fresh: any[], direction: FlightDirection): any[] {
+export function mergeFlightLists(
+  cached: any[],
+  fresh: any[],
+  direction: FlightDirection,
+  nowMs = Date.now(),
+): any[] {
   const map = new Map<string, any>();
   for (const item of cached) {
     map.set(getFlightMergeKey(item, direction), item);
@@ -446,9 +451,33 @@ export function mergeFlightLists(cached: any[], fresh: any[], direction: FlightD
     if (existingKey && existingKey !== nextKey) {
       map.delete(existingKey);
     }
-    map.set(nextKey, item);
+    /* Fresh items are stamped with the time a provider last confirmed them,
+       so pruneUnseenFlights can evict cached flights no source reports
+       anymore (cancellations, synthesized timetable guesses). */
+    map.set(nextKey, { ...item, _seenAtMs: nowMs });
   }
   return Array.from(map.values());
+}
+
+/*---------------------------------------------------------------------------*\
+| A flight that no provider has confirmed for a while is a ghost: it was      |
+| cancelled, rescheduled, or never existed (timetable-synthesized fallback    |
+| data cached during an outage). Evict it even though its scheduled time is   |
+| still in the future. Offline usage is unaffected: eviction only happens     |
+| when a fetch succeeds and the lists are re-merged.                          |
+\*---------------------------------------------------------------------------*/
+export const FLIGHT_UNSEEN_EVICTION_MS = 2 * 60 * 60 * 1000;
+
+export function pruneUnseenFlights(
+  items: any[],
+  nowMs = Date.now(),
+  maxUnseenMs = FLIGHT_UNSEEN_EVICTION_MS,
+): any[] {
+  return items.filter(item => {
+    const seenAt = item?._seenAtMs;
+    if (typeof seenAt !== 'number' || !Number.isFinite(seenAt)) return true;
+    return nowMs - seenAt <= maxUnseenMs;
+  });
 }
 
 export function pruneExpiredFlights(
