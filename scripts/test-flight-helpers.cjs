@@ -413,6 +413,101 @@ assert(
   'at 23:50 a 00:10 monitor time is tomorrow just after midnight',
 );
 
+// ─── Live arrival ETA overlay (open ADS-B data) ──────────────────────────────
+const liveEta = loadTsModule('src/utils/liveArrivalEta.ts');
+const PSA_LAT = 43.6839, PSA_LON = 10.3927;
+
+// FCO-PSA is ~140nm; sanity-check the great-circle helper
+const fcoDistance = liveEta.haversineNm(41.8003, 12.2389, PSA_LAT, PSA_LON);
+assert(fcoDistance > 130 && fcoDistance < 150, `haversine FCO-PSA should be ~140nm, got ${fcoDistance.toFixed(1)}`);
+
+assert(liveEta.normalizeCallsignToFlightNumber('RYR4521') === 'FR4521', 'numeric Ryanair callsigns map to IATA flight numbers');
+assert(liveEta.normalizeCallsignToFlightNumber('RYR52GT') === '', 'alphanumeric callsigns must not be mistaken for flight numbers');
+assert(liveEta.normalizeCallsignToFlightNumber('EJU8319 ') === 'U28319', 'easyJet Europe callsigns map to U2 numbers');
+assert(liveEta.normalizeRegistration('ei-dWa ') === 'EIDWA', 'registrations normalize dashes and case');
+
+const inboundAircraft = {
+  registration: 'EI-DWA',
+  callsign: 'RYR9876',
+  lat: 42.5, lon: 11.2,           // ~85nm a sud-est di PSA
+  groundSpeedKt: 400,
+  altitude: 30000,
+  track: 333,                     // verso PSA (nord-ovest)
+};
+const etaInbound = liveEta.estimateEtaSeconds(inboundAircraft, PSA_LAT, PSA_LON);
+assert(etaInbound != null && etaInbound > 10 * 60 && etaInbound < 45 * 60,
+  `an inbound aircraft 85nm out at 400kt should land in 15-40 min, got ${etaInbound}`);
+
+const outboundAircraft = { ...inboundAircraft, track: 150 };  // si allontana
+assert(liveEta.estimateEtaSeconds(outboundAircraft, PSA_LAT, PSA_LON) === null,
+  'an aircraft flying away from the airport must not produce an ETA');
+assert(liveEta.estimateEtaSeconds({ ...inboundAircraft, altitude: 'ground' }, PSA_LAT, PSA_LON) === null,
+  'aircraft on the ground must not produce an ETA');
+assert(liveEta.estimateEtaSeconds({ ...inboundAircraft, groundSpeedKt: 30 }, PSA_LAT, PSA_LON) === null,
+  'implausibly slow targets (ground vehicles, taxiing) must not produce an ETA');
+
+const nowSec = 1_800_000_000;
+const arrivalByReg = {
+  flight: {
+    identification: { number: { default: 'FR9876' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 30 * 60 }, estimated: { arrival: nowSec + 30 * 60 }, real: {} },
+  },
+};
+const landedArrival = {
+  flight: {
+    identification: { number: { default: 'BA0617' } },
+    aircraft: { registration: 'G-EUYO' },
+    time: { scheduled: { arrival: nowSec - 600 }, estimated: {}, real: { arrival: nowSec - 300 } },
+  },
+};
+const overlaid = liveEta.applyLiveArrivalEtas(
+  [arrivalByReg, landedArrival],
+  [inboundAircraft],
+  PSA_LAT, PSA_LON, nowSec,
+);
+assert(overlaid[0].flight.time.estimated.arrival === nowSec + etaInbound,
+  'arrivals matched by registration should get the live ETA');
+assert(overlaid[0].flight._etaSource === 'adsb', 'live ETAs should be tagged with their source');
+assert(arrivalByReg.flight.time.estimated.arrival === nowSec + 30 * 60,
+  'the overlay must not mutate the input items');
+assert(overlaid[1].flight.time.estimated.arrival === undefined,
+  'landed flights must keep their real times untouched');
+
+const wrongRotation = {
+  flight: {
+    identification: { number: { default: 'FR1111' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 10 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const rotationGuard = liveEta.applyLiveArrivalEtas([wrongRotation], [inboundAircraft], PSA_LAT, PSA_LON, nowSec);
+assert(rotationGuard[0].flight.time.estimated.arrival === undefined,
+  'a live ETA hours away from the schedule is a different rotation and must be ignored');
+
+// Same airframe, two rotations within tolerance: only the closest schedule
+// gets the live ETA (the real case that produced ghost ETAs in testing:
+// FR1492 19:25 and FR8269 23:30 both flown by 9H-QAG).
+const earlyRotation = {
+  flight: {
+    identification: { number: { default: 'FR1492' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 25 * 60 }, estimated: {}, real: {} },
+  },
+};
+const lateRotation = {
+  flight: {
+    identification: { number: { default: 'FR8269' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 2.8 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const rotations = liveEta.applyLiveArrivalEtas([lateRotation, earlyRotation], [inboundAircraft], PSA_LAT, PSA_LON, nowSec);
+assert(rotations[1].flight.time.estimated.arrival === nowSec + etaInbound,
+  'the rotation closest to the live ETA gets the overlay');
+assert(rotations[0].flight.time.estimated.arrival === undefined,
+  'the later rotation of the same airframe must not inherit the live ETA');
+
 const easyJetArrivalScheduledTs = Math.floor(new Date(2026, 4, 12, 17, 35, 0).getTime() / 1000);
 const easyJetArrivalEstimatedTs = Math.floor(new Date(2026, 4, 12, 17, 32, 0).getTime() / 1000);
 const fr24ApiArrival = {

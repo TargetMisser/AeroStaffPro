@@ -24,7 +24,8 @@ import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
-import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
+import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines } from '../utils/airportSettings';
+import { applyLiveArrivalEtas, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
@@ -692,12 +693,37 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         cachedArrs = (cache?.arrivals ?? []).map(stampLegacy);
         cachedDeps = (cache?.departures ?? []).map(stampLegacy);
       } catch {}
-      const mergedArrs = pruneUnseenFlights(
+      let mergedArrs = pruneUnseenFlights(
         pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival'),
       );
       const mergedDeps = pruneUnseenFlights(
         pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure'),
       );
+
+      // Overlay ETA live dai dati ADS-B aperti (stessa fonte grezza di FR24):
+      // incrocia gli arrivi per registrazione/callsign con gli aerei in volo
+      // e sostituisce la stima con distanza/velocità reali. Best-effort: se
+      // l'ADS-B non risponde restano gli orari del FIDS.
+      try {
+        const airportInfo = getAirportInfo(airportCode);
+        if (airportInfo.latitude != null && airportInfo.longitude != null) {
+          const adsbController = new AbortController();
+          const adsbTimer = setTimeout(() => adsbController.abort(), 8_000);
+          try {
+            const aircraft = await fetchAdsbAircraft(
+              airportInfo.latitude,
+              airportInfo.longitude,
+              undefined,
+              adsbController.signal,
+            );
+            mergedArrs = applyLiveArrivalEtas(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+          } finally {
+            clearTimeout(adsbTimer);
+          }
+        }
+      } catch (e) {
+        if (__DEV__) console.log('[liveEta]', e);
+      }
       const sourceState: FlightDataSourceState = {
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
