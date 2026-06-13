@@ -150,7 +150,10 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
   const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
   const isEasyJet = isFlightEasyJet(item);
-  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, {
+  // Header shows the live time (real > estimated > scheduled), so delays surface immediately
+  // instead of the card always displaying the original timetable time.
+  const bestTs = activeTab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
+  const time = bestTs ? new Date(bestTs * 1000).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
