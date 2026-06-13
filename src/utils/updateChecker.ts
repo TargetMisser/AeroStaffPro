@@ -6,7 +6,7 @@ import { nativeApplicationVersion } from 'expo-application';
  * (web, tests). Kept in sync with package.json by scripts/bump-version.cjs
  * and enforced by scripts/release-check.cjs — do not edit by hand.
  */
-export const FALLBACK_APP_VERSION = '2.7.18';
+export const FALLBACK_APP_VERSION = '2.7.19';
 
 export const APP_VERSION = nativeApplicationVersion ?? FALLBACK_APP_VERSION;
 const REPO = 'targetmisser/aerostaffpro';
