@@ -174,6 +174,20 @@ function flightToScheduleItem(
   const airlineName = getAirlineDisplayName(rawAirlineName ?? airlineIata ?? airlineIcao, rawAirlineName ?? airlineIata ?? 'Sconosciuta');
   const realTs = /departed|arrived/i.test(status) ? (runwayTs ?? revisedTs) : undefined;
 
+  // Also carry the OTHER end's times (origin departure for an arrival, and
+  // destination arrival for a departure). AeroDataBox already returns the full
+  // movement pair; keeping only one side left the arrival card's "Partito"
+  // (origin departure) box permanently empty.
+  const oppositeTimeField = direction === 'departures' ? 'arrival' : 'departure';
+  const oppScheduledTs = movementTime(oppositeMovement, 'scheduledTime');
+  const oppRevisedTs = movementTime(oppositeMovement, 'revisedTime');
+  const oppRunwayTs = movementTime(oppositeMovement, 'runwayTime');
+  const oppPredictedTs = movementTime(oppositeMovement, 'predictedTime');
+  const oppEstimatedTs = oppRevisedTs ?? oppPredictedTs ?? oppRunwayTs;
+  // For an arrival, the opposite movement is the origin departure: if the
+  // flight is airborne/landed it has actually departed, so runway/revised is real.
+  const oppRealTs = oppRunwayTs ?? (/departed|arrived|en.?route/i.test(status) ? oppRevisedTs : undefined);
+
   return {
     flight: {
       identification: {
@@ -195,9 +209,18 @@ function flightToScheduleItem(
         ? { origin: remoteAirport, destination: localAirport }
         : { origin: localAirport, destination: remoteAirport },
       time: {
-        scheduled: { [timeField]: scheduledTs },
-        estimated: estimatedTs && estimatedTs !== scheduledTs ? { [timeField]: estimatedTs } : {},
-        real: realTs ? { [timeField]: realTs } : {},
+        scheduled: {
+          [timeField]: scheduledTs,
+          ...(oppScheduledTs ? { [oppositeTimeField]: oppScheduledTs } : {}),
+        },
+        estimated: {
+          ...(estimatedTs && estimatedTs !== scheduledTs ? { [timeField]: estimatedTs } : {}),
+          ...(oppEstimatedTs && oppEstimatedTs !== oppScheduledTs ? { [oppositeTimeField]: oppEstimatedTs } : {}),
+        },
+        real: {
+          ...(realTs ? { [timeField]: realTs } : {}),
+          ...(oppRealTs ? { [oppositeTimeField]: oppRealTs } : {}),
+        },
       },
       status: {
         text: status,

@@ -383,6 +383,14 @@ function itemToScheduleItem(
   const estimatedTs = readTime(item, `${timePrefix}_estimated`);
   const actualTs = readTime(item, `${timePrefix}_actual`);
   const bestTs = actualTs ?? estimatedTs ?? scheduledTs;
+
+  // Carry the opposite end's times too (origin departure for an arrival), so
+  // the arrival card's "Partito" box can show when the inbound left its origin.
+  const oppositePrefix = direction === 'arrivals' ? 'dep' : 'arr';
+  const oppositeField = direction === 'arrivals' ? 'departure' : 'arrival';
+  const oppScheduledTs = readTime(item, `${oppositePrefix}_time`);
+  const oppEstimatedTs = readTime(item, `${oppositePrefix}_estimated`);
+  const oppActualTs = readTime(item, `${oppositePrefix}_actual`);
   const flightNumber = normalizeFlightNumber(item);
   const airlineIata = cleanString(item.airline_iata)?.toUpperCase();
   const airlineIcao = cleanString(item.airline_icao)?.toUpperCase();
@@ -412,9 +420,18 @@ function itemToScheduleItem(
         destination: arrAirport,
       },
       time: {
-        scheduled: { [timeField]: scheduledTs },
-        estimated: estimatedTs ? { [timeField]: estimatedTs } : {},
-        real: actualTs ? { [timeField]: actualTs } : {},
+        scheduled: {
+          [timeField]: scheduledTs,
+          ...(oppScheduledTs ? { [oppositeField]: oppScheduledTs } : {}),
+        },
+        estimated: {
+          ...(estimatedTs ? { [timeField]: estimatedTs } : {}),
+          ...(oppEstimatedTs ? { [oppositeField]: oppEstimatedTs } : {}),
+        },
+        real: {
+          ...(actualTs ? { [timeField]: actualTs } : {}),
+          ...(oppActualTs ? { [oppositeField]: oppActualTs } : {}),
+        },
       },
       status: {
         text: status,

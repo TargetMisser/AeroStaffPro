@@ -508,6 +508,84 @@ assert(rotations[1].flight.time.estimated.arrival === nowSec + etaInbound,
 assert(rotations[0].flight.time.estimated.arrival === undefined,
   'the later rotation of the same airframe must not inherit the live ETA');
 
+// ─── Origin-departure estimate (ADS-B route + elapsed flight) ────────────────
+// elapsed = distance flown / groundspeed. Bucharest-ish origin ~520nm out,
+// aircraft 85nm from PSA at 400kt => flown ~435nm => ~65 min airborne.
+const ROM_LAT = 44.57, ROM_LON = 26.10;   // Bucharest Otopeni
+const elapsed = liveEta.estimateElapsedSeconds(inboundAircraft, ROM_LAT, ROM_LON, PSA_LAT, PSA_LON);
+assert(elapsed != null && elapsed > 40 * 60 && elapsed < 90 * 60,
+  `a mid-route inbound should have been flying 40-90 min, got ${elapsed && Math.round(elapsed / 60)}min`);
+assert(liveEta.estimateElapsedSeconds({ ...inboundAircraft, altitude: 'ground' }, ROM_LAT, ROM_LON, PSA_LAT, PSA_LON) === null,
+  'a grounded aircraft yields no elapsed estimate');
+// origin essentially at the airport => nothing flown yet => null (not a bogus 0)
+assert(liveEta.estimateElapsedSeconds(inboundAircraft, PSA_LAT + 0.05, PSA_LON, PSA_LAT, PSA_LON) === null,
+  'an aircraft that has barely left (origin ~= destination) yields no estimate');
+
+(async () => {
+  liveEta._clearRouteCache();
+  const route = { originIata: 'OTP', originIcao: 'LROP', originName: 'Bucharest', originLat: ROM_LAT, originLon: ROM_LON };
+  const routeLookup = async () => route;
+
+  const inboundArr = {
+    flight: {
+      identification: { number: { default: 'W61467' } },
+      aircraft: { registration: 'HALWA' },
+      airport: { origin: { name: 'BUCAREST' }, destination: { code: { iata: 'PSA' } } },
+      time: { scheduled: { arrival: nowSec + 20 * 60 }, estimated: {}, real: {} },
+    },
+  };
+  const aircraftW6 = { ...inboundAircraft, registration: 'HALWA', callsign: 'WZZ1467' };
+  const out = await liveEta.applyLiveOriginDepartures([inboundArr], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  assert(typeof out[0].flight.time.estimated.departure === 'number',
+    'a matched airborne arrival gets an estimated origin-departure time');
+  assert(out[0].flight.time.estimated.departure < nowSec,
+    'the estimated departure is in the past (the aircraft is already airborne)');
+  assert(out[0].flight._departureSource === 'adsb-estimate',
+    'the estimated departure is tagged as an ADS-B estimate');
+  assert(out[0].flight.airport.origin.code.iata === 'OTP',
+    'the origin airport code is back-filled from the route when the feed only had a name');
+  assert(inboundArr.flight.time.estimated.departure === undefined,
+    'applyLiveOriginDepartures must not mutate the input');
+
+  // A flight that already has a provider departure time must be left untouched.
+  const withProviderDep = {
+    flight: {
+      identification: { number: { default: 'FR1000' } },
+      aircraft: { registration: 'HALWA' },
+      time: { scheduled: { arrival: nowSec + 20 * 60, departure: nowSec - 30 * 60 }, estimated: {}, real: {} },
+    },
+  };
+  const keep = await liveEta.applyLiveOriginDepartures([withProviderDep], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  assert(keep[0].flight.time.estimated.departure === undefined && keep[0].flight._departureSource === undefined,
+    'a provider-supplied departure time must win over the ADS-B estimate');
+
+  // Rotation guard: one airframe, two future arrivals -> only the leg closest to
+  // the projected arrival (now + ETA) gets the estimated departure.
+  const legNow = {
+    flight: {
+      identification: { number: { default: 'W61467' } },
+      aircraft: { registration: 'HALWA' },
+      airport: { origin: { name: 'BUCAREST' } },
+      time: { scheduled: { arrival: nowSec + etaInbound }, estimated: {}, real: {} },
+    },
+  };
+  const legLater = {
+    flight: {
+      identification: { number: { default: 'W61999' } },
+      aircraft: { registration: 'HALWA' },
+      airport: { origin: { name: 'BUCAREST' } },
+      time: { scheduled: { arrival: nowSec + etaInbound + 2.5 * 60 * 60 }, estimated: {}, real: {} },
+    },
+  };
+  const legs = await liveEta.applyLiveOriginDepartures([legLater, legNow], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  assert(typeof legs[1].flight.time.estimated.departure === 'number',
+    'the current leg (closest to ETA) gets the estimated departure');
+  assert(legs[0].flight.time.estimated.departure === undefined,
+    'a later rotation of the same airframe must not inherit the estimated departure');
+
+  console.log('Origin-departure estimate tests passed.');
+})().catch(err => { console.error(err); process.exit(1); });
+
 // ─── fetchAdsbAircraft: browser-like headers and aircraft list parsing ──────
 async function runLiveEtaFetchTests() {
   const requests = [];

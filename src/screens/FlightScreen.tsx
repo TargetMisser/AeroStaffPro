@@ -25,7 +25,7 @@ import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines } from '../utils/airportSettings';
-import { applyLiveArrivalEtas, fetchAdsbAircraft } from '../utils/liveArrivalEta';
+import { applyLiveArrivalEtas, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
@@ -390,12 +390,14 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             </View>
           ) : activeTab === 'arrivals' && ts ? (() => {
             const realDep = item.flight?.time?.real?.departure;
+            const estDep = item.flight?.time?.estimated?.departure;
+            const schedDep = item.flight?.time?.scheduled?.departure;
             const realArr = item.flight?.time?.real?.arrival;
             const estArr = item.flight?.time?.estimated?.arrival;
             const bestArr = realArr || estArr || ts;
             const delayMin = Math.round((bestArr - ts) / 60);
             const landed = !!realArr;
-            const departed = !!realDep;
+            const depEstimated = item.flight?._departureSource === 'adsb-estimate';
 
             const landColor = landed ? '#10B981'
               : delayMin > 20 ? '#EF4444'
@@ -403,25 +405,28 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
               : colors.primary;
             const landLabel = landed ? t('flightLanded') : t('flightEstimated');
 
-            // PSA's arrival feed has no origin-departure time, so the "Departed"
-            // box was always "--:--". When a richer provider (FR24 API) supplies
-            // a real departure, show it; otherwise fall back to the scheduled
-            // arrival so the box always carries a meaningful time.
-            const firstLabel = departed ? t('flightDeparted') : t('flightScheduled');
-            const firstTs = departed ? realDep : ts;
-            const firstIcon = departed ? 'flight-takeoff' : 'schedule';
+            // Origin-departure box: PSA's own feed has no departure time, so we
+            // fill it from (in order) a real provider time, the ADS-B-estimated
+            // departure (prefixed "~"), or a scheduled-departure time. Only when
+            // none exists do we fall back to showing the scheduled arrival.
+            const depTs = realDep ?? estDep ?? schedDep;
+            const firstLabel = depTs ? t('flightDeparted') : t('flightScheduled');
+            const firstTs = depTs ?? ts;
+            const firstIcon = depTs ? 'flight-takeoff' : 'schedule';
+            const firstApprox = !!depTs && !realDep && depEstimated;
+            const firstTimeText = `${firstApprox ? '~' : ''}${fmtTs(firstTs)}`;
 
             return (
               <View style={s.opsRow}>
                 <ValueChangeFlash
-                  valueKey={`${firstLabel}|${fmtTs(firstTs)}`}
+                  valueKey={`${firstLabel}|${firstTimeText}`}
                   enabled={isOperations}
                   style={s.opsBadge}
                 >
                   <MaterialIcons name={firstIcon} size={16} color={colors.primary} />
                   <View>
                     <Text style={s.opsLabel}>{firstLabel}</Text>
-                    <Text style={s.opsTime}>{fmtTs(firstTs)}</Text>
+                    <Text style={s.opsTime}>{firstTimeText}</Text>
                   </View>
                 </ValueChangeFlash>
                 <ValueChangeFlash
@@ -728,14 +733,19 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
               adsbController.signal,
             );
             mergedArrs = applyLiveArrivalEtas(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            // Estimate the inbound's origin-departure time from its route + how far
+            // it has flown, but only for arrivals no schedule provider gave a
+            // departure time for (a key-backed exact time always wins).
+            mergedArrs = await applyLiveOriginDepartures(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
             const matched = mergedArrs.filter(item => item.flight?._etaSource === 'adsb').length;
+            const depMatched = mergedArrs.filter(item => item.flight?._departureSource === 'adsb-estimate').length;
             liveEtaDiagnostics.push({
               provider: 'liveEta',
               label: 'Live ETA (ADS-B)',
               status: 'success',
               arrivals: matched,
               durationMs: Date.now() - startedAt,
-              message: `${aircraft.length} aerei nel raggio, ${matched} orari aggiornati`,
+              message: `${aircraft.length} aerei nel raggio, ${matched} ETA, ${depMatched} decolli stimati`,
             });
           } finally {
             clearTimeout(adsbTimer);

@@ -273,3 +273,184 @@ export async function fetchAdsbAircraft(
   }
   throw lastError;
 }
+
+// ─── Origin-departure estimate ──────────────────────────────────────────────
+// PSA's feed never carries the inbound flight's departure time from its origin.
+// For an arrival matched to a live airborne aircraft we resolve its route
+// (adsbdb: callsign -> origin airport + coords) and estimate the departure
+// time from how far it has already flown at its current groundspeed. Approximate
+// (climb is slower than cruise, so this can read a few minutes late) but real:
+// "flight X, from airport Y, departed ~Z".
+
+export type AircraftRoute = {
+  originIata?: string;
+  originIcao?: string;
+  originName?: string;
+  originLat: number;
+  originLon: number;
+  destIata?: string;
+};
+
+const ADSBDB_CALLSIGN_BASE = 'https://api.adsbdb.com/v0/callsign';
+/** callsign -> route (or null when unknown); routes are stable within a day */
+const ROUTE_CACHE = new Map<string, AircraftRoute | null>();
+/** an aircraft must have flown at least this far for the elapsed estimate to be meaningful */
+const MIN_DISTANCE_FLOWN_NM = 12;
+
+export function _clearRouteCache(): void {
+  ROUTE_CACHE.clear();
+}
+
+export async function fetchAircraftRoute(
+  callsign: string | undefined,
+  signal?: AbortSignal,
+): Promise<AircraftRoute | null> {
+  const cs = String(callsign ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!cs) return null;
+  if (ROUTE_CACHE.has(cs)) return ROUTE_CACHE.get(cs) ?? null;
+  try {
+    const res = await fetch(`${ADSBDB_CALLSIGN_BASE}/${cs}`, { headers: ADSB_FETCH_HEADERS, signal });
+    if (!res.ok) { ROUTE_CACHE.set(cs, null); return null; }   // 404 = unknown callsign, cache the miss
+    const json = await res.json();
+    const origin = json?.response?.flightroute?.origin;
+    const destination = json?.response?.flightroute?.destination;
+    if (!origin || typeof origin.latitude !== 'number' || typeof origin.longitude !== 'number') {
+      ROUTE_CACHE.set(cs, null);
+      return null;
+    }
+    const route: AircraftRoute = {
+      originIata: typeof origin.iata_code === 'string' ? origin.iata_code : undefined,
+      originIcao: typeof origin.icao_code === 'string' ? origin.icao_code : undefined,
+      originName: typeof origin.municipality === 'string' && origin.municipality
+        ? origin.municipality
+        : (typeof origin.name === 'string' ? origin.name : undefined),
+      originLat: origin.latitude,
+      originLon: origin.longitude,
+      destIata: typeof destination?.iata_code === 'string' ? destination.iata_code : undefined,
+    };
+    ROUTE_CACHE.set(cs, route);
+    return route;
+  } catch {
+    return null;   // transient error: don't poison the cache
+  }
+}
+
+/** Seconds the aircraft has already been flying, from distance covered / current speed. */
+export function estimateElapsedSeconds(
+  aircraft: AdsbAircraft,
+  originLat: number,
+  originLon: number,
+  airportLat: number,
+  airportLon: number,
+): number | null {
+  if (aircraft.altitude === 'ground') return null;
+  const { lat, lon, groundSpeedKt } = aircraft;
+  if (typeof lat !== 'number' || typeof lon !== 'number') return null;
+  if (typeof groundSpeedKt !== 'number'
+    || groundSpeedKt < MIN_GROUNDSPEED_KT
+    || groundSpeedKt > MAX_GROUNDSPEED_KT) {
+    return null;
+  }
+  const totalNm = haversineNm(originLat, originLon, airportLat, airportLon);
+  const remainingNm = haversineNm(lat, lon, airportLat, airportLon);
+  const flownNm = totalNm - remainingNm;
+  if (flownNm < MIN_DISTANCE_FLOWN_NM) return null;   // just off the ground / past the field
+  return Math.round((flownNm / groundSpeedKt) * 3600);
+}
+
+/**
+ * Fill the estimated origin-departure time on arrivals that don't already have
+ * a departure time from a schedule provider. Matches arrivals to live aircraft
+ * (registration, then callsign), resolves each route once (cached), and sets
+ * `time.estimated.departure` + tags `_departureSource: 'adsb-estimate'`. Also
+ * back-fills the origin airport code when the feed only had a free-text name.
+ */
+export async function applyLiveOriginDepartures(
+  arrivals: any[],
+  aircraftList: AdsbAircraft[],
+  airportLat: number,
+  airportLon: number,
+  nowSeconds = Math.floor(Date.now() / 1000),
+  routeLookup: (callsign: string | undefined, signal?: AbortSignal) => Promise<AircraftRoute | null> = fetchAircraftRoute,
+): Promise<any[]> {
+  const byRegistration = new Map<string, AdsbAircraft>();
+  const byFlightNumber = new Map<string, AdsbAircraft>();
+  for (const aircraft of aircraftList) {
+    const reg = normalizeRegistration(aircraft.registration);
+    if (reg && !byRegistration.has(reg)) byRegistration.set(reg, aircraft);
+    const flightNumber = normalizeCallsignToFlightNumber(aircraft.callsign);
+    if (flightNumber && !byFlightNumber.has(flightNumber)) byFlightNumber.set(flightNumber, aircraft);
+  }
+
+  // One airframe flies several rotations a day, so a live aircraft can match
+  // several future arrivals (e.g. the 20:00 and the 23:25 Tirana flight on the
+  // same reg). The departure estimate belongs ONLY to the leg it's flying now:
+  // the arrival whose schedule is closest to its projected arrival (now + ETA).
+  const bestByAircraft = new Map<AdsbAircraft, { index: number; deviation: number }>();
+  arrivals.forEach((item, index) => {
+    const time = item?.flight?.time;
+    // already have a departure time from a schedule provider -> nothing to estimate
+    if (time?.real?.departure || time?.scheduled?.departure || time?.estimated?.departure) return;
+    if (time?.real?.arrival) return;   // already landed; departure no longer interesting
+    const reg = readFlightRegistration(item);
+    const aircraft = (reg && byRegistration.get(reg))
+      || byFlightNumber.get(readFlightNumberIdentity(item));
+    if (!aircraft || !aircraft.callsign) return;
+    const eta = estimateEtaSeconds(aircraft, airportLat, airportLon);
+    if (eta == null) return;
+    const projectedArrival = nowSeconds + eta;
+    const scheduled = time?.scheduled?.arrival;
+    const deviation = typeof scheduled === 'number' ? Math.abs(projectedArrival - scheduled) : 0;
+    if (deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;
+    const current = bestByAircraft.get(aircraft);
+    if (!current || deviation < current.deviation) {
+      bestByAircraft.set(aircraft, { index, deviation });
+    }
+  });
+  const tasks: Array<{ index: number; aircraft: AdsbAircraft }> = [];
+  for (const [aircraft, best] of bestByAircraft) tasks.push({ index: best.index, aircraft });
+  if (tasks.length === 0) return arrivals;
+
+  const resolved = await Promise.all(tasks.map(async ({ index, aircraft }) => {
+    const route = await routeLookup(aircraft.callsign);
+    if (!route) return null;
+    const elapsed = estimateElapsedSeconds(aircraft, route.originLat, route.originLon, airportLat, airportLon);
+    if (elapsed == null) return null;
+    return { index, departedAt: nowSeconds - elapsed, route };
+  }));
+
+  const byIndex = new Map<number, { departedAt: number; route: AircraftRoute }>();
+  for (const r of resolved) if (r) byIndex.set(r.index, { departedAt: r.departedAt, route: r.route });
+  if (byIndex.size === 0) return arrivals;
+
+  return arrivals.map((item, index) => {
+    const hit = byIndex.get(index);
+    if (!hit) return item;
+    const existingOrigin = item.flight?.airport?.origin;
+    const needsOriginCode = !existingOrigin?.code?.iata && !existingOrigin?.code?.icao;
+    const originOverride = needsOriginCode && (hit.route.originIata || hit.route.originIcao)
+      ? {
+          name: hit.route.originName || existingOrigin?.name,
+          code: {
+            ...(hit.route.originIata ? { iata: hit.route.originIata } : {}),
+            ...(hit.route.originIcao ? { icao: hit.route.originIcao } : {}),
+          },
+        }
+      : existingOrigin;
+    return {
+      ...item,
+      flight: {
+        ...item.flight,
+        airport: { ...item.flight?.airport, origin: originOverride },
+        time: {
+          ...item.flight?.time,
+          estimated: {
+            ...item.flight?.time?.estimated,
+            departure: hit.departedAt,
+          },
+        },
+        _departureSource: 'adsb-estimate',
+      },
+    };
+  });
+}
