@@ -152,7 +152,7 @@ const arrivalsXml = `<FLIGHTS>
 </FLIGHTS>`;
 
 async function runArrivalsXmlTest() {
-  const { result } = await runStaffMonitor('A', {
+  const { mod, result } = await runStaffMonitor('A', {
     fetchImpl: async url => makeResponse({
       body: arrivalsXml,
       setCookie: 'JSESSIONID=abc123; Path=/; HttpOnly',
@@ -181,6 +181,13 @@ async function runArrivalsXmlTest() {
   assert(second.gate === 'B12', 'second XML flight gate should be parsed');
   assert(second.checkin === '44', 'second XML flight checkin should be parsed');
   assert(second.belt === undefined, 'flight without CONVEYOR should have an undefined belt');
+
+  // The raw arrivals XML should be exposed for support/debug purposes, so a user
+  // can copy the exact "schedulate"/"expect"/"state" attributes from the device.
+  const rawArrivals = mod.getStaffMonitorDebugHtml('A');
+  assert(rawArrivals.includes('schedulate="14:25:00"') && rawArrivals.includes('expect="14:40:00"'),
+    'getStaffMonitorDebugHtml("A") should expose the raw arrivals XML with the schedulate/expect attributes');
+  assert(mod.getStaffMonitorDebugHtml('D') === '', 'getStaffMonitorDebugHtml("D") should be empty when only an arrivals fetch has run');
 
   return runCacheTests();
 }

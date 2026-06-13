@@ -47,6 +47,7 @@ import { formatProviderDiagnostic } from '../utils/flightDiagnostics';
 import {
   getStaffMonitorDebugColumns,
   getStaffMonitorDebugFlights,
+  getStaffMonitorDebugHtml,
   getStaffMonitorDebugStatus,
 } from '../utils/staffMonitor';
 import {
@@ -263,6 +264,7 @@ export default function SettingsScreen({
   const [providerSummary, setProviderSummary] = useState(t('flightProviderAuto'));
   const [providerDebug, setProviderDebug] = useState<FlightProviderDiagnosticsSnapshot | null>(null);
   const [staffMonitorDebug, setStaffMonitorDebug] = useState('');
+  const [staffMonitorRawArrivals, setStaffMonitorRawArrivals] = useState('');
   const [notificationDebug, setNotificationDebug] = useState<NotificationDebugSnapshot | null>(null);
   const [clearingNotifications, setClearingNotifications] = useState(false);
   const [savingAeroDataBox, setSavingAeroDataBox] = useState(false);
@@ -360,6 +362,7 @@ export default function SettingsScreen({
       getStaffMonitorDebugColumns(),
       getStaffMonitorDebugFlights(),
     ].filter(Boolean).join('\n'));
+    setStaffMonitorRawArrivals(getStaffMonitorDebugHtml('A'));
   }, [airportCode]);
 
   const refreshNotificationDebug = useCallback(async () => {
@@ -1428,6 +1431,19 @@ export default function SettingsScreen({
               <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>
                 {staffMonitorDebug || t('flightDebugNoStaffMonitorDebug')}
               </Text>
+
+              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+                {t('flightDebugStaffMonitorRawArrivals')}
+              </Text>
+              <Text style={[styles.providerOptionSub, { color: colors.textMuted, marginBottom: 8 }]}>
+                {t('flightDebugStaffMonitorRawArrivalsSub')}
+              </Text>
+              <Text
+                selectable
+                style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}
+              >
+                {staffMonitorRawArrivals || t('flightDebugNoStaffMonitorRaw')}
+              </Text>
             </View>
 
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
@@ -1722,6 +1738,19 @@ export default function SettingsScreen({
               </Text>
               <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>
                 {staffMonitorDebug || t('flightDebugNoStaffMonitorDebug')}
+              </Text>
+
+              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+                {t('flightDebugStaffMonitorRawArrivals')}
+              </Text>
+              <Text style={[styles.providerOptionSub, { color: colors.textMuted, marginBottom: 8 }]}>
+                {t('flightDebugStaffMonitorRawArrivalsSub')}
+              </Text>
+              <Text
+                selectable
+                style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}
+              >
+                {staffMonitorRawArrivals || t('flightDebugNoStaffMonitorRaw')}
               </Text>
             </View>
 

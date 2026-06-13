@@ -410,12 +410,16 @@ function extractSectionFor(html: string, nature: 'D' | 'A'): string {
 
 // ─── Debug state ──────────────────────────────────────────────────────────────────
 let _lastDebugStatus = 'init';
-let _lastDebugHtml = '';
+let _lastDebugHtmlD = '';
+let _lastDebugHtmlA = '';
 let _lastDebugColumns = 'non ancora rilevate';
 let _lastDebugFlightsD = 'nessun volo';
 let _lastDebugFlightsA = 'nessun volo';
 export function getStaffMonitorDebugStatus(): string { return _lastDebugStatus; }
-export function getStaffMonitorDebugHtml(): string { return _lastDebugHtml; }
+/** Raw HTML/XML sample of the last successful fetch, for support/debug purposes. */
+export function getStaffMonitorDebugHtml(nature: 'D' | 'A' = 'A'): string {
+  return nature === 'A' ? _lastDebugHtmlA : _lastDebugHtmlD;
+}
 export function getStaffMonitorDebugColumns(): string { return _lastDebugColumns; }
 export function getStaffMonitorDebugFlights(): string {
   return `D:\n${_lastDebugFlightsD}\n\nA:\n${_lastDebugFlightsA}`;
@@ -453,7 +457,7 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
         try {
           html = await tryFetchWithRetry(url, 25_000);
           _lastDebugStatus = `D:200 len=${html.length}`;
-          _lastDebugHtml = html.replace(/\s+/g, ' ').slice(0, 300);
+          _lastDebugHtmlD = html.replace(/\s+/g, ' ').slice(0, 4000);
           break;
         } catch (e: any) {
           _lastDebugStatus = `D:ERR ${String(e).slice(0, 60)}`;
@@ -476,6 +480,7 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
       html = await raceUrls([...primaryUrls, ...arrivalExtras], 40_000) ?? '';
       if (html) {
         _lastDebugStatus = `A:200 len=${html.length} cookie=${_sessionCookie ? 'yes' : 'no'}`;
+        _lastDebugHtmlA = html.replace(/\s+/g, ' ').slice(0, 4000);
         devLog(`[staffMonitor] A parallel race succeeded len=${html.length}`);
       } else {
         _lastDebugStatus = `A:ERR all ${primaryUrls.length + arrivalExtras.length} URLs failed cookie=${_sessionCookie ? 'yes' : 'no'}`;
