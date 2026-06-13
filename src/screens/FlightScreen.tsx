@@ -403,30 +403,27 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
               : delayMin > 20 ? '#EF4444'
               : delayMin > 5 ? '#F59E0B'
               : colors.primary;
-            const landLabel = landed ? t('flightLanded') : t('flightEstimated');
+            // Arrival card = the inbound's journey: Partenza (from origin) -> Atterraggio
+            // (here). Left box is always the departure time (real > ADS-B estimate "~" >
+            // scheduled, or --:-- when unknown); right box is the landing, shown as the
+            // real touchdown once landed, otherwise the expected landing time.
+            const landLabel = landed ? t('flightLanded') : t('flightLandingTime');
 
-            // Origin-departure box: PSA's own feed has no departure time, so we
-            // fill it from (in order) a real provider time, the ADS-B-estimated
-            // departure (prefixed "~"), or a scheduled-departure time. Only when
-            // none exists do we fall back to showing the scheduled arrival.
             const depTs = realDep ?? estDep ?? schedDep;
-            const firstLabel = depTs ? t('flightDeparted') : t('flightScheduled');
-            const firstTs = depTs ?? ts;
-            const firstIcon = depTs ? 'flight-takeoff' : 'schedule';
-            const firstApprox = !!depTs && !realDep && depEstimated;
-            const firstTimeText = `${firstApprox ? '~' : ''}${fmtTs(firstTs)}`;
+            const depApprox = !!depTs && !realDep && depEstimated;
+            const depTimeText = depTs ? `${depApprox ? '~' : ''}${fmtTs(depTs)}` : '--:--';
 
             return (
               <View style={s.opsRow}>
                 <ValueChangeFlash
-                  valueKey={`${firstLabel}|${firstTimeText}`}
+                  valueKey={`dep|${depTimeText}`}
                   enabled={isOperations}
                   style={s.opsBadge}
                 >
-                  <MaterialIcons name={firstIcon} size={16} color={colors.primary} />
+                  <MaterialIcons name="flight-takeoff" size={16} color={depTs ? colors.primary : '#6B7280'} />
                   <View>
-                    <Text style={s.opsLabel}>{firstLabel}</Text>
-                    <Text style={s.opsTime}>{firstTimeText}</Text>
+                    <Text style={s.opsLabel}>{t('flightDepartureTime')}</Text>
+                    <Text style={[s.opsTime, !depTs && { color: '#6B7280' }]}>{depTimeText}</Text>
                   </View>
                 </ValueChangeFlash>
                 <ValueChangeFlash
