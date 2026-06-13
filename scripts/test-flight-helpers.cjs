@@ -508,6 +508,46 @@ assert(rotations[1].flight.time.estimated.arrival === nowSec + etaInbound,
 assert(rotations[0].flight.time.estimated.arrival === undefined,
   'the later rotation of the same airframe must not inherit the live ETA');
 
+// ─── fetchAdsbAircraft: browser-like headers and aircraft list parsing ──────
+async function runLiveEtaFetchTests() {
+  const requests = [];
+  const liveEtaWithFetch = loadTsModule('src/utils/liveArrivalEta.ts', {
+    __globals: {
+      fetch: async (url, init) => {
+        requests.push({ url, headers: init?.headers ?? {} });
+        return {
+          ok: true,
+          json: async () => ({ ac: [{ r: 'EIDWA', flight: 'RYR9876', lat: 42.5, lon: 11.2, gs: 400, alt_baro: 30000, track: 333 }] }),
+        };
+      },
+    },
+  });
+
+  const aircraft = await liveEtaWithFetch.fetchAdsbAircraft(PSA_LAT, PSA_LON);
+  assert(requests.length === 1, 'fetchAdsbAircraft should call fetch exactly once when the first endpoint succeeds');
+  assert(requests[0].url === `https://api.adsb.lol/v2/point/${PSA_LAT}/${PSA_LON}/${liveEta.ADSB_RADIUS_NM}`,
+    'fetchAdsbAircraft should hit the adsb.lol point endpoint with lat/lon/radius');
+  assert(/Mozilla/.test(requests[0].headers['User-Agent'] ?? ''),
+    'fetchAdsbAircraft must send a browser-like User-Agent so anti-bot edges return JSON instead of a challenge page');
+  assert(aircraft.length === 1 && aircraft[0].registration === 'EIDWA' && aircraft[0].callsign === 'RYR9876',
+    'fetchAdsbAircraft should parse the aircraft list from the "ac" field');
+
+  // First endpoint fails (e.g. anti-bot challenge) -> falls back to the second one.
+  const fallbackRequests = [];
+  const liveEtaWithFallback = loadTsModule('src/utils/liveArrivalEta.ts', {
+    __globals: {
+      fetch: async url => {
+        fallbackRequests.push(url);
+        if (fallbackRequests.length === 1) return { ok: false, status: 403, json: async () => ({}) };
+        return { ok: true, json: async () => ({ ac: [] }) };
+      },
+    },
+  });
+  const fallbackAircraft = await liveEtaWithFallback.fetchAdsbAircraft(PSA_LAT, PSA_LON);
+  assert(fallbackRequests.length === 2, 'fetchAdsbAircraft should try the second endpoint when the first fails');
+  assert(fallbackAircraft.length === 0, 'an empty "ac" list should resolve to an empty aircraft array');
+}
+
 const easyJetArrivalScheduledTs = Math.floor(new Date(2026, 4, 12, 17, 35, 0).getTime() / 1000);
 const easyJetArrivalEstimatedTs = Math.floor(new Date(2026, 4, 12, 17, 32, 0).getTime() / 1000);
 const fr24ApiArrival = {
@@ -661,6 +701,30 @@ assert(
     diagnostics: [{ provider: 'aeroDataBox', label: 'AeroDataBox', status: 'failed', message: 'quota' }],
   }) === 'provider_failed',
   'tomorrow empty reason should detect failed providers',
+);
+
+// ─── Live ETA (ADS-B) diagnostic formatting ──────────────────────────────────
+const formattedLiveEtaSuccess = flightDiagnostics.formatProviderDiagnostic({
+  provider: 'liveEta',
+  label: 'Live ETA (ADS-B)',
+  status: 'success',
+  arrivals: 1,
+  durationMs: 1234,
+  message: '5 aerei nel raggio, 1 orari aggiornati',
+});
+assert(
+  formattedLiveEtaSuccess === 'Live ETA (ADS-B): 5 aerei nel raggio, 1 orari aggiornati · 1234ms',
+  `live ETA success diagnostic should surface the aircraft/match summary and timing, got "${formattedLiveEtaSuccess}"`,
+);
+const formattedLiveEtaFailure = flightDiagnostics.formatProviderDiagnostic({
+  provider: 'liveEta',
+  label: 'Live ETA (ADS-B)',
+  status: 'failed',
+  message: 'ADSB_HTTP_403',
+});
+assert(
+  formattedLiveEtaFailure === 'Live ETA (ADS-B): errore - ADSB_HTTP_403',
+  `live ETA failure diagnostic should surface the error message, got "${formattedLiveEtaFailure}"`,
 );
 
 const calendarStatsRange = loadTsModule('src/utils/calendarStatsRange.ts');
@@ -1486,7 +1550,8 @@ async function runProviderLayerTests() {
   assert(airLabsCalls.length === firstRoutesOnlyCallCount, 'AirLabs routes-only mode should cache routes after the first routes-only call');
 }
 
-runProviderLayerTests()
+runLiveEtaFetchTests()
+  .then(() => runProviderLayerTests())
   .then(() => {
     console.log('Flight helper tests passed.');
   })

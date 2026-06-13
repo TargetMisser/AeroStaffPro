@@ -1,7 +1,7 @@
 import type { AirportInfo } from '../airportSettings';
 import type { FlightProviderPreference } from '../flightProviderSettings';
 
-export type FlightScheduleProviderId = 'aeroDataBox' | 'airlabs' | 'fr24Api' | 'fr24Public' | 'staffMonitor' | 'cache';
+export type FlightScheduleProviderId = 'aeroDataBox' | 'airlabs' | 'fr24Api' | 'fr24Public' | 'staffMonitor' | 'cache' | 'liveEta';
 
 export type FlightScheduleProviderStatus = {
   provider: FlightScheduleProviderId;

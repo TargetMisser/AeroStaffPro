@@ -41,6 +41,15 @@ function isFutureRelevant(item: FlightScheduleProviderStatus): boolean {
 }
 
 export function formatProviderDiagnostic(item: FlightScheduleProviderStatus): string {
+  if (item.provider === 'liveEta') {
+    const timing = typeof item.durationMs === 'number' ? ` · ${item.durationMs}ms` : '';
+    if (item.status === 'success') {
+      return `${item.label}: ${item.message ?? ''}${timing}`;
+    }
+    const message = item.message ? ` - ${item.message}` : '';
+    return `${item.label}: errore${message}`;
+  }
+
   const mode = item.mode ? ` · ${item.mode}` : '';
   const contribution = typeof item.contributed === 'boolean'
     ? ` · ${item.contributed ? 'usato' : 'non usato'}`

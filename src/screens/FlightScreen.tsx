@@ -704,11 +704,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       // incrocia gli arrivi per registrazione/callsign con gli aerei in volo
       // e sostituisce la stima con distanza/velocità reali. Best-effort: se
       // l'ADS-B non risponde restano gli orari del FIDS.
+      const liveEtaDiagnostics: FlightScheduleProviderStatus[] = [];
       try {
         const airportInfo = getAirportInfo(airportCode);
         if (airportInfo.latitude != null && airportInfo.longitude != null) {
           const adsbController = new AbortController();
           const adsbTimer = setTimeout(() => adsbController.abort(), 8_000);
+          const startedAt = Date.now();
           try {
             const aircraft = await fetchAdsbAircraft(
               airportInfo.latitude,
@@ -717,17 +719,32 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
               adsbController.signal,
             );
             mergedArrs = applyLiveArrivalEtas(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            const matched = mergedArrs.filter(item => item.flight?._etaSource === 'adsb').length;
+            liveEtaDiagnostics.push({
+              provider: 'liveEta',
+              label: 'Live ETA (ADS-B)',
+              status: 'success',
+              arrivals: matched,
+              durationMs: Date.now() - startedAt,
+              message: `${aircraft.length} aerei nel raggio, ${matched} orari aggiornati`,
+            });
           } finally {
             clearTimeout(adsbTimer);
           }
         }
       } catch (e) {
         if (__DEV__) console.log('[liveEta]', e);
+        liveEtaDiagnostics.push({
+          provider: 'liveEta',
+          label: 'Live ETA (ADS-B)',
+          status: 'failed',
+          message: String((e as any)?.message ?? e).slice(0, 120),
+        });
       }
       const sourceState: FlightDataSourceState = {
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
-        providerDiagnostics,
+        providerDiagnostics: [...(providerDiagnostics ?? []), ...liveEtaDiagnostics],
       };
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);

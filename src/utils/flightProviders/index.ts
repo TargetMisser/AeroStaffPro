@@ -35,6 +35,9 @@ const PROVIDER_TIMEOUT_MS: Record<FlightScheduleProviderId, number> = {
   fr24Public: 10_000,
   airlabs: 12_000,
   cache: 0,
+  // Not a real schedule provider — only used for the FlightScreen live ETA
+  // diagnostic entry, which never goes through runProviders().
+  liveEta: 0,
 };
 
 const PROVIDERS_BY_ID = {

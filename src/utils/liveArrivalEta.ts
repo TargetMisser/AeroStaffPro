@@ -27,6 +27,16 @@ const ADSB_ENDPOINTS = [
   'https://api.airplanes.live/v2/point',
 ];
 
+/* Both aggregators sit behind anti-bot edges that can reply with a non-JSON
+   challenge page to requests without a browser-like User-Agent (the same
+   class of issue staffMonitor.ts works around with FETCH_HEADERS). Without
+   this, fetch() resolves "ok" but res.json() throws, the overlay silently
+   no-ops, and the FIDS times never get replaced. */
+const ADSB_FETCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+  'Accept': 'application/json',
+};
+
 export const ADSB_RADIUS_NM = 250;
 const MIN_GROUNDSPEED_KT = 80;
 const MAX_GROUNDSPEED_KT = 620;
@@ -250,7 +260,7 @@ export async function fetchAdsbAircraft(
   for (const base of ADSB_ENDPOINTS) {
     try {
       const res = await fetch(`${base}/${airportLat}/${airportLon}/${radiusNm}`, {
-        headers: { Accept: 'application/json' },
+        headers: ADSB_FETCH_HEADERS,
         signal,
       });
       if (!res.ok) throw new Error(`ADSB_HTTP_${res.status}`);
