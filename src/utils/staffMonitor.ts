@@ -9,6 +9,7 @@ export type StaffMonitorFlight = {
   route?: string;
   scheduledTime?: string;
   estimatedTime?: string;
+  landedTime?: string;
   status?: string;
   stand?: string;
   checkin?: string;
@@ -249,12 +250,22 @@ function parseXmlSection(xmlStr: string): StaffMonitorFlight[] {
     const registration = getAttr(flightAttrsStr, 'aircraftReg') || undefined;
     const route = getAttr(flightAttrsStr, 'city') || undefined;
     
-    const schedTime = getAttr(flightAttrsStr, 'schedulate');
-    const scheduledTime = schedTime ? schedTime.slice(0, 5) : undefined;
-    
-    const expTime = getAttr(flightAttrsStr, 'expect');
-    const estimatedTime = expTime ? expTime.slice(0, 5) : undefined;
-    
+    // Times can arrive as "14:25:00", "14:25" or even date-prefixed like
+    // "12/06/2026 17:11" (block/landed times for older flights). Pull out the
+    // HH:MM portion instead of blindly slicing the first 5 chars, which would
+    // turn "12/06/2026 17:11" into the junk "12/06".
+    const extractClock = (raw: string): string | undefined => {
+      const m = /(\d{1,2})[:.](\d{2})/.exec(raw);
+      return m ? `${m[1].padStart(2, '0')}:${m[2]}` : undefined;
+    };
+
+    const scheduledTime = extractClock(getAttr(flightAttrsStr, 'schedulate'));
+    const estimatedTime = extractClock(getAttr(flightAttrsStr, 'expect'));
+    // Actual touchdown time. In the live PSA feed `state` is frequently empty
+    // even for flights that have already landed, so this is the reliable
+    // "the aircraft is down" signal for arrivals.
+    const landedTime = extractClock(getAttr(flightAttrsStr, 'landed'));
+
     const status = getAttr(flightAttrsStr, 'state') || undefined;
     const stand = getAttr(flightAttrsStr, 'stand') || undefined;
     const checkin = getAttr(flightAttrsStr, 'checkin') || undefined;
@@ -275,6 +286,7 @@ function parseXmlSection(xmlStr: string): StaffMonitorFlight[] {
       route,
       scheduledTime,
       estimatedTime,
+      landedTime,
       status,
       stand,
       checkin,

@@ -189,6 +189,73 @@ async function runArrivalsXmlTest() {
     'getStaffMonitorDebugHtml("A") should expose the raw arrivals XML with the schedulate/expect attributes');
   assert(mod.getStaffMonitorDebugHtml('D') === '', 'getStaffMonitorDebugHtml("D") should be empty when only an arrivals fetch has run');
 
+  return runProviderRealTimeTest();
+}
+
+// ─── End-to-end: real PSA arrivals feed must surface live times, not table times ─
+// Reproduces the "resta sempre l'orario di tabella" bug with a fixture lifted from
+// a real device capture: a delayed flight (expect != schedulate), a landed flight
+// whose `state` is blank but carries a real `landed` time plus a date-prefixed
+// `expect`, and an on-time flight. Drives the actual provider + schedule adapter
+// (the same getFlightBestTs the flight card header reads) end to end.
+const realArrivalsXml = `<?xml version="1.0" encoding="ISO-8859-1"?>
+<FLIGHTS update="13/06/2026 12:07">
+<FLIGHT carrier="ATLANTIC AIR SOLUTION" code="RC" number="DIGAL" city="FIGARI" aircraftReg="DIOVA" stand="81" state="" schedulate="11:00" expect="12/06/2026 17:11" blockOn="12/06/2026 17:11" landed="17:06" />
+<FLIGHT carrier="RYANAIR LIMITED" code="FR" number="06205" city="CATANIA" aircraftReg="EIEBL" stand="29" state="" schedulate="11:30" expect="12:33" landed=""><CONVEYOR code="1" descr="Nastro 01" /></FLIGHT>
+<FLIGHT carrier="RYANAIR LIMITED" code="FR" number="07991" city="STOCKHOLM" aircraftReg="9HQDV" stand="26" state="" schedulate="12:20" expect="12:20" landed=""><CONVEYOR code="3" descr="Nastro 03" /></FLIGHT>
+</FLIGHTS>`;
+
+async function runProviderRealTimeTest() {
+  const now = new Date(2026, 5, 13, 12, 7, 0); // 13 Jun 2026 12:07 local
+  const tsAt = (h, m) => Math.floor(new Date(2026, 5, 13, h, m, 0).getTime() / 1000);
+
+  const fetchImpl = async url => (String(url).includes('nature=A')
+    ? makeResponse({ body: realArrivalsXml, setCookie: 'JSESSIONID=test; Path=/; HttpOnly' })
+    : makeResponse({ body: '<html><body><table></table></body></html>' }));
+
+  const providerMod = loadTsModule('src/utils/flightProviders/staffMonitorProvider.ts', {
+    '@react-native-async-storage/async-storage': makeAsyncStorageMock(),
+    __globals: { fetch: fetchImpl },
+  });
+  const adapter = loadTsModule('src/utils/flightScheduleAdapter.ts');
+
+  const { allArrivals } = await providerMod.staffMonitorProvider.fetch({
+    airportCode: 'PSA',
+    airport: { name: 'Pisa', icao: 'LIRP' },
+    now,
+  });
+
+  const byNumber = num => allArrivals.find(f => adapter.getFlightNumber(f) === num);
+
+  // Delayed flight: the card header must show 12:33 (estimate), not 11:30 (timetable).
+  const fr = byNumber('FR6205');
+  assert(fr, 'FR6205 should be parsed from the real arrivals feed');
+  assert(adapter.getFlightScheduledTs(fr, 'arrival') === tsAt(11, 30), 'FR6205 scheduled arrival should be 11:30');
+  assert(adapter.getFlightBestTs(fr, 'arrival') === tsAt(12, 33), 'FR6205 best time should be the 12:33 estimate, not the 11:30 timetable time');
+  assert(
+    adapter.getFlightBestTs(fr, 'arrival') !== adapter.getFlightScheduledTs(fr, 'arrival'),
+    'a delayed flight must not keep showing its scheduled (table) time as the best time',
+  );
+
+  // Landed flight: blank `state` but a real `landed` time and a date-prefixed `expect`.
+  const rc = byNumber('RCDIGAL');
+  assert(rc, 'the landed ghost flight should be parsed despite a date-prefixed expect attribute');
+  assert(
+    adapter.getFlightRealTs(rc, 'arrival') === tsAt(17, 6),
+    'a flight with a real landed time must expose 17:06 as its real arrival, even with empty state',
+  );
+  assert(
+    adapter.getFlightBestTs(rc, 'arrival') === tsAt(17, 6),
+    'best time for a landed flight should be the actual touchdown time',
+  );
+  assert(rc.flight.status.generic.status.color === 'green', 'a landed flight should be coloured green');
+
+  // On-time, not-yet-landed flight keeps its scheduled time and exposes no real time.
+  const fr2 = byNumber('FR7991');
+  assert(fr2, 'FR7991 should be parsed');
+  assert(adapter.getFlightBestTs(fr2, 'arrival') === tsAt(12, 20), 'an on-time flight keeps its 12:20 time');
+  assert(adapter.getFlightRealTs(fr2, 'arrival') === undefined, 'a flight that has not landed must not report a real arrival time');
+
   return runCacheTests();
 }
 

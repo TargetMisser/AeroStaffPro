@@ -129,8 +129,17 @@ function staffMonitorFlightToScheduleItem(
   const routeName = item.route ?? 'N/A';
   const homeAirport = airportEndpoint(airportName, airportCode, airportIcao);
   const remoteAirport = airportEndpoint(routeName);
-  const realTs = hasRealEvent(item.status, direction) ? effectiveTs : undefined;
-  const statusText = item.status ?? (estimatedTs && estimatedTs !== scheduledTs ? 'Stimato' : 'Scheduled');
+
+  // A real touchdown time is the strongest "the aircraft is here" signal: in the
+  // live PSA feed `state` is often blank even after landing, so the status-text
+  // check below would otherwise never flag an arrival as landed.
+  const landedTs = direction === 'arrivals'
+    ? alignEstimatedTime(scheduledTs, parseStaffMonitorClock(item.landedTime, now))
+    : undefined;
+  const hasLanded = landedTs !== undefined;
+  const realTs = landedTs ?? (hasRealEvent(item.status, direction) ? effectiveTs : undefined);
+  const statusText = item.status
+    || (hasLanded ? 'Atterrato' : estimatedTs && estimatedTs !== scheduledTs ? 'Stimato' : 'Scheduled');
 
   return {
     flight: {
@@ -156,7 +165,7 @@ function staffMonitorFlightToScheduleItem(
       },
       status: {
         text: statusText,
-        generic: { status: { color: statusColor(item.status, scheduledTs, effectiveTs) } },
+        generic: { status: { color: hasLanded ? 'green' : statusColor(item.status, scheduledTs, effectiveTs) } },
       },
       _source: 'staffMonitor',
     },
