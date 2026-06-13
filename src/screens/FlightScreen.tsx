@@ -403,19 +403,25 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
               : colors.primary;
             const landLabel = landed ? t('flightLanded') : t('flightEstimated');
 
+            // PSA's arrival feed has no origin-departure time, so the "Departed"
+            // box was always "--:--". When a richer provider (FR24 API) supplies
+            // a real departure, show it; otherwise fall back to the scheduled
+            // arrival so the box always carries a meaningful time.
+            const firstLabel = departed ? t('flightDeparted') : t('flightScheduled');
+            const firstTs = departed ? realDep : ts;
+            const firstIcon = departed ? 'flight-takeoff' : 'schedule';
+
             return (
               <View style={s.opsRow}>
                 <ValueChangeFlash
-                  valueKey={departed ? fmtTs(realDep) : '--:--'}
+                  valueKey={`${firstLabel}|${fmtTs(firstTs)}`}
                   enabled={isOperations}
                   style={s.opsBadge}
                 >
-                  <MaterialIcons name="flight-takeoff" size={16} color={departed ? colors.primary : '#6B7280'} />
+                  <MaterialIcons name={firstIcon} size={16} color={colors.primary} />
                   <View>
-                    <Text style={s.opsLabel}>{t('flightDeparted')}</Text>
-                    <Text style={[s.opsTime, !departed && { color: '#6B7280' }]}>
-                      {departed ? fmtTs(realDep) : '--:--'}
-                    </Text>
+                    <Text style={s.opsLabel}>{firstLabel}</Text>
+                    <Text style={s.opsTime}>{fmtTs(firstTs)}</Text>
                   </View>
                 </ValueChangeFlash>
                 <ValueChangeFlash
