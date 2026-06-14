@@ -3,8 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
-import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines } from '../utils/airportSettings';
+import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines, getAirportInfo } from '../utils/airportSettings';
 import { filterFlightsByAirlines, getFlightAirportLabel, getFlightBestTs } from '../utils/flightScheduleAdapter';
+import { staffMonitorProvider } from '../utils/flightProviders/staffMonitorProvider';
 import { ShiftWidget } from './ShiftWidget';
 import { getStoredWidgetThemeProps } from './widgetTheme';
 
@@ -148,8 +149,8 @@ async function renderThemedWidget(props: WidgetTaskHandlerProps, data: WidgetDat
   );
 }
 
-// ─── Fetch fresh widget data from FR24 + cached shift key ─────────────────────
-async function fetchFreshWidgetData(): Promise<WidgetData> {
+// ─── Fetch fresh widget data from the live provider + cached shift key ────────
+export async function fetchFreshWidgetData(): Promise<WidgetData> {
   try {
     const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
     if (!shiftRaw) return getWidgetData();
@@ -164,19 +165,28 @@ async function fetchFreshWidgetData(): Promise<WidgetData> {
     const allAirlines = await getStoredAirportAirlines(airportCode);
     const filterRaw = await AsyncStorage.getItem('aerostaff_flight_filter_v1');
     const allowedAirlines: string[] = filterRaw ? JSON.parse(filterRaw) : allAirlines;
-    const url = buildFr24ScheduleUrl(airportCode);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
+    // Source departures from the real provider (StaffMonitor) where supported,
+    // so the background widget refresh actually works. The previous FR24 public
+    // endpoint returns 403, so the periodic morning update never got fresh data.
+    // FR24 public stays as the fallback for airports StaffMonitor doesn't cover.
+    const airportInfo = getAirportInfo(airportCode);
     let allDepartures: any[] = [];
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: controller.signal });
-      const json = await res.json();
-      allDepartures = json.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
-      await storeDetectedAirportAirlines(airportCode, allDepartures);
-    } finally {
-      clearTimeout(timer);
+    if (staffMonitorProvider.supports({ airportCode, airport: airportInfo, now: new Date() })) {
+      const result = await staffMonitorProvider.fetch({ airportCode, airport: airportInfo, now: new Date() });
+      allDepartures = result.allDepartures;
+    } else {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const res = await fetch(buildFr24ScheduleUrl(airportCode), { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: controller.signal });
+        const json = await res.json();
+        allDepartures = json.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+      } finally {
+        clearTimeout(timer);
+      }
     }
+    await storeDetectedAirportAirlines(airportCode, allDepartures);
 
     const fmtOff = (dep: number, off: number) => fmtTs(dep - off * 60);
     const nowHH = fmtTs(Date.now() / 1000);

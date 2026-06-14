@@ -220,6 +220,20 @@ assert(
   'APP_VERSION should prefer the native application version when available',
 );
 
+// ─── Widget background refresh source guard ──────────────────────────────────
+// The widget's periodic (background) update must pull flights from the real
+// provider (StaffMonitor), not the FR24 public endpoint that returns 403 — a
+// regression there silently breaks the automatic morning refresh.
+const widgetHandlerSource = fs.readFileSync(path.join(root, 'src/widgets/widgetTaskHandler.tsx'), 'utf8');
+assert(
+  widgetHandlerSource.includes('staffMonitorProvider'),
+  'widget background refresh must source flights from the live provider (StaffMonitor)',
+);
+assert(
+  /staffMonitorProvider\.fetch/.test(widgetHandlerSource),
+  'widget background refresh must call staffMonitorProvider.fetch for supported airports',
+);
+
 // ─── Shift Calendar Night-Shift Replacement Tests ────────────────────────────
 // The Android implementation of expo-calendar getEventsAsync only returns
 // events FULLY CONTAINED in the query window (BEGIN >= start AND END <= end).
