@@ -138,7 +138,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
 }
 
 // ─── Password Row ─────────────────────────────────────────────────────────────
-function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry; onEdit: () => void; onDelete: () => void }) {
+function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry; onEdit: (item: PasswordEntry) => void; onDelete: (id: string) => void }) {
   const { colors } = useAppTheme();
   const s = useMemo(() => makeRowStyles(colors), [colors]);
   const [revealed, setRevealed] = useState(false);
@@ -157,10 +157,10 @@ function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry;
         {item.notes ? <Text style={s.notes}>{item.notes}</Text> : null}
       </View>
       <View style={s.actions}>
-        <TouchableOpacity style={s.editBtn} onPress={onEdit}>
+        <TouchableOpacity style={s.editBtn} onPress={() => onEdit(item)}>
           <MaterialIcons name="edit" size={17} color={colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.delBtn} onPress={onDelete}>
+        <TouchableOpacity style={s.delBtn} onPress={() => onDelete(item.id)}>
           <MaterialIcons name="delete-outline" size={17} color="#EF4444" />
         </TouchableOpacity>
       </View>
@@ -169,6 +169,7 @@ function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry;
 }
 
 // Performance optimization: memoize flatlist item to prevent unnecessary re-renders
+// Added useCallback to renderItem to stabilize props and windowSize=5 to reduce memory footprint
 const PasswordRow = React.memo(PasswordRowComponent);
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -292,6 +293,15 @@ export default function PasswordScreen() {
     return <PinOverlay title="Imposta PIN (4 cifre)" onUnlock={handlePinSetup} onCancel={() => setPinMode(null)} />;
   }
 
+
+  const renderPasswordItem = useCallback(({ item }: { item: PasswordEntry }) => (
+    <PasswordRow
+      item={item}
+      onEdit={openEdit}
+      onDelete={deleteEntry}
+    />
+  ), [openEdit, deleteEntry]);
+
   return (
     <View style={s.root}>
       {/* Toolbar */}
@@ -321,13 +331,8 @@ export default function PasswordScreen() {
       <FlatList
         data={entries}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <PasswordRow
-            item={item}
-            onEdit={() => openEdit(item)}
-            onDelete={() => deleteEntry(item.id)}
-          />
-        )}
+        renderItem={renderPasswordItem}
+        windowSize={5}
         contentContainerStyle={{ padding: 16, paddingBottom: 96 }}
         ListEmptyComponent={
           <View style={s.empty}>

@@ -1,3 +1,3 @@
-## 2024-04-13 - Missing React.memo for FlatList Items
-**Learning:** The React Native FlatList components in this codebase frequently render unmemoized inline items (like `ContactRow`, `PasswordRow`, etc.), causing unnecessary re-renders of the entire list when individual state changes.
-**Action:** Always wrap long list item components in `React.memo()` to prevent cascading re-renders and improve FlatList scrolling performance.
+## 2026-05-27 - FlatList Memoization Pitfall
+**Learning:** React.memo() on a list item component inside a FlatList is ineffective if the parent component passes inline functions as props (e.g., `onEdit={() => openEdit(item)}`). The shallow comparison always fails because a new function reference is created on every render.
+**Action:** Always stabilize callback props using `useCallback` and extract them from the `renderItem` method, or pass the item down so the child component can call a stable function reference with its own data. Also, ensure the `renderItem` function itself is wrapped in `useCallback`.
