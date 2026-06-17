@@ -1,11 +1,15 @@
 /**
- * Live arrival ETA overlay from open ADS-B data (adsb.lol / airplanes.live).
+ * Live arrival ETA + departure status overlay from open ADS-B data
+ * (adsb.lol / airplanes.live).
  *
  * StaffMonitor's estimated times update only when the airport FIDS does; the
  * actual aircraft position tells the truth much earlier (it's the same raw
- * data FlightRadar24 uses). We match airport arrivals to live aircraft by
- * registration (primary, exact airframe) or callsign (fallback) and replace
- * the estimated arrival with distance/groundspeed plus an approach allowance.
+ * data FlightRadar24 uses). We match airport flights to live aircraft by
+ * registration (primary, exact airframe) or callsign (fallback) and, for
+ * arrivals, replace the estimated arrival with distance/groundspeed plus an
+ * approach allowance. For departures we detect the wheels-up moment: an
+ * airframe already airborne and climbing outbound has left, so we stamp a real
+ * departure time before the FIDS catches up.
  *
  * No API key, no scraping: both endpoints are public ADS-B aggregators.
  */
@@ -47,6 +51,18 @@ const MAX_SCHEDULE_DEVIATION_SECONDS = 3 * 60 * 60;
 /** the aircraft must be flying roughly toward the airport, not away from it
     (the same registration flies the outbound rotation minutes later) */
 const MAX_INBOUND_TRACK_DEVIATION_DEG = 80;
+/** mirror of the inbound test for departures: an outbound aircraft's track must
+    point roughly away from the field, which separates a departure climbing out
+    from the arrival of the same airframe minutes earlier */
+const MAX_OUTBOUND_TRACK_DEVIATION_DEG = 80;
+/** below this distance the field→aircraft bearing is too noisy to tell an
+    outbound climb from an arrival on short final, so don't guess a takeoff */
+const MIN_OUTBOUND_DISTANCE_NM = 1.5;
+/** a just-departed aircraft is still near the field; beyond this it has either
+    been gone long enough for the FIDS to catch up or it's a same-registration
+    aircraft on a different leg passing through — either way the straight-line
+    elapsed estimate is no longer trustworthy, so don't claim a takeoff */
+const MAX_DEPARTURE_DISTANCE_NM = 60;
 
 /** ICAO callsign prefix -> IATA flight number prefix for the PSA airlines. */
 const CALLSIGN_PREFIX_TO_IATA: Record<string, string> = {
@@ -151,6 +167,37 @@ export function estimateEtaSeconds(
   return Math.round(cruiseSeconds + APPROACH_BUFFER_SECONDS);
 }
 
+/**
+ * Seconds since takeoff for an aircraft that has just departed the airport and
+ * is climbing outbound, or null when the data can't support that conclusion.
+ * Mirrors estimateEtaSeconds but requires the track to point AWAY from the
+ * field, so an arrival of the same airframe on short final never reads as a
+ * fresh departure.
+ */
+export function estimateSecondsSinceDeparture(
+  aircraft: AdsbAircraft,
+  airportLat: number,
+  airportLon: number,
+): number | null {
+  if (aircraft.altitude === 'ground') return null;
+  const { lat, lon, groundSpeedKt, track } = aircraft;
+  if (typeof lat !== 'number' || typeof lon !== 'number') return null;
+  if (typeof groundSpeedKt !== 'number'
+    || groundSpeedKt < MIN_GROUNDSPEED_KT
+    || groundSpeedKt > MAX_GROUNDSPEED_KT) {
+    return null;
+  }
+  if (typeof track !== 'number') return null;   // no heading -> can't tell inbound from outbound
+
+  const distanceNm = haversineNm(lat, lon, airportLat, airportLon);
+  if (distanceNm > MAX_DEPARTURE_DISTANCE_NM || distanceNm < MIN_OUTBOUND_DISTANCE_NM) return null;
+
+  const outbound = bearingDeg(airportLat, airportLon, lat, lon);   // radial from field to aircraft
+  if (angleDifferenceDeg(track, outbound) > MAX_OUTBOUND_TRACK_DEVIATION_DEG) return null;
+
+  return Math.round((distanceNm / groundSpeedKt) * 3600);
+}
+
 function readFlightRegistration(item: any): string {
   return normalizeRegistration(item?.flight?.aircraft?.registration);
 }
@@ -232,6 +279,67 @@ export function applyLiveArrivalEtas(
           },
         },
         _etaSource: 'adsb',
+      },
+    };
+  });
+}
+
+/**
+ * Overlay an actual-departure time onto departures whose aircraft is already
+ * airborne and climbing outbound (returns new objects; inputs untouched).
+ * Departures that already carry a real departure time are left alone.
+ *
+ * Matching is callsign-first — while airborne the aircraft carries THIS leg's
+ * callsign, so it maps to the right flight — with registration as a fallback.
+ * The outbound-geometry check in estimateSecondsSinceDeparture guards against
+ * latching onto the inbound rotation of the same airframe, and the schedule
+ * deviation guard rejects a match that belongs to a different rotation.
+ */
+export function applyLiveDepartureStatus(
+  departures: any[],
+  aircraftList: AdsbAircraft[],
+  airportLat: number,
+  airportLon: number,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): any[] {
+  const byRegistration = new Map<string, AdsbAircraft>();
+  const byFlightNumber = new Map<string, AdsbAircraft>();
+  for (const aircraft of aircraftList) {
+    const reg = normalizeRegistration(aircraft.registration);
+    if (reg && !byRegistration.has(reg)) byRegistration.set(reg, aircraft);
+    const flightNumber = normalizeCallsignToFlightNumber(aircraft.callsign);
+    if (flightNumber && !byFlightNumber.has(flightNumber)) byFlightNumber.set(flightNumber, aircraft);
+  }
+
+  return departures.map(item => {
+    if (item?.flight?.time?.real?.departure) return item;
+
+    const reg = readFlightRegistration(item);
+    const aircraft = byFlightNumber.get(readFlightNumberIdentity(item))
+      || (reg ? byRegistration.get(reg) : undefined);
+    if (!aircraft) return item;
+
+    const elapsed = estimateSecondsSinceDeparture(aircraft, airportLat, airportLon);
+    if (elapsed == null) return item;
+
+    const departedAt = nowSeconds - elapsed;
+    const scheduled = item?.flight?.time?.scheduled?.departure;
+    if (typeof scheduled === 'number' && Math.abs(departedAt - scheduled) > MAX_SCHEDULE_DEVIATION_SECONDS) {
+      return item;   // another rotation / wrong match
+    }
+
+    return {
+      ...item,
+      flight: {
+        ...item.flight,
+        time: {
+          ...item.flight?.time,
+          real: {
+            ...item.flight?.time?.real,
+            departure: departedAt,
+          },
+        },
+        _departureStatusSource: 'adsb',
       },
     };
   });

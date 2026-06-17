@@ -508,6 +508,86 @@ assert(rotations[1].flight.time.estimated.arrival === nowSec + etaInbound,
 assert(rotations[0].flight.time.estimated.arrival === undefined,
   'the later rotation of the same airframe must not inherit the live ETA');
 
+// ─── Live departure status (open ADS-B takeoff detection) ────────────────────
+// Same idea as the arrival ETA but mirrored: an airframe already airborne and
+// climbing AWAY from PSA has taken off, so the live position beats the FIDS.
+const departedAircraft = {
+  registration: 'EI-DXY',
+  callsign: 'RYR3344',
+  lat: 43.30, lon: 10.85,   // ~30nm a sud-est di PSA
+  groundSpeedKt: 350,
+  altitude: 9000,
+  track: 130,               // in salita verso sud-est, si allontana dal campo
+};
+const sinceDep = liveEta.estimateSecondsSinceDeparture(departedAircraft, PSA_LAT, PSA_LON);
+assert(sinceDep != null && sinceDep > 3 * 60 && sinceDep < 12 * 60,
+  `a departure ~30nm out at 350kt should have left 4-9 min ago, got ${sinceDep && Math.round(sinceDep / 60)}min`);
+assert(liveEta.estimateSecondsSinceDeparture({ ...departedAircraft, track: 310 }, PSA_LAT, PSA_LON) === null,
+  'an inbound aircraft (track toward the field) must not read as a departure');
+assert(liveEta.estimateSecondsSinceDeparture({ ...departedAircraft, altitude: 'ground' }, PSA_LAT, PSA_LON) === null,
+  'an aircraft on the ground has not taken off');
+assert(liveEta.estimateSecondsSinceDeparture({ ...departedAircraft, lat: PSA_LAT + 0.01, lon: PSA_LON }, PSA_LAT, PSA_LON) === null,
+  'an aircraft right over the field is too ambiguous to call departed');
+// outboundAircraft is ~85nm out heading away: aligned outbound, but past the
+// near-field takeoff window, so it must not be reported as a fresh departure.
+assert(liveEta.estimateSecondsSinceDeparture(outboundAircraft, PSA_LAT, PSA_LON) === null,
+  'an outbound aircraft already far from the field is past the takeoff window');
+
+const depNowSec = 1_800_000_000;
+const departureOutbound = {
+  flight: {
+    identification: { number: { default: 'FR3344' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec - 6 * 60 }, estimated: {}, real: {} },
+  },
+};
+const stillScheduledDep = {
+  flight: {
+    identification: { number: { default: 'U21234' } },
+    aircraft: { registration: 'GEZAB' },
+    time: { scheduled: { departure: depNowSec + 40 * 60 }, estimated: {}, real: {} },
+  },
+};
+const depOverlaid = liveEta.applyLiveDepartureStatus(
+  [departureOutbound, stillScheduledDep],
+  [departedAircraft],
+  PSA_LAT, PSA_LON, depNowSec,
+);
+assert(typeof depOverlaid[0].flight.time.real.departure === 'number',
+  'a departure whose aircraft is airborne and outbound gets a real takeoff time');
+assert(depOverlaid[0].flight.time.real.departure < depNowSec,
+  'the takeoff time is in the past (the aircraft is already airborne)');
+assert(depOverlaid[0].flight._departureStatusSource === 'adsb',
+  'a live takeoff is tagged with its source');
+assert(depOverlaid[1].flight.time.real.departure === undefined,
+  'a departure with no matching airborne aircraft keeps its scheduled time');
+assert(departureOutbound.flight.time.real.departure === undefined,
+  'applyLiveDepartureStatus must not mutate the input');
+
+const alreadyDeparted = {
+  flight: {
+    identification: { number: { default: 'FR3344' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec - 30 * 60 }, estimated: {}, real: { departure: depNowSec - 25 * 60 } },
+  },
+};
+const keepReal = liveEta.applyLiveDepartureStatus([alreadyDeparted], [departedAircraft], PSA_LAT, PSA_LON, depNowSec);
+assert(keepReal[0].flight.time.real.departure === depNowSec - 25 * 60,
+  'a departure that already has a real time is left untouched');
+
+const wrongRotationDep = {
+  flight: {
+    identification: { number: { default: 'FR9001' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec + 6 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const guardDep = liveEta.applyLiveDepartureStatus([wrongRotationDep], [departedAircraft], PSA_LAT, PSA_LON, depNowSec);
+assert(guardDep[0].flight.time.real.departure === undefined,
+  'a takeoff hours from the schedule is a different rotation and must be ignored');
+
+console.log('Live departure status tests passed.');
+
 // ─── Origin-departure estimate (ADS-B route + elapsed flight) ────────────────
 // elapsed = distance flown / groundspeed. Bucharest-ish origin ~520nm out,
 // aircraft 85nm from PSA at 400kt => flown ~435nm => ~65 min airborne.

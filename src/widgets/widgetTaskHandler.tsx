@@ -6,6 +6,7 @@ import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines, getAirportInfo } from '../utils/airportSettings';
 import { filterFlightsByAirlines, getFlightAirportLabel, getFlightBestTs } from '../utils/flightScheduleAdapter';
 import { staffMonitorProvider } from '../utils/flightProviders/staffMonitorProvider';
+import { applyLiveDepartureStatus, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { ShiftWidget } from './ShiftWidget';
 import { getStoredWidgetThemeProps } from './widgetTheme';
 
@@ -187,6 +188,30 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
       }
     }
     await storeDetectedAirportAirlines(airportCode, allDepartures);
+
+    // Live takeoff detection from open ADS-B (best-effort, one extra call).
+    // Marks departures whose aircraft is already airborne and outbound as
+    // departed, so the widget shows the real time instead of only the FIDS
+    // estimate. Skips the costly per-aircraft route lookups used on the full
+    // Voli screen — the background refresh stays one cheap request. If ADS-B
+    // doesn't answer in time the StaffMonitor times are kept as-is.
+    if (airportInfo.latitude != null && airportInfo.longitude != null) {
+      const adsbController = new AbortController();
+      const adsbTimer = setTimeout(() => adsbController.abort(), 6000);
+      try {
+        const aircraft = await fetchAdsbAircraft(
+          airportInfo.latitude,
+          airportInfo.longitude,
+          undefined,
+          adsbController.signal,
+        );
+        allDepartures = applyLiveDepartureStatus(allDepartures, aircraft, airportInfo.latitude, airportInfo.longitude);
+      } catch {
+        // best-effort: keep StaffMonitor times when ADS-B is unavailable
+      } finally {
+        clearTimeout(adsbTimer);
+      }
+    }
 
     const fmtOff = (dep: number, off: number) => fmtTs(dep - off * 60);
     const nowHH = fmtTs(Date.now() / 1000);

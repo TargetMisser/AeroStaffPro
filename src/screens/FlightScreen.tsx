@@ -25,7 +25,7 @@ import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines } from '../utils/airportSettings';
-import { applyLiveArrivalEtas, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
+import { applyLiveArrivalEtas, applyLiveDepartureStatus, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
@@ -707,7 +707,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       let mergedArrs = pruneUnseenFlights(
         pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival'),
       );
-      const mergedDeps = pruneUnseenFlights(
+      let mergedDeps = pruneUnseenFlights(
         pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure'),
       );
 
@@ -734,15 +734,20 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             // it has flown, but only for arrivals no schedule provider gave a
             // departure time for (a key-backed exact time always wins).
             mergedArrs = await applyLiveOriginDepartures(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            // Mark outbound flights whose aircraft is already airborne and
+            // climbing away from the field as departed, ahead of the FIDS.
+            mergedDeps = applyLiveDepartureStatus(mergedDeps, aircraft, airportInfo.latitude, airportInfo.longitude);
             const matched = mergedArrs.filter(item => item.flight?._etaSource === 'adsb').length;
             const depMatched = mergedArrs.filter(item => item.flight?._departureSource === 'adsb-estimate').length;
+            const departed = mergedDeps.filter(item => item.flight?._departureStatusSource === 'adsb').length;
             liveEtaDiagnostics.push({
               provider: 'liveEta',
               label: 'Live ETA (ADS-B)',
               status: 'success',
               arrivals: matched,
+              departures: departed,
               durationMs: Date.now() - startedAt,
-              message: `${aircraft.length} aerei nel raggio, ${matched} ETA, ${depMatched} decolli stimati`,
+              message: `${aircraft.length} aerei nel raggio, ${matched} ETA, ${depMatched} decolli stimati, ${departed} decollati`,
             });
           } finally {
             clearTimeout(adsbTimer);
