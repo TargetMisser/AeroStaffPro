@@ -1,0 +1,3 @@
+## 2024-05-24 - Accessibility Labels for Icon-only Buttons without Localization Hooks
+**Learning:** Adding accessibility to icon-only buttons (`TouchableOpacity` with an icon child) in deep component trees where the localization hook (`useLanguage()`) is not already imported can lead to TypeScript errors (`Cannot find name 't'`) if you attempt to use `t('close')` directly.
+**Action:** When working within a 50-line limit or attempting to keep patches safe and isolated, using a bilingual fallback string (e.g., `accessibilityLabel="Chiudi / Close"`) is an acceptable micro-UX improvement for screen readers without breaking the build or requiring new hook imports.
