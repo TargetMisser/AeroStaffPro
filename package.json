@@ -1,6 +1,6 @@
 {
   "name": "aerostaff-pro",
-  "version": "2.7.25",
+  "version": "2.7.26",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
