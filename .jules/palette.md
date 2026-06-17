@@ -1,0 +1,3 @@
+## 2024-05-07 - Accessible Icon-only Buttons
+**Learning:** React Native's `TouchableOpacity` icon buttons often lack screen reader accessibility. Adding `accessibilityLabel` using standard translation keys ensures context, while `accessibilityRole="button"` guarantees proper screen reader announcements. Furthermore, using `hitSlop` makes small icon targets much more usable.
+**Action:** When creating or modifying icon-only buttons in the future, always include `accessible={true}`, `accessibilityRole="button"`, a descriptive `accessibilityLabel`, and an appropriate `hitSlop` like `{ top: 8, bottom: 8, left: 8, right: 8 }`.
