@@ -947,7 +947,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       <Modal visible={editMenuOpen} transparent animationType="fade" onRequestClose={() => setEditMenuOpen(false)}>
         <View style={s.modalOverlay}>
           <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setEditMenuOpen(false)} />
-          <View style={[s.editMenuContent, { backgroundColor: colors.isDark || colors.card === 'transparent' ? '#1E293B' : '#FFFFFF' }]}>
+          <View style={[s.editMenuContent, { backgroundColor: colors.card === 'transparent' ? colors.cardSecondary : colors.card }]}>
             <Text style={[s.modalTitle, { color: colors.text, marginBottom: 16 }]}>Modifica Turni</Text>
             <TouchableOpacity style={[s.editMenuOption, { backgroundColor: colors.primaryLight }]} onPress={() => { setEditMenuOpen(false); startImport(); }}>
               <MaterialIcons name="picture-as-pdf" size={24} color={colors.primary} />
@@ -974,7 +974,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         <View style={s.modalOverlay}>
           <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setManualModalOpen(false)} />
           <View style={s.modalScrollContent}>
-            <View style={[s.manualModalContent, { backgroundColor: colors.isDark || colors.card === 'transparent' ? '#1E293B' : '#FFFFFF' }]}>
+            <View style={[s.manualModalContent, { backgroundColor: colors.card === 'transparent' ? colors.cardSecondary : colors.card }]}>
             {/* Header fisso */}
             <View style={[s.modalHeader, { paddingHorizontal: 24, paddingTop: 24 }]}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calAddShiftTitle')}</Text>
@@ -1037,7 +1037,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     accentColor={colors.primary}
                     textColor={colors.text}
                     mutedColor={colors.textMuted}
-                    bgColor={colors.card === 'transparent' ? (colors.isDark ? '#1E293B' : '#F3F4F6') : colors.card}
+                    bgColor={colors.card === 'transparent' ? colors.cardSecondary : colors.card}
                     borderColor={colors.border}
                   />
                   <Text style={[s.manualLabel, { color: colors.textSub, marginTop: 16 }]}>{t('calEndTime')}</Text>
@@ -1050,7 +1050,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     accentColor={colors.primary}
                     textColor={colors.text}
                     mutedColor={colors.textMuted}
-                    bgColor={colors.card === 'transparent' ? (colors.isDark ? '#1E293B' : '#F3F4F6') : colors.card}
+                    bgColor={colors.card === 'transparent' ? colors.cardSecondary : colors.card}
                     borderColor={colors.border}
                   />
                 </>
@@ -1082,7 +1082,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       }}>
         <View style={s.modalOverlay}>
           <View style={s.modalBg} />
-          <View style={[s.modalContent, { backgroundColor: colors.isDark || colors.card === 'transparent' ? '#1E293B' : '#FFFFFF' }]}>
+          <View style={[s.modalContent, { backgroundColor: colors.card === 'transparent' ? colors.cardSecondary : colors.card }]}>
             {/* Header */}
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calImportTitle')}</Text>

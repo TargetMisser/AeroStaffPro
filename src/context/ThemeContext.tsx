@@ -36,6 +36,16 @@ export type ThemeColors = {
   tabIconInactive: string;
   tabLabelActive: string;
   pillActive: string;
+  // Semantic (fill = solid icon/text/badge color; *Soft = tinted chip background)
+  success: string;
+  successSoft: string;
+  warning: string;
+  warningSoft: string;
+  danger: string;
+  dangerSoft: string;
+  info: string;
+  infoSoft: string;
+  neutral: string;
   // Sistema
   statusBar: 'dark-content' | 'light-content';
   isDark: boolean;
@@ -62,6 +72,15 @@ const LIGHT: ThemeColors = {
   tabIconInactive:'rgba(60,60,67,0.38)',
   tabLabelActive: '#F47B16',
   pillActive:     'rgba(244,123,22,0.14)',
+  success:        '#10B981',
+  successSoft:    'rgba(16,185,129,0.13)',
+  warning:        '#F59E0B',
+  warningSoft:    'rgba(245,158,11,0.13)',
+  danger:         '#EF4444',
+  dangerSoft:     'rgba(239,68,68,0.13)',
+  info:           '#3B82F6',
+  infoSoft:       'rgba(59,130,246,0.13)',
+  neutral:        '#64748B',
   statusBar:      'dark-content',
   isDark:         false,
 };
@@ -87,6 +106,15 @@ const DARK: ThemeColors = {
   tabIconInactive:'rgba(204,251,241,0.58)',
   tabLabelActive: '#2DD4BF',
   pillActive:     'rgba(45,212,191,0.18)',
+  success:        '#34D399',
+  successSoft:    'rgba(52,211,153,0.16)',
+  warning:        '#FBBF24',
+  warningSoft:    'rgba(251,191,36,0.16)',
+  danger:         '#F87171',
+  dangerSoft:     'rgba(248,113,113,0.16)',
+  info:           '#60A5FA',
+  infoSoft:       'rgba(96,165,250,0.16)',
+  neutral:        '#94A3B8',
   statusBar:      'light-content',
   isDark:         true,
 };
