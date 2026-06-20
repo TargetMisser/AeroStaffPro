@@ -148,7 +148,7 @@ function parseLinePairs(text: string, baseYear: number): OcrParsedShift[] {
   return result;
 }
 
-function parseSegmentPairs(text: string, dates: OcrDateToken[], shifts: OcrShiftToken[]): OcrParsedShift[] {
+function parseSegmentPairs(dates: OcrDateToken[], shifts: OcrShiftToken[]): OcrParsedShift[] {
   const result: OcrParsedShift[] = [];
 
   for (let i = 0; i < dates.length; i += 1) {
@@ -203,7 +203,7 @@ export function parseOcrShiftText(text: string, baseYear = new Date().getFullYea
     return { shifts: linePairs, datesFound: dates.length, shiftsFound: shifts.length, strategy: 'line' };
   }
 
-  const segmentPairs = uniqueByDate(parseSegmentPairs(normalized, dates, shifts));
+  const segmentPairs = uniqueByDate(parseSegmentPairs(dates, shifts));
   if (segmentPairs.length === dates.length) {
     return { shifts: segmentPairs, datesFound: dates.length, shiftsFound: shifts.length, strategy: 'segment' };
   }

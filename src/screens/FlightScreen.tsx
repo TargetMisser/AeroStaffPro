@@ -994,6 +994,22 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             message,
           }],
         });
+      } else {
+        // Non-fatal refresh failure: keep whatever flights are already on
+        // screen but surface that the update failed. Previously this branch
+        // only logged under __DEV__, so in production the error vanished and
+        // crew saw silently stale times/gates with no indication anything
+        // had gone wrong.
+        setFlightDataSource({
+          sourceLabel: 'Aggiornamento non riuscito · dati non aggiornati',
+          fetchedAt: Date.now(),
+          providerDiagnostics: [{
+            provider: 'cache',
+            label: 'Fonti voli',
+            status: 'failed',
+            message,
+          }],
+        });
       }
 
       if (__DEV__) {

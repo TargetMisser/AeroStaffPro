@@ -20,7 +20,7 @@ export default function ShiftScreen() {
   const pickImage = async () => {
     try {
       let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsMultipleSelection: true,
         selectionLimit: 0,
         orderedSelection: true,

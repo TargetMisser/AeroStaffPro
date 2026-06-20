@@ -66,11 +66,11 @@ async function createShiftEvent(
   shift: ShiftReplacement,
   titles: ShiftEventTitles,
   restTiming: RestEventTiming,
-): Promise<boolean> {
+): Promise<string | null> {
   const { year, month, day } = parseIsoDate(shift.date);
 
   if (shift.type === 'work') {
-    if (!shift.startTime || !shift.endTime) return false;
+    if (!shift.startTime || !shift.endTime) return null;
 
     const startTime = parseTime(shift.startTime);
     const endTime = parseTime(shift.endTime);
@@ -78,27 +78,25 @@ async function createShiftEvent(
     const endDate = new Date(year, month - 1, day, endTime.hour, endTime.minute, 0, 0);
     if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
 
-    await Calendar.createEventAsync(calendarId, {
+    return Calendar.createEventAsync(calendarId, {
       title: titles.work,
       startDate,
       endDate,
       timeZone: 'Europe/Rome',
     });
-    return true;
   }
 
   const startDate = new Date(year, month - 1, day, restTiming.startHour, restTiming.startMinute, 0, 0);
   const endDate = new Date(year, month - 1, day, restTiming.endHour, restTiming.endMinute, 0, 0);
   if (endDate <= startDate) endDate.setDate(endDate.getDate() + 1);
 
-  await Calendar.createEventAsync(calendarId, {
+  return Calendar.createEventAsync(calendarId, {
     title: titles.rest,
     startDate,
     endDate,
     allDay: restTiming.allDay,
     timeZone: 'Europe/Rome',
   });
-  return true;
 }
 
 export async function getWritableCalendarId(): Promise<string | null> {
@@ -133,11 +131,11 @@ export async function getWritableCalendarId(): Promise<string | null> {
   }
 }
 
-export async function deleteShiftEventsInRange(
+async function findShiftEventIdsInRange(
   calendarId: string,
   start: Date,
   end: Date,
-): Promise<number> {
+): Promise<string[]> {
   /* expo-calendar's Android query only returns events fully contained in the
      window (Instances.BEGIN >= start AND Instances.END <= end), so a night
      shift running past midnight - or an all-day rest stored in UTC - is
@@ -147,17 +145,27 @@ export async function deleteShiftEventsInRange(
      belongs to the day it starts on. */
   const queryEnd = new Date(end.getTime() + 24 * 60 * 60 * 1000);
   const events = await Calendar.getEventsAsync([calendarId], start, queryEnd);
-  const shiftEvents = events.filter(event => {
-    if (!isShiftEventTitle(event.title)) return false;
-    const startsAt = new Date(event.startDate).getTime();
-    return startsAt >= start.getTime() && startsAt <= end.getTime();
-  });
+  return events
+    .filter(event => {
+      if (!isShiftEventTitle(event.title)) return false;
+      const startsAt = new Date(event.startDate).getTime();
+      return startsAt >= start.getTime() && startsAt <= end.getTime();
+    })
+    .map(event => event.id);
+}
 
-  await Promise.all(
-    shiftEvents.map(event => Calendar.deleteEventAsync(event.id).catch(() => {})),
-  );
+async function deleteEventsByIds(ids: string[]): Promise<void> {
+  await Promise.all(ids.map(id => Calendar.deleteEventAsync(id).catch(() => {})));
+}
 
-  return shiftEvents.length;
+export async function deleteShiftEventsInRange(
+  calendarId: string,
+  start: Date,
+  end: Date,
+): Promise<number> {
+  const ids = await findShiftEventIdsInRange(calendarId, start, end);
+  await deleteEventsByIds(ids);
+  return ids.length;
 }
 
 export async function replaceShiftForDate({
@@ -199,13 +207,27 @@ export async function replaceShiftsForRange({
   const rangeStart = new Date(firstDate.year, firstDate.month - 1, firstDate.day, 0, 0, 0, 0);
   const rangeEnd = new Date(lastDate.year, lastDate.month - 1, lastDate.day, 23, 59, 59, 999);
 
-  await deleteShiftEventsInRange(calendarId, rangeStart, rangeEnd);
+  // Capture the existing shift events BEFORE creating anything, so we can
+  // remove exactly those at the end. (Deleting by range instead would also
+  // wipe the new events, which share the same 'Lavoro'/'Riposo' titles.)
+  const oldEventIds = await findShiftEventIdsInRange(calendarId, rangeStart, rangeEnd);
 
-  let createdCount = 0;
-  for (const shift of sorted) {
-    const created = await createShiftEvent(calendarId, shift, titles, restTiming);
-    if (created) createdCount += 1;
+  // Create the new events FIRST. If any creation fails, roll back the events
+  // we already created and leave the user's existing roster untouched: a
+  // failed import the user can retry is far better than a half-wiped calendar.
+  const createdIds: string[] = [];
+  try {
+    for (const shift of sorted) {
+      const id = await createShiftEvent(calendarId, shift, titles, restTiming);
+      if (id) createdIds.push(id);
+    }
+  } catch (e) {
+    await deleteEventsByIds(createdIds);
+    throw e;
   }
 
-  return createdCount;
+  // New events are all in place; now it is safe to remove the old ones.
+  await deleteEventsByIds(oldEventIds);
+
+  return createdIds.length;
 }

@@ -57,23 +57,29 @@ export async function scheduleShiftNotifications(
           second: isEasyJet ? '2-digit' : undefined,
         });
 
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Arrivo tra ${settings.arrivalLeadMinutes} min - ${flightNumber}`,
-            body: `${airline} da ${origin} · atterraggio alle ${arrivalTime}`,
-            sound: true,
-            sticky: settings.sticky,
-            autoDismiss: !settings.sticky,
-            data: buildNotificationData({
-              scheduler: 'flights',
-              type: 'arrival_shift',
-              flightNumber,
-              ts,
-            }),
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
-        });
-        newIds.push(id);
+        try {
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Arrivo tra ${settings.arrivalLeadMinutes} min - ${flightNumber}`,
+              body: `${airline} da ${origin} · atterraggio alle ${arrivalTime}`,
+              sound: true,
+              sticky: settings.sticky,
+              autoDismiss: !settings.sticky,
+              data: buildNotificationData({
+                scheduler: 'flights',
+                type: 'arrival_shift',
+                flightNumber,
+                ts,
+              }),
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
+          });
+          newIds.push(id);
+        } catch {
+          // Skip just this notification and keep scheduling the rest, so a
+          // single OS rejection can't abort the batch and orphan the IDs we
+          // already created (they are persisted to NOTIF_IDS_KEY below).
+        }
       }
     }
 
@@ -90,23 +96,29 @@ export async function scheduleShiftNotifications(
         const destination = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
         const departureTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Partenza tra ${settings.departureLeadMinutes} min - ${flightNumber}`,
-            body: `${airline} → ${destination} · decollo alle ${departureTime}`,
-            sound: true,
-            sticky: settings.sticky,
-            autoDismiss: !settings.sticky,
-            data: buildNotificationData({
-              scheduler: 'flights',
-              type: 'departure_shift',
-              flightNumber,
-              ts,
-            }),
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
-        });
-        newIds.push(id);
+        try {
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Partenza tra ${settings.departureLeadMinutes} min - ${flightNumber}`,
+              body: `${airline} → ${destination} · decollo alle ${departureTime}`,
+              sound: true,
+              sticky: settings.sticky,
+              autoDismiss: !settings.sticky,
+              data: buildNotificationData({
+                scheduler: 'flights',
+                type: 'departure_shift',
+                flightNumber,
+                ts,
+              }),
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
+          });
+          newIds.push(id);
+        } catch {
+          // Skip just this notification and keep scheduling the rest, so a
+          // single OS rejection can't abort the batch and orphan the IDs we
+          // already created (they are persisted to NOTIF_IDS_KEY below).
+        }
       }
     }
 
@@ -114,22 +126,27 @@ export async function scheduleShiftNotifications(
       const secondsUntilEnd = shiftEnd - now;
       if (secondsUntilEnd > 0) {
         const endTime = new Date(shiftEnd * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-        const endId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Turno terminato',
-            body: `Buon lavoro! Il tuo turno delle ${endTime} è concluso.`,
-            sound: true,
-            sticky: settings.sticky,
-            autoDismiss: !settings.sticky,
-            data: buildNotificationData({
-              scheduler: 'flights',
-              type: 'shift_end',
-              ts: shiftEnd,
-            }),
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilEnd), repeats: false },
-        });
-        newIds.push(endId);
+        try {
+          const endId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Turno terminato',
+              body: `Buon lavoro! Il tuo turno delle ${endTime} è concluso.`,
+              sound: true,
+              sticky: settings.sticky,
+              autoDismiss: !settings.sticky,
+              data: buildNotificationData({
+                scheduler: 'flights',
+                type: 'shift_end',
+                ts: shiftEnd,
+              }),
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilEnd), repeats: false },
+          });
+          newIds.push(endId);
+        } catch {
+          // Best-effort: a failed shift-end notification must not abort the
+          // batch or orphan the flight notifications already scheduled above.
+        }
       }
     }
 

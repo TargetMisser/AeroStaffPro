@@ -36,16 +36,25 @@ async function importLegacySensitiveData(data: Record<string, unknown>): Promise
   const legacyPasswords = data[PASSWORDS_KEY];
   if (typeof legacyPasswords === 'string' && legacyPasswords.trim()) {
     await SecureStore.setItemAsync(PASSWORDS_KEY, legacyPasswords);
-    await secureWipeAsyncStorageItem(PASSWORDS_KEY);
-    imported += 1;
+    // Only scrub the plaintext copy once the secret is confirmed durably in
+    // the keychain. A silently-failed SecureStore write must not lead us to
+    // destroy the only remaining copy of the user's passwords.
+    if ((await SecureStore.getItemAsync(PASSWORDS_KEY)) === legacyPasswords) {
+      await secureWipeAsyncStorageItem(PASSWORDS_KEY);
+      imported += 1;
+    }
   }
 
   const legacyPin = data[PIN_KEY];
   if (typeof legacyPin === 'string' && legacyPin.trim()) {
     await SecureStore.setItemAsync(PIN_KEY, legacyPin);
-    await secureWipeAsyncStorageItem(PIN_KEY);
-    hasImportedPin = true;
-    imported += 1;
+    // Same guard as the passwords above: confirm the keychain write before
+    // wiping the plaintext PIN so a failed write can't lose it.
+    if ((await SecureStore.getItemAsync(PIN_KEY)) === legacyPin) {
+      await secureWipeAsyncStorageItem(PIN_KEY);
+      hasImportedPin = true;
+      imported += 1;
+    }
   }
 
   const legacyPinEnabled = data[PIN_ENABLED_KEY];

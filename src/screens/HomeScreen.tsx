@@ -619,7 +619,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const pickImage = async () => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         allowsMultipleSelection: true,
         selectionLimit: 0,
         orderedSelection: true,
