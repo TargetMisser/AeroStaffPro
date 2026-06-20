@@ -22,6 +22,7 @@ import { SwipeableFlightCard } from '../components/flights/SwipeableFlightCard';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils/airlineOps';
+import { statusToToken, delayToToken } from '../utils/statusColors';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines } from '../utils/airportSettings';
@@ -142,7 +143,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const airlineIdentity = [airline, iataCode, icaoCode].filter(Boolean).join(' ');
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
-  const statusColor = raw === 'green' ? '#10b981' : raw === 'red' ? '#ef4444' : raw === 'yellow' ? '#f59e0b' : '#6b7280';
+  const statusColor = statusToToken(raw, colors);
   const remoteAirport = activeTab === 'arrivals'
     ? item.flight?.airport?.origin
     : item.flight?.airport?.destination;
@@ -222,10 +223,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
     if (!startTs || !endTs || endTs <= startTs) return null;
 
     const delayMin = Math.round((endTs - ts) / 60);
-    const progressColor = realArr ? '#10B981'
-      : delayMin > 20 ? '#EF4444'
-      : delayMin > 5 ? '#F59E0B'
-      : colors.primary;
+    const progressColor = delayToToken(delayMin, !!realArr, colors);
 
     return {
       startTs,
@@ -399,10 +397,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             const landed = !!realArr;
             const depEstimated = item.flight?._departureSource === 'adsb-estimate';
 
-            const landColor = landed ? '#10B981'
-              : delayMin > 20 ? '#EF4444'
-              : delayMin > 5 ? '#F59E0B'
-              : colors.primary;
+            const landColor = delayToToken(delayMin, landed, colors);
             // Arrival card = the inbound's journey: Partenza (from origin) -> Atterraggio
             // (here). Left box is always the departure time (real > ADS-B estimate "~" >
             // scheduled, or --:-- when unknown); right box is the landing, shown as the
@@ -461,7 +456,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             const dMin = Math.round((bArr - ts) / 60);
             const isLanded = !!rArr;
             const dText = isLanded ? 'Atterrato' : dMin > 0 ? `+${dMin} min` : 'In orario';
-            const dColor = isLanded ? '#10B981' : dMin > 20 ? '#EF4444' : dMin > 5 ? '#F59E0B' : '#10B981';
+            const dColor = delayToToken(dMin, isLanded, colors, colors.success);
             return (
               <ValueChangeFlash valueKey={dText} enabled={isOperations} style={[s.statusPill, { backgroundColor: dColor + '22' }]}>
                 <Text style={[s.statusText, { color: dColor }]}>{dText}</Text>

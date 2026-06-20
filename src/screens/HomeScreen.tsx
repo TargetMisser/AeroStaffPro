@@ -16,6 +16,7 @@ import BoardReveal from '../components/motion/BoardReveal';
 import ShiftTimeline from '../components/ShiftTimeline';
 
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
+import { statusToToken } from '../utils/statusColors';
 import { getAirportInfo } from '../utils/airportSettings';
 import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import { getCachedFlightProviderDiagnostics, type FlightProviderDiagnosticsSnapshot } from '../utils/fr24api';
@@ -101,7 +102,7 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
   const airlineColor = getAirlineColor(airlineIdentity);
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
-  const statusColor = raw === 'green' ? '#10b981' : raw === 'red' ? '#ef4444' : raw === 'yellow' ? '#f59e0b' : '#6b7280';
+  const statusColor = statusToToken(raw, colors);
 
   const dest = tab === 'arrivals'
     ? getFlightAirportLabel(item.flight?.airport?.origin, 'N/A')

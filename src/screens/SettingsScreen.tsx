@@ -20,6 +20,7 @@ import {
 import UpdateModal from '../components/UpdateModal';
 import ProfileSwitcherModal from '../components/ProfileSwitcherModal';
 import { exportBackup, importBackup } from '../utils/backupManager';
+import { providerStatusToToken } from '../utils/statusColors';
 import {
   clearAeroDataBoxApiKey,
   clearAirLabsApiKey,
@@ -1395,11 +1396,7 @@ export default function SettingsScreen({
 
                   <View style={styles.debugProviderList}>
                     {providerDebug.diagnostics.length > 0 ? providerDebug.diagnostics.map((item, index) => {
-                      const statusColor = item.status === 'success'
-                        ? '#10B981'
-                        : item.status === 'skipped'
-                          ? '#94A3B8'
-                          : '#EF4444';
+                      const statusColor = providerStatusToToken(item.status, colors);
                       return (
                         <View
                           key={`${item.provider}_${index}`}
@@ -1703,11 +1700,7 @@ export default function SettingsScreen({
 
                   <View style={styles.debugProviderList}>
                     {providerDebug.diagnostics.length > 0 ? providerDebug.diagnostics.map((item, index) => {
-                      const statusColor = item.status === 'success'
-                        ? '#10B981'
-                        : item.status === 'skipped'
-                          ? '#94A3B8'
-                          : '#EF4444';
+                      const statusColor = providerStatusToToken(item.status, colors);
                       return (
                         <View
                           key={`debug_${item.provider}_${index}`}
