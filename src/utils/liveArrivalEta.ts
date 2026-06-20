@@ -156,11 +156,16 @@ export function estimateEtaSeconds(
   const distanceNm = haversineNm(lat, lon, airportLat, airportLon);
   if (distanceNm > ADSB_RADIUS_NM) return null;
 
-  if (typeof track === 'number' && distanceNm > 8) {
-    const inbound = bearingDeg(lat, lon, airportLat, airportLon);
-    if (angleDifferenceDeg(track, inbound) > MAX_INBOUND_TRACK_DEVIATION_DEG) {
-      return null;
-    }
+  // Require a heading and verify it points roughly AT the field, mirroring the
+  // outbound test in estimateSecondsSinceDeparture. Previously this ran only
+  // when `track` was present AND distance > 8 nm, so an outbound same-airframe
+  // (no track field, or still climbing out within 8 nm) fell through and was
+  // reported as "arriving in ~5-6 min". If we can't tell inbound from outbound,
+  // don't guess.
+  if (typeof track !== 'number') return null;
+  const inbound = bearingDeg(lat, lon, airportLat, airportLon);
+  if (angleDifferenceDeg(track, inbound) > MAX_INBOUND_TRACK_DEVIATION_DEG) {
+    return null;
   }
 
   const cruiseSeconds = (distanceNm / groundSpeedKt) * 3600;
@@ -247,10 +252,16 @@ export function applyLiveArrivalEtas(
 
     const estimatedArrival = nowSeconds + etaSeconds;
     const scheduled = item?.flight?.time?.scheduled?.arrival;
+    // A missing scheduled time means we can't verify the rotation, so it must
+    // NOT count as a perfect (deviation 0) match: fabricating 0 both skipped the
+    // 3-hour rotation guard and made it always win the per-aircraft contest,
+    // attaching the live ETA to the wrong flight row. Use +Infinity so any
+    // candidate with a real (finite) deviation wins, and only apply the rotation
+    // reject when there is a scheduled time to compare against.
     const deviation = typeof scheduled === 'number'
       ? Math.abs(estimatedArrival - scheduled)
-      : 0;
-    if (deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;   // another rotation
+      : Number.POSITIVE_INFINITY;
+    if (typeof scheduled === 'number' && deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;   // another rotation
 
     const current = bestByAircraft.get(aircraft);
     if (!current || deviation < current.deviation) {
@@ -508,8 +519,11 @@ export async function applyLiveOriginDepartures(
     if (eta == null) return;
     const projectedArrival = nowSeconds + eta;
     const scheduled = time?.scheduled?.arrival;
-    const deviation = typeof scheduled === 'number' ? Math.abs(projectedArrival - scheduled) : 0;
-    if (deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;
+    // See applyLiveArrivalEtas: a missing scheduled time must not fabricate a
+    // deviation of 0 (which auto-wins and skips the rotation guard); use
+    // +Infinity for tie-breaking and only reject on a real scheduled time.
+    const deviation = typeof scheduled === 'number' ? Math.abs(projectedArrival - scheduled) : Number.POSITIVE_INFINITY;
+    if (typeof scheduled === 'number' && deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;
     const current = bestByAircraft.get(aircraft);
     if (!current || deviation < current.deviation) {
       bestByAircraft.set(aircraft, { index, deviation });
