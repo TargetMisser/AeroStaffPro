@@ -229,7 +229,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
       startTs,
       endTs,
       progress: realArr ? 1 : clamp((Date.now() / 1000 - startTs) / (endTs - startTs), 0, 1),
-      departureColor: realDep ? colors.primary : '#6B7280',
+      departureColor: realDep ? colors.primary : colors.neutral,
       arrivalColor: progressColor,
       planeColor: progressColor,
     };
@@ -415,10 +415,10 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
                   enabled={isOperations}
                   style={s.opsBadge}
                 >
-                  <MaterialIcons name="flight-takeoff" size={16} color={depTs ? colors.primary : '#6B7280'} />
+                  <MaterialIcons name="flight-takeoff" size={16} color={depTs ? colors.primary : colors.neutral} />
                   <View>
                     <Text style={s.opsLabel}>{t('flightDepartureTime')}</Text>
-                    <Text style={[s.opsTime, !depTs && { color: '#6B7280' }]}>{depTimeText}</Text>
+                    <Text style={[s.opsTime, !depTs && { color: colors.neutral }]}>{depTimeText}</Text>
                   </View>
                 </ValueChangeFlash>
                 <ValueChangeFlash
@@ -1539,7 +1539,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pageHeader: { backgroundColor: isOperations ? 'rgba(2,8,12,0.90)' : c.card, paddingHorizontal: 16, paddingVertical: isOperations ? 12 : 14, borderBottomWidth: 1, borderBottomColor: operationBorderSoft, flexDirection: 'row', alignItems: 'center' },
     notifBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     notifBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
-    notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
+    notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
     notifBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
     pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
@@ -1555,11 +1555,11 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     segBtnText: { fontSize: 12, fontWeight: '600', color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
     segBtnTextActive: { color: isOperations ? c.primaryDark : c.primary, fontWeight: '800' },
     card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
-    cardShift: { borderWidth: 1.5, borderColor: '#F59E0B' },
-    shiftBanner: { backgroundColor: '#F59E0B', paddingVertical: 5, paddingHorizontal: 12 },
+    cardShift: { borderWidth: 1.5, borderColor: c.warning },
+    shiftBanner: { backgroundColor: c.warning, paddingVertical: 5, paddingHorizontal: 12 },
     shiftBannerText: { color: '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
-    cardPinned: { borderWidth: 2, borderColor: '#F59E0B' },
-    pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : '#F59E0B', paddingVertical: 5, paddingHorizontal: 12, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
+    cardPinned: { borderWidth: 2, borderColor: c.warning },
+    pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : c.warning, paddingVertical: 5, paddingHorizontal: 12, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
     pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
     statusPill: { paddingHorizontal: 10, paddingVertical: isOperations ? 3 : 4, borderRadius: isOperations ? 10 : 20, marginTop: isOperations ? 6 : 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
     statusText: { fontSize: 10, fontWeight: '800', letterSpacing: isOperations ? 0.6 : 0 },
@@ -1599,8 +1599,8 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     },
     alertHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
     alertIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-    alertSuccess: { backgroundColor: '#16A34A' },
-    alertWarning: { backgroundColor: '#EA580C' },
+    alertSuccess: { backgroundColor: c.success },
+    alertWarning: { backgroundColor: c.warning },
     alertInfo: { backgroundColor: c.primary },
     alertTitle: { flex: 1, fontSize: 28, fontWeight: '900', color: c.text },
     alertMessage: { fontSize: 17, lineHeight: 24, color: c.textSub, marginBottom: 16 },
