@@ -40,6 +40,7 @@ import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY, type WidgetData, type WidgetShiftDa
 import { ShiftWidget } from '../widgets/ShiftWidget';
 import { parseOcrShiftText } from '../utils/ocrShiftParser';
 import { useLanguage } from '../context/LanguageContext';
+import { TYPE } from '../theme/typography';
 
 const GOLD = '#F59E0B';
 
@@ -886,14 +887,14 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     weatherTemp: { fontSize: isOperations ? 30 : 28, fontWeight: '800', color: c.primaryDark },
     weatherDesc: { fontSize: 11, color: c.textSub, textAlign: 'center', marginTop: 2, letterSpacing: isOperations ? 0.4 : 0 },
     dateCard: { width: isOperations ? 96 : 90, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryDark, borderRadius: isOperations ? 20 : 18, padding: 14, alignItems: 'center', justifyContent: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.30, shadowRadius: 12, elevation: isOperations ? 0 : 6, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
-    dateToday: { fontSize: 10, color: isOperations ? 'rgba(153,246,228,0.72)' : 'rgba(255,255,255,0.6)', letterSpacing: 1.7, fontWeight: '800' },
-    dateNum: { fontSize: 36, fontWeight: '800', color: isOperations ? c.primaryDark : '#fff', lineHeight: 40 },
+    dateToday: { ...TYPE.micro, color: isOperations ? 'rgba(153,246,228,0.72)' : 'rgba(255,255,255,0.6)', letterSpacing: 1.7 },
+    dateNum: { ...TYPE.display, color: isOperations ? c.primaryDark : '#fff' },
     dateMonth: { fontSize: 12, color: isOperations ? c.textSub : 'rgba(255,255,255,0.7)', marginTop: 2 },
     operationalCard: { marginHorizontal: 16, marginTop: 8, backgroundColor: operationPanel, borderRadius: isOperations ? 24 : 20, padding: 16, borderWidth: 1, borderColor: operationBorder, gap: 13, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 12, elevation: isOperations ? 0 : 3 },
     operationalHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     operationalTitleBlock: { flex: 1, gap: 3 },
     operationalKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.8, color: isOperations ? 'rgba(153,246,228,0.70)' : c.textMuted },
-    operationalTitle: { fontSize: isOperations ? 25 : 22, fontWeight: '900', color: c.text, letterSpacing: -0.5 },
+    operationalTitle: { ...(isOperations ? TYPE.titleLg : TYPE.title), color: c.text, letterSpacing: -0.5 },
     operationalDetail: { fontSize: 13, lineHeight: 18, color: c.textSub },
     operationalBeacon: { width: 48, height: 48, borderRadius: isOperations ? 16 : 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.neutral },
     operationalBeaconActive: { backgroundColor: c.success },
@@ -905,21 +906,21 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     healthChip: { width: '48%', minWidth: 134, flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
     healthText: { flex: 1, minWidth: 0 },
-    healthLabel: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
+    healthLabel: { ...TYPE.glyph, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
     healthValue: { fontSize: 12, fontWeight: '900', marginTop: 1 },
     sectionTitle: { fontSize: 12, fontWeight: '800', color: isOperations ? 'rgba(153,246,228,0.66)' : c.textSub, letterSpacing: isOperations ? 1.6 : 0.5, marginHorizontal: 16, marginTop: 16, marginBottom: 8, textTransform: 'uppercase' },
     shiftCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: 16, padding: isOperations ? 18 : 16, flexDirection: 'row', gap: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.10, shadowRadius: 12, elevation: isOperations ? 0 : 4, minHeight: isOperations ? 104 : 90, borderWidth: 1, borderColor: operationBorder },
     shiftStrip: { width: isOperations ? 5 : 4, borderRadius: 999, backgroundColor: c.primary, marginRight: 2 },
     shiftBadgeRow: { flexDirection: 'row', marginBottom: 8 },
     inProgressBadge: { backgroundColor: isOperations ? 'rgba(45,212,191,0.14)' : '#D1FAE5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' },
-    inProgressText: { fontSize: 10, fontWeight: '800', color: isOperations ? c.primaryDark : c.success, letterSpacing: isOperations ? 1 : 0 },
-    shiftTitle: { fontSize: isOperations ? 18 : 17, fontWeight: '800', color: isOperations ? c.text : c.primaryDark, marginBottom: 4 },
+    inProgressText: { ...TYPE.micro, color: isOperations ? c.primaryDark : c.success, letterSpacing: isOperations ? 1 : 0 },
+    shiftTitle: { ...TYPE.headline, color: isOperations ? c.text : c.primaryDark, marginBottom: 4 },
     shiftTime: { fontSize: isOperations ? 28 : 22, fontWeight: '900', color: isOperations ? c.primaryDark : c.primary, marginBottom: 4, fontVariant: ['tabular-nums'] },
     timelineCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: 16, marginTop: 12, padding: 16, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 10, elevation: isOperations ? 0 : 3, borderWidth: 1, borderColor: operationBorder },
     restRow: { flexDirection: 'row', alignItems: 'center' },
     restIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.success + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     restText: { fontSize: 18, fontWeight: '700', color: c.success },
-    emptyShift: { color: c.textSub, fontSize: 15, lineHeight: 24, textAlign: 'center', flex: 1 },
+    emptyShift: { ...TYPE.body, color: c.textSub, textAlign: 'center', flex: 1 },
     uploadToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 16, backgroundColor: c.card, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: c.glassBorder },
     uploadToggleText: { flex: 1, fontSize: 15, fontWeight: '600', color: c.primaryDark },
     uploadSection: { marginHorizontal: 16, backgroundColor: c.card, borderRadius: 18, padding: 16, marginTop: 2, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2, borderWidth: 1, borderColor: c.glassBorder },

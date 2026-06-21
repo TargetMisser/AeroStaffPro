@@ -83,6 +83,7 @@ import {
   schedulePinnedNotifications,
   scheduleShiftNotifications,
 } from '../utils/flightNotificationScheduler';
+import { TYPE } from '../theme/typography';
 
 const WearDataSender = Platform.OS === 'android' ? NativeModules.WearDataSender : null;
 
@@ -1541,7 +1542,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     notifBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
     notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
     notifBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
-    pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
+    pageTitle: { ...(isOperations ? TYPE.titleLg : TYPE.title), color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
     controlsRow: { flexDirection: 'row', gap: 8, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
     sourceRow: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: 16 },
@@ -1552,7 +1553,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     segBtn: { flex: 1, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', borderRadius: isOperations ? 11 : 6 },
     segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },
-    segBtnText: { fontSize: 12, fontWeight: '600', color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
+    segBtnText: { ...TYPE.caption, color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
     segBtnTextActive: { color: isOperations ? c.primaryDark : c.primary, fontWeight: '800' },
     card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
     cardShift: { borderWidth: 1.5, borderColor: c.warning },
@@ -1562,7 +1563,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : c.warning, paddingVertical: 5, paddingHorizontal: 12, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
     pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
     statusPill: { paddingHorizontal: 10, paddingVertical: isOperations ? 3 : 4, borderRadius: isOperations ? 10 : 20, marginTop: isOperations ? 6 : 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
-    statusText: { fontSize: 10, fontWeight: '800', letterSpacing: isOperations ? 0.6 : 0 },
+    statusText: { ...TYPE.micro, letterSpacing: isOperations ? 0.6 : 0 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
     airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
     headerLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },

@@ -21,6 +21,7 @@ import UpdateModal from '../components/UpdateModal';
 import ProfileSwitcherModal from '../components/ProfileSwitcherModal';
 import { exportBackup, importBackup } from '../utils/backupManager';
 import { providerStatusToToken } from '../utils/statusColors';
+import { TYPE } from '../theme/typography';
 import {
   clearAeroDataBoxApiKey,
   clearAirLabsApiKey,
@@ -1857,10 +1858,10 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
   bannerIcon:  { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  bannerTitle: { fontSize: 18, fontWeight: '800' },
+  bannerTitle: { ...TYPE.headline },
   bannerSub:   { fontSize: 12, marginTop: 2 },
 
-  sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 1.1, marginBottom: 8, paddingLeft: 4, marginTop: 4 },
+  sectionTitle: { ...TYPE.overline, marginBottom: 8, paddingLeft: 4, marginTop: 4 },
 
   // Theme grid
   themeGrid: { flexDirection: 'row', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
@@ -1901,12 +1902,11 @@ const styles = StyleSheet.create({
   modalCopy: { fontSize: 13, lineHeight: 20, marginBottom: 16 },
   modalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
   modalInput: {
+    ...TYPE.subhead,
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    fontSize: 16,
-    fontWeight: '700',
     marginBottom: 16,
   },
   modalActions: { flexDirection: 'row', gap: 10 },
@@ -2003,7 +2003,7 @@ const styles = StyleSheet.create({
   debugMetaWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   debugMetaPill: { flex: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 9 },
   debugMetaPillSmall: { minWidth: 92, flexGrow: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 9 },
-  debugMetaLabel: { fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+  debugMetaLabel: { ...TYPE.micro, textTransform: 'uppercase' },
   debugMetaValue: { fontSize: 15, fontWeight: '900', marginTop: 2 },
   debugProviderList: { gap: 8 },
   debugProviderRow: {
@@ -2055,8 +2055,7 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   statusModalTitle: {
-    fontSize: 22,
-    fontWeight: '800',
+    ...TYPE.title,
     textAlign: 'center',
   },
   statusModalScroll: {
@@ -2069,8 +2068,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   statusModalMessage: {
-    fontSize: 15,
-    lineHeight: 22,
+    ...TYPE.body,
     textAlign: 'center',
     marginTop: 10,
     marginBottom: 18,

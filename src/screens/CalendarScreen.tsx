@@ -32,6 +32,7 @@ import {
   type ParsedSchedule, type ParsedEmployee,
 } from '../utils/pdfShiftParser';
 import { useLanguage } from '../context/LanguageContext';
+import { TYPE } from '../theme/typography';
 
 const STORAGE_KEY = '@shift_import_name';
 
@@ -1193,7 +1194,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
     pageHeader: { backgroundColor: c.card, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
-    pageTitle: { fontSize: 22, fontWeight: 'bold', color: c.primaryDark },
+    pageTitle: { ...TYPE.title, color: c.primaryDark },
     pageSub: { fontSize: 11, color: c.textSub, letterSpacing: 1.5, marginTop: 3 },
     importBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
     importBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
@@ -1251,11 +1252,11 @@ function makeStyles(c: ThemeColors) {
     legendDot: { width: 8, height: 8, borderRadius: 4 },
     legendTodayRing: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     legendTodayCenter: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.primary },
-    legendText: { color: c.textSub, fontSize: 12, fontWeight: '600' },
+    legendText: { ...TYPE.caption, color: c.textSub },
     calendarSummary: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.border },
     calendarSummaryLabel: { color: c.textSub, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
     calendarSummaryValue: { color: c.primary, fontSize: 28, fontWeight: '800', marginTop: 6 },
-    calendarSummaryMeta: { color: c.textSub, fontSize: 13, fontWeight: '600', marginTop: 4 },
+    calendarSummaryMeta: { ...TYPE.callout, color: c.textSub, marginTop: 4 },
     weekCard: {
       backgroundColor: c.card,
       borderRadius: 20,
@@ -1274,7 +1275,7 @@ function makeStyles(c: ThemeColors) {
     weekRange: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'uppercase' },
     weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'flex-end' },
     weekTotalValue: { color: c.primary, fontSize: 18, fontWeight: '900' },
-    weekTotalLabel: { color: c.primaryDark, fontSize: 10, fontWeight: '800', marginTop: 1 },
+    weekTotalLabel: { ...TYPE.micro, color: c.primaryDark, marginTop: 1 },
     weekRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1297,7 +1298,7 @@ function makeStyles(c: ThemeColors) {
     },
     weekDayName: { color: c.textSub, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
     weekDayNumber: { color: c.text, fontSize: 22, fontWeight: '900', lineHeight: 26 },
-    weekMonthNumber: { color: c.textMuted, fontSize: 10, fontWeight: '800' },
+    weekMonthNumber: { ...TYPE.micro, color: c.textMuted },
     weekShiftBody: { flex: 1, minHeight: 58, justifyContent: 'center' },
     weekShiftTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
     weekShiftTitle: { fontSize: 16, fontWeight: '900' },
@@ -1323,19 +1324,19 @@ function makeStyles(c: ThemeColors) {
     },
     weatherIcon: { marginRight: 2 },
     weatherPlace: { fontSize: 10, color: c.textSub, fontWeight: '600' },
-    weatherText: { fontSize: 12, color: c.text, fontWeight: '600' },
+    weatherText: { ...TYPE.caption, color: c.text },
     shiftTypeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, marginTop: 6 },
     shiftIconBox: { width: 44, height: 44, backgroundColor: c.primaryLight, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-    shiftTypeName: { fontSize: 19, fontWeight: 'bold', color: c.primaryDark },
+    shiftTypeName: { ...TYPE.headline, color: c.primaryDark },
     timeRow: { flexDirection: 'row', alignItems: 'center' },
-    timeText: { fontSize: 22, fontWeight: 'bold', color: c.primary },
+    timeText: { ...TYPE.title, color: c.primary },
     flightBadge: { marginTop: 14, backgroundColor: c.primaryLight, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
     flightBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     flightBadgeText: { color: c.primary, fontWeight: '700', fontSize: 13 },
     restRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
     restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.successSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    restText: { fontSize: 20, fontWeight: 'bold', color: c.success },
-    emptyText: { textAlign: 'center', color: c.textSub, fontSize: 15, marginTop: 20, lineHeight: 24 },
+    restText: { ...TYPE.headline, color: c.success },
+    emptyText: { ...TYPE.body, textAlign: 'center', color: c.textSub, marginTop: 20 },
     // Modal
     modalOverlay: { flex: 1, justifyContent: 'flex-end' },
     modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
@@ -1343,10 +1344,10 @@ function makeStyles(c: ThemeColors) {
     modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 100, maxHeight: '92%' },
     manualModalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 0, maxHeight: '92%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    modalTitle: { fontSize: 20, fontWeight: 'bold' },
+    modalTitle: { ...TYPE.headline },
     centerBox: { alignItems: 'center', paddingVertical: 40, gap: 12 },
     stepText: { fontSize: 16, fontWeight: '600' },
-    stepLabel: { fontSize: 14, marginBottom: 12 },
+    stepLabel: { ...TYPE.body, marginBottom: 12 },
     nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderRadius: 8, marginBottom: 4 },
     nameText: { fontSize: 15, fontWeight: '500' },
     previewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1 },

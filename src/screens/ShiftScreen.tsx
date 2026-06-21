@@ -5,6 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { WebView } from 'react-native-webview';
 import * as Calendar from 'expo-calendar';
 import { useLanguage } from '../context/LanguageContext';
+import { TYPE } from '../theme/typography';
 
 const PRIMARY = '#F47B16';
 const DARK_ORANGE = '#C2520A';
@@ -324,7 +325,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 14,
     borderBottomWidth: 1, borderBottomColor: '#E5E7EB',
   },
-  pageTitle: { fontSize: 24, fontWeight: 'bold', color: DARK_ORANGE },
+  pageTitle: { ...TYPE.title, color: DARK_ORANGE },
   pageSub: { fontSize: 13, color: '#6B7280', marginTop: 4 },
   infoCard: {
     backgroundColor: '#fff',
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
   infoTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  infoTitle: { fontWeight: 'bold', fontSize: 15, color: PRIMARY },
+  infoTitle: { ...TYPE.subhead, color: PRIMARY },
   infoDesc: { fontSize: 13, color: '#6B7280', lineHeight: 20 },
   buttonsContainer: { margin: 16, marginBottom: 0 },
   button: {
@@ -344,7 +345,7 @@ const styles = StyleSheet.create({
     shadowColor: DARK_ORANGE, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
   },
   buttonInner: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  buttonText: { ...TYPE.subhead, color: '#fff' },
   imagesPreview: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', margin: 16, gap: 10 },
   image: { width: '45%', height: 140, resizeMode: 'cover', borderRadius: 10, borderWidth: 1, borderColor: '#E5E7EB' },
   loadingContainer: { marginTop: 24, alignItems: 'center' },
@@ -354,13 +355,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff', borderRadius: 14,
     shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
-  resultTitle: { fontSize: 15, fontWeight: 'bold', color: DARK_ORANGE, marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 8 },
+  resultTitle: { ...TYPE.subhead, color: DARK_ORANGE, marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 8 },
   resultText: { fontSize: 13, color: '#374151', lineHeight: 20, marginBottom: 16 },
   saveButton: {
     backgroundColor: PRIMARY,
     padding: 15, borderRadius: 12, alignItems: 'center',
     shadowColor: PRIMARY, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
   },
-  saveButtonText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
+  saveButtonText: { ...TYPE.subhead, color: '#fff' },
 });
 
