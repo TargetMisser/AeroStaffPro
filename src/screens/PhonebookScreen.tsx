@@ -280,7 +280,7 @@ function ContactRowComponent({ contact, onEdit, onDelete }: ContactRowProps) {
         <MaterialIcons name="edit" size={18} color={colors.textSub} />
       </TouchableOpacity>
       <TouchableOpacity style={rowStyles.editBtn} onPress={confirmDelete}>
-        <MaterialIcons name="delete-outline" size={18} color="#EF4444" />
+        <MaterialIcons name="delete-outline" size={18} color={colors.danger} />
       </TouchableOpacity>
     </View>
   );

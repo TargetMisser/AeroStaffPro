@@ -391,7 +391,7 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
               }}>
                 {c.cmd.split(/(\[[^\]]+\])/).map((part, j) =>
                   part.startsWith('[') ? (
-                    <Text key={j} style={{ color: '#F59E0B' }}>{part}</Text>
+                    <Text key={j} style={{ color: colors.warning }}>{part}</Text>
                   ) : (
                     <Text key={j}>{part}</Text>
                   )

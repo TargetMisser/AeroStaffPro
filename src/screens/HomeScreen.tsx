@@ -183,9 +183,9 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
           <View style={{ backgroundColor: statusColor + '22', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
             <Text style={{ fontSize: 10, fontWeight: '700', color: statusColor }}>{statusText}</Text>
           </View>
-          <View style={{ backgroundColor: '#F59E0B22', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <MaterialIcons name="push-pin" size={12} color="#F59E0B" />
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#F59E0B' }}>{t('homePinned')}</Text>
+          <View style={{ backgroundColor: colors.warning + '22', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <MaterialIcons name="push-pin" size={12} color={colors.warning} />
+            <Text style={{ fontSize: 10, fontWeight: '700', color: colors.warning }}>{t('homePinned')}</Text>
           </View>
         </View>
       </View>
@@ -290,7 +290,7 @@ function EasyJetOverlapMonitor({ overlappingFlights, tickerMs, colors, t, locale
 
               <View style={{ alignItems: 'flex-end', gap: 2 }}>
                 <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>{timeStr}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '800', color: landed ? '#10B981' : '#FF6600', textTransform: 'uppercase' }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: landed ? colors.success : '#FF6600', textTransform: 'uppercase' }}>
                   {countdown}
                 </Text>
               </View>
@@ -847,7 +847,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
           ) : isRest ? (
             <View style={s.restRow}>
               <View style={s.restIconWrap}>
-                <MaterialIcons name="hotel" size={22} color="#10b981" />
+                <MaterialIcons name="hotel" size={22} color={colors.success} />
               </View>
               <Text style={s.restText}>{t('homeRestDay')}</Text>
             </View>
@@ -895,10 +895,10 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     operationalKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.8, color: isOperations ? 'rgba(153,246,228,0.70)' : c.textMuted },
     operationalTitle: { fontSize: isOperations ? 25 : 22, fontWeight: '900', color: c.text, letterSpacing: -0.5 },
     operationalDetail: { fontSize: 13, lineHeight: 18, color: c.textSub },
-    operationalBeacon: { width: 48, height: 48, borderRadius: isOperations ? 16 : 24, alignItems: 'center', justifyContent: 'center', backgroundColor: '#64748B' },
-    operationalBeaconActive: { backgroundColor: '#10B981' },
+    operationalBeacon: { width: 48, height: 48, borderRadius: isOperations ? 16 : 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.neutral },
+    operationalBeaconActive: { backgroundColor: c.success },
     operationalBeaconNext: { backgroundColor: c.primary },
-    operationalBeaconRest: { backgroundColor: '#0EA5E9' },
+    operationalBeaconRest: { backgroundColor: c.info },
     summaryBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     summaryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: 999, borderWidth: 1, borderColor: operationBorder, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, paddingHorizontal: 9, paddingVertical: 5 },
     summaryBadgeText: { fontSize: 11, fontWeight: '900', color: c.primaryDark },
@@ -912,13 +912,13 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     shiftStrip: { width: isOperations ? 5 : 4, borderRadius: 999, backgroundColor: c.primary, marginRight: 2 },
     shiftBadgeRow: { flexDirection: 'row', marginBottom: 8 },
     inProgressBadge: { backgroundColor: isOperations ? 'rgba(45,212,191,0.14)' : '#D1FAE5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' },
-    inProgressText: { fontSize: 10, fontWeight: '800', color: isOperations ? c.primaryDark : '#059669', letterSpacing: isOperations ? 1 : 0 },
+    inProgressText: { fontSize: 10, fontWeight: '800', color: isOperations ? c.primaryDark : c.success, letterSpacing: isOperations ? 1 : 0 },
     shiftTitle: { fontSize: isOperations ? 18 : 17, fontWeight: '800', color: isOperations ? c.text : c.primaryDark, marginBottom: 4 },
     shiftTime: { fontSize: isOperations ? 28 : 22, fontWeight: '900', color: isOperations ? c.primaryDark : c.primary, marginBottom: 4, fontVariant: ['tabular-nums'] },
     timelineCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: 16, marginTop: 12, padding: 16, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 10, elevation: isOperations ? 0 : 3, borderWidth: 1, borderColor: operationBorder },
     restRow: { flexDirection: 'row', alignItems: 'center' },
-    restIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#10b98122', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    restText: { fontSize: 18, fontWeight: '700', color: '#10b981' },
+    restIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: c.success + '22', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    restText: { fontSize: 18, fontWeight: '700', color: c.success },
     emptyShift: { color: c.textSub, fontSize: 15, lineHeight: 24, textAlign: 'center', flex: 1 },
     uploadToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 16, backgroundColor: c.card, borderRadius: 18, paddingHorizontal: 16, paddingVertical: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: c.glassBorder },
     uploadToggleText: { flex: 1, fontSize: 15, fontWeight: '600', color: c.primaryDark },

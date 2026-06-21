@@ -566,7 +566,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         dots.push({ key: 'work', color: colors.primary, selectedDotColor: '#fff' });
       }
       if (events.some(event => event.title.includes('Riposo'))) {
-        dots.push({ key: 'rest', color: '#10b981', selectedDotColor: '#fff' });
+        dots.push({ key: 'rest', color: colors.success, selectedDotColor: '#fff' });
       }
       if (dots.length > 0) next[iso] = { dots };
     }
@@ -797,7 +797,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
               ) : restEvent ? (
                 <View style={s.restRow}>
                   <View style={s.restIconBox}>
-                    <MaterialIcons name="hotel" size={22} color="#10b981" />
+                    <MaterialIcons name="hotel" size={22} color={colors.success} />
                   </View>
                   <Text style={s.restText}>{t('calRestDay')}</Text>
                 </View>
@@ -847,7 +847,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                   <Text style={s.legendText}>{t('calTypeWork')}</Text>
                 </View>
                 <View style={s.legendItem}>
-                  <View style={[s.legendDot, { backgroundColor: '#10b981' }]} />
+                  <View style={[s.legendDot, { backgroundColor: colors.success }]} />
                   <Text style={s.legendText}>{t('calTypeRest')}</Text>
                 </View>
                 <View style={s.legendItem}>
@@ -927,7 +927,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                           </>
                         ) : day.rest ? (
                           <View style={s.weekRestRow}>
-                            <MaterialIcons name="hotel" size={18} color="#10b981" />
+                            <MaterialIcons name="hotel" size={18} color={colors.success} />
                             <Text style={s.weekRestText}>{t('calRestDay')}</Text>
                           </View>
                         ) : (
@@ -1144,8 +1144,8 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                           </Text>
                         </View>
                       ) : (
-                        <View style={[s.previewPill, { backgroundColor: '#D1FAE5' }]}>
-                          <Text style={[s.previewPillText, { color: '#059669' }]}>{t('calRestPill')}</Text>
+                        <View style={[s.previewPill, { backgroundColor: colors.successSoft }]}>
+                          <Text style={[s.previewPillText, { color: colors.success }]}>{t('calRestPill')}</Text>
                         </View>
                       )}
                     </View>
@@ -1179,8 +1179,8 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
             {/* Step: Done */}
             {importStep === 'done' && (
               <View style={s.centerBox}>
-                <MaterialIcons name="check-circle" size={48} color="#10b981" />
-                <Text style={[s.stepText, { color: '#10b981' }]}>{t('calImportDone')}</Text>
+                <MaterialIcons name="check-circle" size={48} color={colors.success} />
+                <Text style={[s.stepText, { color: colors.success }]}>{t('calImportDone')}</Text>
               </View>
             )}
           </View>
@@ -1304,7 +1304,7 @@ function makeStyles(c: ThemeColors) {
     weekShiftMeta: { color: c.text, fontSize: 15, fontWeight: '800', marginTop: 5 },
     weekFlightMeta: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3 },
     weekRestRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    weekRestText: { color: '#10b981', fontSize: 16, fontWeight: '900' },
+    weekRestText: { color: c.success, fontSize: 16, fontWeight: '900' },
     weekEmptyText: { color: c.textSub, fontSize: 14, fontWeight: '700' },
     mainCard: {
       backgroundColor: c.card, borderRadius: 14,
@@ -1333,8 +1333,8 @@ function makeStyles(c: ThemeColors) {
     flightBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     flightBadgeText: { color: c.primary, fontWeight: '700', fontSize: 13 },
     restRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-    restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: '#10b98122', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    restText: { fontSize: 20, fontWeight: 'bold', color: '#10b981' },
+    restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.successSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    restText: { fontSize: 20, fontWeight: 'bold', color: c.success },
     emptyText: { textAlign: 'center', color: c.textSub, fontSize: 15, marginTop: 20, lineHeight: 24 },
     // Modal
     modalOverlay: { flex: 1, justifyContent: 'flex-end' },

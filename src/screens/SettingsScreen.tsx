@@ -815,10 +815,10 @@ export default function SettingsScreen({
           disabled={exportingBackup}
           activeOpacity={0.8}
         >
-          <View style={[styles.backupTileIcon, { backgroundColor: '#10B98122' }]}>
+          <View style={[styles.backupTileIcon, { backgroundColor: colors.successSoft }]}>
             {exportingBackup
-              ? <ActivityIndicator size={22} color="#10B981" />
-              : <MaterialIcons name="upload" size={26} color="#10B981" />}
+              ? <ActivityIndicator size={22} color={colors.success} />
+              : <MaterialIcons name="upload" size={26} color={colors.success} />}
           </View>
           <Text style={[styles.backupTileLabel, { color: colors.text }]}>Esporta</Text>
           <Text style={[styles.backupTileSub, { color: colors.textMuted }]}>Salva su file</Text>
@@ -830,10 +830,10 @@ export default function SettingsScreen({
           disabled={importingBackup}
           activeOpacity={0.8}
         >
-          <View style={[styles.backupTileIcon, { backgroundColor: '#3B82F622' }]}>
+          <View style={[styles.backupTileIcon, { backgroundColor: colors.infoSoft }]}>
             {importingBackup
-              ? <ActivityIndicator size={22} color="#3B82F6" />
-              : <MaterialIcons name="download" size={26} color="#3B82F6" />}
+              ? <ActivityIndicator size={22} color={colors.info} />
+              : <MaterialIcons name="download" size={26} color={colors.info} />}
           </View>
           <Text style={[styles.backupTileLabel, { color: colors.text }]}>Importa</Text>
           <Text style={[styles.backupTileSub, { color: colors.textMuted }]}>Ripristina da file</Text>
@@ -895,10 +895,10 @@ export default function SettingsScreen({
                     dialogState.tone === 'success'
                       ? colors.primaryLight
                       : dialogState.tone === 'warning'
-                        ? '#F59E0B22'
+                        ? colors.warningSoft
                         : dialogState.tone === 'info'
-                          ? '#2563EB22'
-                          : '#DC262622',
+                          ? colors.infoSoft
+                          : colors.dangerSoft,
                 },
               ]}>
                 <MaterialIcons
@@ -916,10 +916,10 @@ export default function SettingsScreen({
                     dialogState.tone === 'success'
                       ? colors.primary
                       : dialogState.tone === 'warning'
-                        ? '#D97706'
+                        ? colors.warning
                         : dialogState.tone === 'info'
-                          ? '#2563EB'
-                          : '#DC2626'
+                          ? colors.info
+                          : colors.danger
                   }
                 />
               </View>
@@ -949,7 +949,7 @@ export default function SettingsScreen({
                           borderColor: colors.border,
                           borderWidth: 1,
                         },
-                        actionStyle === 'danger' && { backgroundColor: '#DC2626' },
+                        actionStyle === 'danger' && { backgroundColor: colors.danger },
                       ]}
                       onPress={() => { handleDialogAction(action); }}
                       activeOpacity={0.85}
@@ -1073,7 +1073,7 @@ export default function SettingsScreen({
                       <Text style={[styles.providerOptionTitle, { color: selected ? colors.primaryDark : colors.text }]}>
                         {option.title}
                       </Text>
-                      <Text style={[styles.providerOptionSub, { color: warn ? '#D97706' : colors.textMuted }]}>
+                      <Text style={[styles.providerOptionSub, { color: warn ? colors.warning : colors.textMuted }]}>
                         {option.sub}
                       </Text>
                     </View>
@@ -1162,7 +1162,7 @@ export default function SettingsScreen({
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: '#DC2626' }, savingAeroDataBox && { opacity: 0.6 }]}
+                  style={[styles.modalBtn, { backgroundColor: colors.danger }, savingAeroDataBox && { opacity: 0.6 }]}
                   onPress={removeAeroDataBoxKey}
                   disabled={savingAeroDataBox}
                   activeOpacity={0.85}
@@ -1223,7 +1223,7 @@ export default function SettingsScreen({
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: '#DC2626' }, savingAirLabs && { opacity: 0.6 }]}
+                  style={[styles.modalBtn, { backgroundColor: colors.danger }, savingAirLabs && { opacity: 0.6 }]}
                   onPress={removeAirLabsKey}
                   disabled={savingAirLabs}
                   activeOpacity={0.85}
@@ -1284,7 +1284,7 @@ export default function SettingsScreen({
 
               <View style={styles.modalActions}>
                 <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: '#DC2626' }, savingFr24 && { opacity: 0.6 }]}
+                  style={[styles.modalBtn, { backgroundColor: colors.danger }, savingFr24 && { opacity: 0.6 }]}
                   onPress={removeFr24Key}
                   disabled={savingFr24}
                   activeOpacity={0.85}
@@ -1477,7 +1477,7 @@ export default function SettingsScreen({
                   <View style={styles.debugMetaWrap}>
                     <View style={[styles.debugMetaPillSmall, { backgroundColor: colors.cardSecondary }]}>
                       <Text style={[styles.debugMetaLabel, { color: colors.textMuted }]}>{t('notificationDebugEnabled')}</Text>
-                      <Text style={[styles.debugMetaValue, { color: notificationDebug.enabled ? '#10B981' : colors.text }]}>
+                      <Text style={[styles.debugMetaValue, { color: notificationDebug.enabled ? colors.success : colors.text }]}>
                         {notificationDebug.enabled ? t('yes') : t('no')}
                       </Text>
                     </View>
@@ -1495,7 +1495,7 @@ export default function SettingsScreen({
                     </View>
                     <View style={[styles.debugMetaPillSmall, { backgroundColor: colors.cardSecondary }]}>
                       <Text style={[styles.debugMetaLabel, { color: colors.textMuted }]}>{t('notificationDebugDuplicates')}</Text>
-                      <Text style={[styles.debugMetaValue, { color: notificationDebug.possibleDuplicates.length > 0 ? '#EF4444' : colors.text }]}>
+                      <Text style={[styles.debugMetaValue, { color: notificationDebug.possibleDuplicates.length > 0 ? colors.danger : colors.text }]}>
                         {notificationDebug.possibleDuplicates.length}
                       </Text>
                     </View>
@@ -1503,15 +1503,15 @@ export default function SettingsScreen({
 
                   <View style={styles.notificationDebugActions}>
                     <TouchableOpacity
-                      style={[styles.notificationClearBtn, { backgroundColor: '#DC262622', borderColor: '#DC262655' }, clearingNotifications && { opacity: 0.6 }]}
+                      style={[styles.notificationClearBtn, { backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft }, clearingNotifications && { opacity: 0.6 }]}
                       onPress={() => { clearScheduledNotifications().catch(() => {}); }}
                       disabled={clearingNotifications}
                       activeOpacity={0.85}
                     >
                       {clearingNotifications
-                        ? <ActivityIndicator size={15} color="#DC2626" />
-                        : <MaterialIcons name="delete-sweep" size={16} color="#DC2626" />}
-                      <Text style={styles.notificationClearText}>{t('notificationDebugClear')}</Text>
+                        ? <ActivityIndicator size={15} color={colors.danger} />
+                        : <MaterialIcons name="delete-sweep" size={16} color={colors.danger} />}
+                      <Text style={[styles.notificationClearText, { color: colors.danger }]}>{t('notificationDebugClear')}</Text>
                     </TouchableOpacity>
                   </View>
 
@@ -1781,7 +1781,7 @@ export default function SettingsScreen({
                   <View style={styles.debugMetaWrap}>
                     <View style={[styles.debugMetaPillSmall, { backgroundColor: colors.cardSecondary }]}>
                       <Text style={[styles.debugMetaLabel, { color: colors.textMuted }]}>{t('notificationDebugEnabled')}</Text>
-                      <Text style={[styles.debugMetaValue, { color: notificationDebug.enabled ? '#10B981' : colors.text }]}>
+                      <Text style={[styles.debugMetaValue, { color: notificationDebug.enabled ? colors.success : colors.text }]}>
                         {notificationDebug.enabled ? t('yes') : t('no')}
                       </Text>
                     </View>
@@ -1791,7 +1791,7 @@ export default function SettingsScreen({
                     </View>
                     <View style={[styles.debugMetaPillSmall, { backgroundColor: colors.cardSecondary }]}>
                       <Text style={[styles.debugMetaLabel, { color: colors.textMuted }]}>{t('notificationDebugDuplicates')}</Text>
-                      <Text style={[styles.debugMetaValue, { color: notificationDebug.possibleDuplicates.length > 0 ? '#EF4444' : colors.text }]}>
+                      <Text style={[styles.debugMetaValue, { color: notificationDebug.possibleDuplicates.length > 0 ? colors.danger : colors.text }]}>
                         {notificationDebug.possibleDuplicates.length}
                       </Text>
                     </View>
@@ -1799,15 +1799,15 @@ export default function SettingsScreen({
 
                   <View style={styles.notificationDebugActions}>
                     <TouchableOpacity
-                      style={[styles.notificationClearBtn, { backgroundColor: '#DC262622', borderColor: '#DC262655' }, clearingNotifications && { opacity: 0.6 }]}
+                      style={[styles.notificationClearBtn, { backgroundColor: colors.dangerSoft, borderColor: colors.dangerSoft }, clearingNotifications && { opacity: 0.6 }]}
                       onPress={() => { clearScheduledNotifications().catch(() => {}); }}
                       disabled={clearingNotifications}
                       activeOpacity={0.85}
                     >
                       {clearingNotifications
-                        ? <ActivityIndicator size={15} color="#DC2626" />
-                        : <MaterialIcons name="delete-sweep" size={16} color="#DC2626" />}
-                      <Text style={styles.notificationClearText}>{t('notificationDebugClear')}</Text>
+                        ? <ActivityIndicator size={15} color={colors.danger} />
+                        : <MaterialIcons name="delete-sweep" size={16} color={colors.danger} />}
+                      <Text style={[styles.notificationClearText, { color: colors.danger }]}>{t('notificationDebugClear')}</Text>
                     </TouchableOpacity>
                   </View>
 
