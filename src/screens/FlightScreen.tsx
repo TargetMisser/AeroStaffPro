@@ -463,6 +463,19 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
                 <Text style={[s.statusText, { color: dColor }]}>{dText}</Text>
               </ValueChangeFlash>
             );
+          })() : activeTab === 'departures' && ts ? (() => {
+            const rDep = item.flight?.time?.real?.departure;
+            const eDep = item.flight?.time?.estimated?.departure;
+            const bDep = rDep || eDep || ts;
+            const dMin = Math.round((bDep - ts) / 60);
+            const hasDeparted = !!rDep;
+            const dText = hasDeparted ? 'Decollato' : dMin > 0 ? `+${dMin} min` : 'In orario';
+            const dColor = delayToToken(dMin, hasDeparted, colors, colors.success);
+            return (
+              <ValueChangeFlash valueKey={dText} enabled={isOperations} style={[s.statusPill, { backgroundColor: dColor + '22' }]}>
+                <Text style={[s.statusText, { color: dColor }]}>{dText}</Text>
+              </ValueChangeFlash>
+            );
           })() : (
             <ValueChangeFlash valueKey={statusText} enabled={isOperations} style={[s.statusPill, { backgroundColor: statusColor + '22' }]}>
               <Text style={[s.statusText, { color: statusColor }]}>{statusText}</Text>
