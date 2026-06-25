@@ -33,7 +33,7 @@ import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
-import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
+import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from '../utils/flightTimes';
 import { isFlightEasyJet } from '../utils/easyjetOverlapMode';
 import {
   compareFlightsChronologically,
@@ -894,17 +894,18 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           const wAllowedAirlines: string[] = wFilterRaw ? JSON.parse(wFilterRaw) : [];
           const wFlights: WidgetFlight[] = mergedDeps
             .filter(item => {
-              const ts = getBestDepartureTs(item);
-              if (ts == null) return false;
+              const stdTs = getScheduledFlightTs(item, 'departure');
+              if (stdTs == null) return false;
               const airline = item.flight?.airline?.name || '';
               if (wAllowedAirlines.length > 0 && !wAllowedAirlines.some(k => isFlightAirlineMatch(item, k))) return false;
               const ops = getAirlineOps(airline);
-              const ciO = ts - ops.checkInOpen * 60, ciC = ts - ops.checkInClose * 60;
-              const gO = ts - ops.gateOpen * 60, gC = ts - ops.gateClose * 60;
+              const ciO = stdTs - ops.checkInOpen * 60, ciC = stdTs - ops.checkInClose * 60;
+              const gO = stdTs - ops.gateOpen * 60, gC = stdTs - ops.gateClose * 60;
               return (ciO <= activeWidgetShift.end && ciC >= activeWidgetShift.start) || (gO <= activeWidgetShift.end && gC >= activeWidgetShift.start);
             })
             .map(item => {
-              const ts = getBestDepartureTs(item)!;
+              const etdTs = getBestDepartureTs(item)!;
+              const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
               const airline = item.flight?.airline?.name || 'Sconosciuta';
               const airlineIdentity = [
                 airline,
@@ -921,10 +922,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
               return {
                 flightNumber: fn,
                 destinationIata: getFlightAirportLabel(item.flight?.airport?.destination, 'N/A'),
-                departureTs: ts,
-                departureTime: fmtT(ts),
-                ciOpen: fmtOff(ts, ops.checkInOpen), ciClose: fmtOff(ts, ops.checkInClose),
-                gateOpen: fmtOff(ts, ops.gateOpen), gateClose: fmtOff(ts, ops.gateClose),
+                departureTs: etdTs,
+                departureTime: fmtT(etdTs),
+                ciOpen: fmtOff(stdTs, ops.checkInOpen), ciClose: fmtOff(stdTs, ops.checkInClose),
+                gateOpen: fmtOff(stdTs, ops.gateOpen), gateClose: fmtOff(stdTs, ops.gateClose),
                 airlineColor: getAirlineColor(airlineIdentity),
                 isPinned: fn === pinnedFn,
                 stand: sm?.stand,

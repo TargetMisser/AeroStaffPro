@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { getAirlineOps } from './airlineOps';
 import { getFlightAirportLabel } from './flightScheduleAdapter';
-import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
+import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from './flightTimes';
 import { shouldNotifyAirline, type FlightNotificationSettings } from './flightNotificationSettings';
 import { isFlightEasyJet } from './easyjetOverlapMode';
 import {
@@ -229,26 +229,30 @@ export async function schedulePinnedNotifications(
         ids.push(id);
       }
     } else {
-      const ts = getBestDepartureTs(item);
-      if (!ts) return;
+      const etdTs = getBestDepartureTs(item);
+      if (!etdTs) return;
+      const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
       const dest = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
-      const depTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+      const depTime = new Date(etdTs * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
       const ops = getAirlineOps(airline);
 
-      const phases: Array<{ offset: number; type: string; title: string; body: string }> = [
-        { offset: ops.checkInOpen, type: 'pinned_checkin_open', title: `Check-in aperto - ${flightNumber}`, body: `Check-in aperto per il volo delle ${depTime} → ${dest}` },
-        { offset: ops.gateOpen, type: 'pinned_gate_open', title: `Gate aperto - ${flightNumber}`, body: `Gate aperto per il volo delle ${depTime} → ${dest}` },
-        { offset: ops.gateClose, type: 'pinned_gate_close', title: `Chiusura gate - ${flightNumber}`, body: `Gate in chiusura per il volo delle ${depTime} → ${dest}` },
+      // Closure phases use stdTs so they never shift when the flight is delayed.
+      // Only the departure notification uses etdTs (the real/estimated departure).
+      const phases: Array<{ offset: number; type: string; title: string; body: string; baseTs: number }> = [
+        { offset: ops.checkInOpen, type: 'pinned_checkin_open', title: `Check-in aperto - ${flightNumber}`, body: `Check-in aperto per il volo delle ${depTime} → ${dest}`, baseTs: stdTs },
+        { offset: ops.gateOpen, type: 'pinned_gate_open', title: `Gate aperto - ${flightNumber}`, body: `Gate aperto per il volo delle ${depTime} → ${dest}`, baseTs: stdTs },
+        { offset: ops.gateClose, type: 'pinned_gate_close', title: `Chiusura gate - ${flightNumber}`, body: `Gate in chiusura per il volo delle ${depTime} → ${dest}`, baseTs: stdTs },
         {
           offset: settings.departureLeadMinutes,
           type: 'pinned_departure',
           title: `Partenza tra ${settings.departureLeadMinutes} min - ${flightNumber}`,
           body: `${airline} → ${dest} · partenza alle ${depTime}`,
+          baseTs: etdTs,
         },
       ];
 
       for (const phase of phases) {
-        const secsUntil = ts - phase.offset * 60 - now;
+        const secsUntil = phase.baseTs - phase.offset * 60 - now;
         if (secsUntil <= 0) continue;
         const id = await Notifications.scheduleNotificationAsync({
           content: {
@@ -261,7 +265,7 @@ export async function schedulePinnedNotifications(
               scheduler: 'flights_pinned',
               type: phase.type,
               flightNumber,
-              ts,
+              ts: phase.baseTs,
               pinned: true,
             }),
           },
