@@ -3,6 +3,7 @@ import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } 
 import { MaterialIcons } from '@expo/vector-icons';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 
 const ARION_INBOX_URL = 'https://prd-arion-ap.firebaseapp.com/messages/inbox';
 
@@ -13,6 +14,7 @@ type WebLoadError = {
 
 export default function ArionInboxScreen() {
   const { colors, mode } = useAppTheme();
+  const { t } = useLanguage();
   const webViewRef = useRef<WebView>(null);
   const [progress, setProgress] = useState(0);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -47,6 +49,7 @@ export default function ArionInboxScreen() {
             disabled={!canGoBack}
             onPress={() => webViewRef.current?.goBack()}
             activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={t('a11yBack')}
           >
             <MaterialIcons name="arrow-back-ios-new" size={16} color={colors.primary} />
           </TouchableOpacity>
@@ -55,6 +58,7 @@ export default function ArionInboxScreen() {
             disabled={!canGoForward}
             onPress={() => webViewRef.current?.goForward()}
             activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={t('a11yForward')}
           >
             <MaterialIcons name="arrow-forward-ios" size={16} color={colors.primary} />
           </TouchableOpacity>
@@ -62,6 +66,7 @@ export default function ArionInboxScreen() {
             style={[styles.navButton, { backgroundColor: colors.cardSecondary }]}
             onPress={() => webViewRef.current?.reload()}
             activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
           >
             <MaterialIcons name="refresh" size={18} color={colors.primary} />
           </TouchableOpacity>
@@ -78,6 +83,7 @@ export default function ArionInboxScreen() {
           style={[styles.externalButton, { borderColor: colors.border, backgroundColor: colors.cardSecondary }]}
           onPress={openExternal}
           activeOpacity={0.85}
+          accessibilityRole="button" accessibilityLabel={t('a11yOpenInBrowser')}
         >
           <MaterialIcons name="open-in-new" size={18} color={colors.primary} />
         </TouchableOpacity>

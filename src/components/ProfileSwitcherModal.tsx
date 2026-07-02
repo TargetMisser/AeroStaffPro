@@ -184,7 +184,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
               <Text style={styles.title}>{t('profileTitle')}</Text>
               <Text style={styles.subtitle}>{t('profileSubtitle')}</Text>
             </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
               <MaterialIcons name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -226,6 +226,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
                         style={styles.profileAction}
                         onPress={() => openEditor(profile)}
                         activeOpacity={0.8}
+                        accessibilityRole="button" accessibilityLabel={t('profileEdit')}
                       >
                         <MaterialIcons name="edit" size={18} color={colors.primary} />
                       </TouchableOpacity>

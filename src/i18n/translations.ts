@@ -7,6 +7,13 @@ const it = {
   overlayNotepad: 'Blocco Note', overlayPhonebook: 'Rubrica', overlayPasswords: 'Password',
   overlayManuals: 'Manuali DCS', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Impostazioni',
   // Common
+  // Accessibilità (label per screen reader)
+  a11yClose: 'Chiudi', a11yBack: 'Indietro', a11yForward: 'Avanti',
+  a11yRefresh: 'Aggiorna', a11yOpenInBrowser: 'Apri nel browser',
+  a11yClearSearch: 'Cancella ricerca', a11yEdit: 'Modifica',
+  a11yShowPassword: 'Mostra password', a11yHidePassword: 'Nascondi password',
+  a11yBackspace: 'Cancella ultima cifra', a11yCall: 'Chiama',
+  a11yOpenMenu: 'Apri menu', a11yDecrease: 'Diminuisci', a11yIncrease: 'Aumenta',
   cancel: 'Annulla', save: 'Salva', delete: 'Elimina', remove: 'Rimuovi', error: 'Errore',
   confirm: 'Conferma', ok: 'OK', add: 'Aggiungi', yes: 'Sì', no: 'No',
   profileTitle: 'Profili aeroporto',
@@ -293,6 +300,13 @@ const en: typeof it = {
   overlayNotepad: 'Notepad', overlayPhonebook: 'Phonebook', overlayPasswords: 'Password',
   overlayManuals: 'DCS Manuals', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Settings',
   // Common
+  // Accessibility (screen reader labels)
+  a11yClose: 'Close', a11yBack: 'Back', a11yForward: 'Forward',
+  a11yRefresh: 'Refresh', a11yOpenInBrowser: 'Open in browser',
+  a11yClearSearch: 'Clear search', a11yEdit: 'Edit',
+  a11yShowPassword: 'Show password', a11yHidePassword: 'Hide password',
+  a11yBackspace: 'Delete last digit', a11yCall: 'Call',
+  a11yOpenMenu: 'Open menu', a11yDecrease: 'Decrease', a11yIncrease: 'Increase',
   cancel: 'Cancel', save: 'Save', delete: 'Delete', remove: 'Remove', error: 'Error',
   confirm: 'Confirm', ok: 'OK', add: 'Add', yes: 'Yes', no: 'No',
   profileTitle: 'Airport profiles',

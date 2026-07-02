@@ -118,7 +118,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
           {keys.map((k, i) => (
             k === '' ? <View key={i} style={s.keyEmpty} /> :
             k === '⌫' ? (
-              <TouchableOpacity key={i} style={s.key} onPress={del} activeOpacity={0.7}>
+              <TouchableOpacity key={i} style={s.key} onPress={del} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('a11yBackspace')}>
                 <MaterialIcons name="backspace" size={20} color={colors.text} />
               </TouchableOpacity>
             ) : (
@@ -141,6 +141,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
 // ─── Password Row ─────────────────────────────────────────────────────────────
 function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry; onEdit: () => void; onDelete: () => void }) {
   const { colors } = useAppTheme();
+  const { t } = useLanguage();
   const s = useMemo(() => makeRowStyles(colors), [colors]);
   const [revealed, setRevealed] = useState(false);
 
@@ -151,17 +152,17 @@ function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry;
         {item.username ? <Text style={s.username}>{item.username}</Text> : null}
         <View style={s.pwRow}>
           <Text style={s.pw}>{revealed ? item.password : '••••••••'}</Text>
-          <TouchableOpacity onPress={() => setRevealed(r => !r)} style={s.eyeBtn}>
+          <TouchableOpacity onPress={() => setRevealed(r => !r)} style={s.eyeBtn} accessibilityRole="button" accessibilityLabel={t(revealed ? 'a11yHidePassword' : 'a11yShowPassword')}>
             <MaterialIcons name={revealed ? 'visibility-off' : 'visibility'} size={16} color={colors.textSub} />
           </TouchableOpacity>
         </View>
         {item.notes ? <Text style={s.notes}>{item.notes}</Text> : null}
       </View>
       <View style={s.actions}>
-        <TouchableOpacity style={s.editBtn} onPress={onEdit}>
+        <TouchableOpacity style={s.editBtn} onPress={onEdit} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
           <MaterialIcons name="edit" size={17} color={colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.delBtn} onPress={onDelete}>
+        <TouchableOpacity style={s.delBtn} onPress={onDelete} accessibilityRole="button" accessibilityLabel={t('delete')}>
           <MaterialIcons name="delete-outline" size={17} color="#EF4444" />
         </TouchableOpacity>
       </View>
@@ -368,7 +369,7 @@ export default function PasswordScreen() {
                 secureTextEntry={!showPw}
                 autoCapitalize="none"
               />
-              <TouchableOpacity onPress={() => setShowPw(p => !p)} style={s.eyeModal}>
+              <TouchableOpacity onPress={() => setShowPw(p => !p)} style={s.eyeModal} accessibilityRole="button" accessibilityLabel={t(showPw ? 'a11yHidePassword' : 'a11yShowPassword')}>
                 <MaterialIcons name={showPw ? 'visibility-off' : 'visibility'} size={20} color={colors.textSub} />
               </TouchableOpacity>
             </View>

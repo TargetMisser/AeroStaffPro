@@ -75,7 +75,7 @@ export default function FlightSourceDebugModal({
               <Text style={[styles.title, { color: colors.text }]}>{t('flightSourceDebugTitle')}</Text>
               <Text style={[styles.subtitle, { color: colors.textMuted }]}>{t('flightSourceDebugSub')}</Text>
             </View>
-            <TouchableOpacity style={[styles.closeBtn, { backgroundColor: colors.cardSecondary }]} onPress={onClose}>
+            <TouchableOpacity style={[styles.closeBtn, { backgroundColor: colors.cardSecondary }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
               <MaterialIcons name="close" size={20} color={colors.text} />
             </TouchableOpacity>
           </View>

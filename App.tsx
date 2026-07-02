@@ -315,11 +315,11 @@ function AppInner() {
           />
         )}
         {overlay ? (
-          <TactilePressable onPress={handleBack} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection">
+          <TactilePressable onPress={handleBack} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yBack')}>
             <MaterialIcons name="arrow-back" size={22} color={colors.primaryDark} />
           </TactilePressable>
         ) : (
-          <TactilePressable onPress={() => setDrawerOpen(true)} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection">
+          <TactilePressable onPress={() => setDrawerOpen(true)} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yOpenMenu')}>
             <MaterialIcons name="menu" size={24} color={colors.primaryDark} />
           </TactilePressable>
         )}

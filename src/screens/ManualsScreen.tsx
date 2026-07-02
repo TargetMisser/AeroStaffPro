@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import { TYPE } from '../theme/typography';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 
@@ -330,6 +331,7 @@ function RichBodyText({ text, colors }: { text: string; colors: any }) {
 
 // ─── Commands Tab component ──────────────────────────────────────────────────
 function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any }) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const lower = search.toLowerCase();
   const filtered = lower
@@ -360,7 +362,7 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
           autoCapitalize="none"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel={t('a11yClearSearch')}>
             <MaterialIcons name="close" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
@@ -451,6 +453,7 @@ function ManualItemRow({
   editMode: boolean;
   onEdit: () => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = useAppTheme();
   const itemStyles = useMemo(() => makeItemStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
@@ -470,7 +473,7 @@ function ManualItemRow({
         />
         <Text style={itemStyles.title}>{item.title}</Text>
         {editMode && (
-          <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
             <MaterialIcons name="edit" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
@@ -512,6 +515,7 @@ function SectionBlock({
   onAddItem: () => void;
   onEditItem: (itemIdx: number) => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = useAppTheme();
   const sectionStyles = useMemo(() => makeSectionStyles(colors), [colors]);
   const [open, setOpen] = useState(true);
@@ -527,7 +531,7 @@ function SectionBlock({
         <Text style={sectionStyles.title}>{section.title}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {editMode && (
-            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
               <MaterialIcons name="edit" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           )}
@@ -957,6 +961,7 @@ function ItemModal({
 }
 
 export default function ManualsScreen() {
+  const { t } = useLanguage();
   const { colors } = useAppTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [airlines, setAirlines] = useState<Airline[]>(DEFAULT_AIRLINES);
@@ -998,7 +1003,7 @@ export default function ManualsScreen() {
       <View style={s.header}>
         <MaterialIcons name="menu-book" size={22} color={colors.primary} />
         <Text style={s.headerTitle}>Manuali DCS</Text>
-        <TouchableOpacity onPress={() => setEditMode(v => !v)} style={{ marginLeft: 'auto' }}>
+        <TouchableOpacity onPress={() => setEditMode(v => !v)} style={{ marginLeft: 'auto' }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
           <MaterialIcons
             name="edit"
             size={20}

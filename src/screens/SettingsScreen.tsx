@@ -991,6 +991,7 @@ export default function SettingsScreen({
               style={[styles.providerCloseBtn, { backgroundColor: colors.cardSecondary }]}
               onPress={closeProviderModal}
               activeOpacity={0.85}
+              accessibilityRole="button" accessibilityLabel={t('a11yClose')}
             >
               <MaterialIcons name="close" size={22} color={colors.text} />
             </TouchableOpacity>
@@ -1373,6 +1374,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshProviderDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1468,6 +1470,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshNotificationDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1593,6 +1596,7 @@ export default function SettingsScreen({
               style={[styles.providerCloseBtn, { backgroundColor: colors.cardSecondary }]}
               onPress={closeDebugModal}
               activeOpacity={0.85}
+              accessibilityRole="button" accessibilityLabel={t('a11yClose')}
             >
               <MaterialIcons name="close" size={22} color={colors.text} />
             </TouchableOpacity>
@@ -1677,6 +1681,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshProviderDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1772,6 +1777,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshNotificationDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
