@@ -25,7 +25,7 @@ import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils
 import { statusToToken, delayToToken } from '../utils/statusColors';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
-import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines } from '../utils/airportSettings';
+import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines, reconcileSelectedAirlines } from '../utils/airportSettings';
 import { applyLiveArrivalEtas, applyLiveDepartureStatus, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
@@ -68,7 +68,6 @@ import {
 import {
   clamp,
   DEFAULT_NOTIFICATION_SETTINGS,
-  sameAirlineKeys,
   sanitizeNotificationSettings,
   type FlightNotificationSettings,
 } from '../utils/flightNotificationSettings';
@@ -559,16 +558,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     setSelectedAirlines(next);
     persistSelectedAirlines(next).catch(() => {});
   }, [persistSelectedAirlines]);
-  const airportAirlinesRef = useRef<string[]>([]);
   const selectedAirlinesRef = useRef<string[]>([]);
   const notifSettingsRef = useRef<FlightNotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
   const fetchInFlightRef = useRef(false);
   const lastFlightRefreshAttemptAtRef = useRef(0);
-
-  useEffect(() => {
-    airportAirlinesRef.current = airportAirlines;
-  }, [airportAirlines]);
 
   useEffect(() => {
     selectedAirlinesRef.current = selectedAirlines;
@@ -673,19 +667,16 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       const nextAirportAirlines = getAirportAirlines(airportCode);
       setAirportAirlines(nextAirportAirlines);
 
-      const savedProfileAirlines = activeProfile?.airportCode === airportCode ? activeProfile.airlines : [];
-      const previousAirportAirlines = airportAirlinesRef.current;
-      const previousSelectedAirlines = selectedAirlinesRef.current;
-      const hadAllPreviouslySelected =
-        previousAirportAirlines.length > 0 &&
-        previousAirportAirlines.every(key => previousSelectedAirlines.includes(key));
-
-      if (savedProfileAirlines.length === 0) {
-        if (previousSelectedAirlines.length > 0) {
-          applySelectedAirlines([]);
-        }
-      } else if (hadAllPreviouslySelected && !sameAirlineKeys(savedProfileAirlines, nextAirportAirlines)) {
-        applySelectedAirlines(nextAirportAirlines);
+      // Le compagnie appena rilevate nello schedule NON vengono mai selezionate
+      // in automatico: restano deselezionate nel filtro finché l'utente non le
+      // spunta, così in bacheca non compaiono voli che non gestisce.
+      const reconciledSelection = reconcileSelectedAirlines({
+        savedProfileAirlines: activeProfile?.airportCode === airportCode ? activeProfile.airlines : [],
+        previousSelectedAirlines: selectedAirlinesRef.current,
+        nextAirportAirlines,
+      });
+      if (reconciledSelection) {
+        applySelectedAirlines(reconciledSelection);
       }
       // Accumula voli: fonde i dati freschi con quelli in cache e conserva solo
       // i voli non più vecchi di 1 ora dall'orario migliore disponibile.

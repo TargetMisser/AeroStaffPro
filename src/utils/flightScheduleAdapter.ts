@@ -1,3 +1,5 @@
+import { AIRLINE_ALIASES, airlineAliasMatches, normalizeAirlineText } from './airlineAliases';
+
 export type FlightDirection = 'arrival' | 'departure';
 export type FlightTimestampBucket = 'real' | 'estimated' | 'scheduled';
 
@@ -20,38 +22,6 @@ export function getFlightAirlineName(item: any): string {
   return String(item?.flight?.airline?.name ?? '').trim();
 }
 
-const AIRLINE_MATCH_ALIASES: Record<string, string[]> = {
-  ryanair: ['ryanair', 'fr', 'ryr'],
-  easyjet: ['easyjet', 'easy jet', 'u2', 'ec', 'ds', 'eju', 'ezy', 'ezs'],
-  wizz: ['wizz', 'wizz air', 'w6', 'w4', 'w9', 'wzz', 'wmt', 'wuk'],
-  volotea: ['volotea', 'v7'],
-  vueling: ['vueling', 'vy'],
-  transavia: ['transavia', 'transavia france', 'transavia holland', 'hv', 'to', 'tra', 'tvf'],
-  'aer lingus': ['aer lingus', 'ei'],
-  'british airways': ['british airways', 'ba', 'baw'],
-  sas: ['sas', 'scandinavian', 'sk', 'sas'],
-  scandinavian: ['sas', 'scandinavian', 'sk', 'sas'],
-  flydubai: ['flydubai', 'fz', 'fdb'],
-  aeroitalia: ['aeroitalia', 'xz'],
-  'air arabia maroc': ['air arabia maroc', '3o', 'mac'],
-  'air arabia': ['air arabia', 'g9', 'abz'],
-  'air dolomiti': ['air dolomiti', 'en', 'dla'],
-  buzz: ['buzz', 'rr', 'rys'],
-  dhl: ['dhl', 'qy', 'bcs'],
-  eurowings: ['eurowings', 'ew', 'ewg'],
-  'ita airways': ['ita airways', 'az', 'ity'],
-  lufthansa: ['lufthansa', 'lh', 'dlh'],
-};
-
-function normalizeAirlineText(value: unknown): string {
-  if (typeof value !== 'string' && typeof value !== 'number') return '';
-  return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function compactAirlineText(value: unknown): string {
-  return normalizeAirlineText(value).replace(/\s+/g, '');
-}
-
 function getFlightNumberAirlinePrefix(item: any): string {
   const flightNumber = getFlightNumber(item).toUpperCase().replace(/[\s\-_]/g, '');
   return flightNumber.match(/^([A-Z0-9]{2,3}?)(?=\d)/)?.[1] ?? '';
@@ -71,28 +41,14 @@ function getFlightAirlineIdentifiers(item: any): string[] {
     .map(value => String(value));
 }
 
-function airlineIdentifierMatchesAlias(identifier: string | number, alias: string): boolean {
-  const normalizedIdentifier = normalizeAirlineText(identifier);
-  const compactIdentifier = compactAirlineText(identifier);
-  const normalizedAlias = normalizeAirlineText(alias);
-  const compactAlias = compactAirlineText(alias);
-  if (!normalizedIdentifier || !normalizedAlias || !compactAlias) return false;
-
-  if (compactAlias.length <= 3) {
-    return normalizedIdentifier.split(' ').includes(compactAlias) || compactIdentifier === compactAlias;
-  }
-
-  return compactIdentifier.includes(compactAlias);
-}
-
 export function isFlightAirlineMatch(item: any, airlineKey: string): boolean {
   const normalizedKey = normalizeAirlineText(airlineKey);
   if (!normalizedKey) return false;
 
-  const aliases = AIRLINE_MATCH_ALIASES[normalizedKey] ?? [normalizedKey];
+  const aliases = AIRLINE_ALIASES[normalizedKey] ?? [normalizedKey];
   const identifiers = getFlightAirlineIdentifiers(item);
   return identifiers.some(identifier =>
-    aliases.some(alias => airlineIdentifierMatchesAlias(identifier, alias)),
+    aliases.some(alias => airlineAliasMatches(identifier, alias)),
   );
 }
 
