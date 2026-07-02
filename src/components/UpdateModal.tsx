@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { type UpdateInfo, APP_VERSION } from '../utils/updateChecker';
 import {
   downloadUpdatePackage,
@@ -286,8 +287,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPE.callout,
   },
   progressTrack: {
     height: 8,

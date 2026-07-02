@@ -13,6 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAirport, type AirportProfile } from '../context/AirportContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import {
   AIRPORT_PRESETS,
   formatAirportSettingLabel,
@@ -388,8 +389,7 @@ function makeStyles(colors: ThemeColors) {
       borderBottomColor: colors.border,
     },
     title: {
-      fontSize: 18,
-      fontWeight: '800',
+      ...TYPE.headline,
       color: colors.text,
     },
     subtitle: {
@@ -463,8 +463,7 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: colors.primary,
     },
     activePillText: {
-      fontSize: 10,
-      fontWeight: '800',
+      ...TYPE.micro,
       color: '#fff',
       letterSpacing: 0.4,
     },

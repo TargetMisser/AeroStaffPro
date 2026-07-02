@@ -6,6 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
 
 const STORAGE_KEY = 'aerostaff_phonebook_v1';
@@ -58,8 +59,8 @@ function makeModalStyles(c: ThemeColors) {
       backgroundColor: c.border,
       alignSelf: 'center', marginBottom: 18,
     },
-    title: { fontSize: 18, fontWeight: '700', color: c.primaryDark, marginBottom: 16 },
-    label: { fontSize: 12, fontWeight: '600', color: c.textSub, marginBottom: 6, marginTop: 12 },
+    title: { ...TYPE.headline, color: c.primaryDark, marginBottom: 16 },
+    label: { ...TYPE.caption, color: c.textSub, marginBottom: 6, marginTop: 12 },
     input: {
       borderWidth: 1.5, borderColor: c.border, borderRadius: 12,
       paddingHorizontal: 14, paddingVertical: 11,
@@ -71,7 +72,7 @@ function makeModalStyles(c: ThemeColors) {
       borderRadius: 20, borderWidth: 1.5, borderColor: c.border,
       marginRight: 8, backgroundColor: c.card,
     },
-    catTxt: { fontSize: 12, fontWeight: '600', color: c.textSub },
+    catTxt: { ...TYPE.caption, color: c.textSub },
     actions: { flexDirection: 'row', gap: 10, marginTop: 20 },
     cancelBtn: {
       flex: 1, borderWidth: 1.5, borderColor: c.border,
@@ -300,7 +301,7 @@ function makeStyles(c: ThemeColors) {
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
     },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: c.primaryDark, flex: 1 },
+    headerTitle: { ...TYPE.headline, color: c.primaryDark, flex: 1 },
     addBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
       backgroundColor: c.primary, borderRadius: 10,
@@ -322,7 +323,7 @@ function makeStyles(c: ThemeColors) {
       backgroundColor: c.card,
     },
     filterChipActive: { backgroundColor: c.primary, borderColor: c.primary },
-    filterTxt: { fontSize: 12, fontWeight: '600', color: c.textSub },
+    filterTxt: { ...TYPE.caption, color: c.textSub },
     filterTxtActive: { color: '#fff' },
     list: { flex: 1 },
     listPad: { padding: 16, paddingBottom: 96 },

@@ -7,6 +7,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
 import { secureWipeAsyncStorageItem } from '../utils/secureWipe';
 
@@ -396,7 +397,7 @@ function makePinStyles(c: ThemeColors) {
   return StyleSheet.create({
     overlay: { flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' },
     box:     { alignItems: 'center', padding: 32, width: '100%', maxWidth: 320 },
-    title:   { fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 24 },
+    title:   { ...TYPE.subhead, color: c.text, marginBottom: 24 },
     dots:    { flexDirection: 'row', gap: 16, marginBottom: 32 },
     dot:     { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: c.primary, backgroundColor: 'transparent' },
     dotFilled: { backgroundColor: c.primary },
@@ -428,7 +429,7 @@ function makeStyles(c: ThemeColors) {
     root:         { flex: 1, backgroundColor: c.bg },
     toolbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
     titleRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    title:        { fontSize: 17, fontWeight: '700', color: c.primaryDark },
+    title:        { ...TYPE.headline, color: c.primaryDark },
     toolbarActions:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
     iconBtn:      { width: 36, height: 36, borderRadius: 10, backgroundColor: c.cardSecondary, justifyContent: 'center', alignItems: 'center' },
     iconBtnActive:{ backgroundColor: c.primary },
@@ -440,8 +441,8 @@ function makeStyles(c: ThemeColors) {
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalScrollContent: { flexGrow: 1, justifyContent: 'flex-end' },
     modalBox:     { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '92%' },
-    modalTitle:   { fontSize: 18, fontWeight: '700', color: c.primaryDark, marginBottom: 20 },
-    label:        { fontSize: 12, fontWeight: '600', color: c.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+    modalTitle:   { ...TYPE.headline, color: c.primaryDark, marginBottom: 20 },
+    label:        { ...TYPE.caption, color: c.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
     input:        { backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: c.text, marginBottom: 14 },
     inputMulti:   { height: 80, paddingTop: 10 },
     pwInputRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },

@@ -6,6 +6,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw } from '../utils/fr24api';
@@ -321,7 +322,7 @@ function makeStyles(c: ThemeColors) {
     handleRow: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
     handle: { width: 36, height: 4, borderRadius: 2 },
     header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 },
-    title: { fontSize: 18, fontWeight: '800' },
+    title: { ...TYPE.headline },
     subtitle: { fontSize: 12, marginTop: 2 },
     closeBtn: { padding: 8, borderRadius: 20 },
     legend: { flexDirection: 'row', gap: 16, paddingHorizontal: 20, paddingBottom: 12 },

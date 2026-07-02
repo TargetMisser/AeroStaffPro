@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 
 const STORAGE_KEY = 'manuals_data_v2';
@@ -429,7 +430,7 @@ function makeItemStyles(c: ThemeColors) {
       flexDirection: 'row', alignItems: 'center', gap: 10,
       padding: 13,
     },
-    title: { fontSize: 13, fontWeight: '600', color: c.text, flex: 1 },
+    title: { ...TYPE.callout, color: c.text, flex: 1 },
     body: {
       paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2,
       borderTopWidth: 1, borderTopColor: c.cardSecondary,
@@ -565,8 +566,8 @@ const modalStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   scrollContent: { flexGrow: 1, justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36, maxHeight: '92%' },
-  title: { fontSize: 17, fontWeight: '700', marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '600', marginBottom: 4, marginTop: 12 },
+  title: { ...TYPE.headline, marginBottom: 16 },
+  label: { ...TYPE.caption, marginBottom: 4, marginTop: 12 },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 },
   inputMulti: { minHeight: 100, paddingTop: 9 },
   colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
@@ -591,7 +592,7 @@ function makeStyles(c: ThemeColors) {
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
     },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: c.primaryDark },
+    headerTitle: { ...TYPE.headline, color: c.primaryDark },
     airlineBar: {
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
@@ -607,7 +608,7 @@ function makeStyles(c: ThemeColors) {
       backgroundColor: c.card,
     },
     airlineCode: { fontSize: 11, fontWeight: '800', color: c.textSub },
-    airlineName: { fontSize: 12, fontWeight: '600', color: c.textSub },
+    airlineName: { ...TYPE.caption, color: c.textSub },
     content:    { flex: 1 },
     contentPad: { padding: 14, paddingBottom: 80 },
     banner: {
@@ -622,7 +623,7 @@ function makeStyles(c: ThemeColors) {
       borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
       marginBottom: 8,
     },
-    addBtnText: { fontSize: 13, fontWeight: '600' },
+    addBtnText: { ...TYPE.callout },
   });
 }
 
