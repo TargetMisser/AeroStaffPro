@@ -32,7 +32,7 @@ import {
   type ParsedSchedule, type ParsedEmployee,
 } from '../utils/pdfShiftParser';
 import { useLanguage } from '../context/LanguageContext';
-import { TYPE } from '../theme/typography';
+import { TYPE, WEIGHT } from '../theme/typography';
 
 const STORAGE_KEY = '@shift_import_name';
 
@@ -1357,7 +1357,7 @@ function makeStyles(c: ThemeColors) {
     secondaryBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
     secondaryBtnText: { fontSize: 14, fontWeight: '600' },
     primaryBtn: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-    primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+    primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: WEIGHT.semibold },
     // Edit menu
     editMenuContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
     editMenuOption: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 14, marginBottom: 10 },

@@ -82,7 +82,7 @@ import {
   schedulePinnedNotifications,
   scheduleShiftNotifications,
 } from '../utils/flightNotificationScheduler';
-import { TYPE } from '../theme/typography';
+import { TYPE, WEIGHT } from '../theme/typography';
 
 const WearDataSender = Platform.OS === 'android' ? NativeModules.WearDataSender : null;
 
@@ -1550,10 +1550,10 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
     cardShift: { borderWidth: 1.5, borderColor: c.warning },
     shiftBanner: { backgroundColor: c.warning, paddingVertical: 5, paddingHorizontal: 12 },
-    shiftBannerText: { color: '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
+    shiftBannerText: { color: '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
     cardPinned: { borderWidth: 2, borderColor: c.warning },
     pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : c.warning, paddingVertical: 5, paddingHorizontal: 12, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
-    pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
+    pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
     statusPill: { paddingHorizontal: 10, paddingVertical: isOperations ? 3 : 4, borderRadius: isOperations ? 10 : 20, marginTop: isOperations ? 6 : 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
     statusText: { ...TYPE.micro, letterSpacing: isOperations ? 0.6 : 0 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },

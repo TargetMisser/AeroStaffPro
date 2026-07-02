@@ -5,6 +5,7 @@ import { WebView } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import TactilePressable from '../components/motion/TactilePressable';
+import { WEIGHT } from '../theme/typography';
 
 const DARK_CSS_JS = `
 (function() {
@@ -98,7 +99,7 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
 
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
-  title: { fontSize: 22, fontWeight: 'bold' },
+  title: { fontSize: 22, fontWeight: WEIGHT.semibold },
   sub: { fontSize: 12, marginTop: 2 },
   loadingWrap: { position: 'absolute', top: 60, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10, paddingHorizontal: 20 },
   loadingText: { marginTop: 12, fontSize: 14, textAlign: 'center' },
