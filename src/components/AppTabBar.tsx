@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
 import TactilePressable from './motion/TactilePressable';
 import { SPACING, RADIUS } from '../theme/spacing';
+import { computeRegularTabLayout } from '../utils/tabBarLayout';
 import {
   motionDurations,
   motionEasing,
@@ -48,6 +49,9 @@ const withMotionTokens = {
   reducedMotionSnapMs: Math.min(motionDurations.instant, motionRecipeDurations.snap),
   navDetentSpring: motionRecipeSprings.navDetent,
 };
+
+const REGULAR_HORIZONTAL_PADDING = 5;
+const REGULAR_SELECTOR_INSET = 5;
 
 function getSurfaceConfig(variant: AppTabBarVariant, isDark: boolean): SurfaceConfig {
   if (variant === 'solid') {
@@ -296,12 +300,17 @@ export default function AppTabBar({
     }).start();
   }, [activeIndex, fallbackProgress, reducedMotion]);
 
-  const regularSlotWidth = trackWidth > 0 ? trackWidth / tabCount : 0;
+  const regularLayout = computeRegularTabLayout(
+    trackWidth,
+    tabCount,
+    REGULAR_HORIZONTAL_PADDING,
+    REGULAR_SELECTOR_INSET,
+  );
   const opsGap = 6;
   const opsSlotWidth = trackWidth > 0 ? (trackWidth - opsGap * (tabCount - 1)) / tabCount : 0;
   const detentTranslateX = progress.interpolate({
     inputRange: tabs.map((_, index) => index),
-    outputRange: tabs.map((_, index) => index * regularSlotWidth),
+    outputRange: tabs.map((_, index) => regularLayout.translateXForIndex(index)),
     extrapolate: 'clamp',
   });
   const opsDetentTranslateX = progress.interpolate({
@@ -388,13 +397,14 @@ export default function AppTabBar({
           style={styles.row}
           onLayout={event => setTrackWidth(event.nativeEvent.layout.width)}
         >
-          {regularSlotWidth > 0 && (
+          {regularLayout.slotWidth > 0 && (
             <Animated.View
               pointerEvents="none"
               style={[
                 styles.detentSelector,
                   {
-                    width: Math.max(52, regularSlotWidth - 10),
+                    left: regularLayout.selectorLeft,
+                    width: regularLayout.selectorWidth,
                     transform: [{ translateX: detentTranslateX }, { scale: detentScale }],
                   },
                 ]}
@@ -405,7 +415,6 @@ export default function AppTabBar({
                   { opacity: indicatorTravelOpacity },
                 ]}
               />
-              <View style={[styles.detentGlow, { backgroundColor: activeColor }]} />
             </Animated.View>
           )}
           {tabs.map((tab, index) => (
@@ -452,11 +461,10 @@ const styles = StyleSheet.create({
     height: 66,
     alignItems: 'center',
     position: 'relative',
-    paddingHorizontal: 5,
+    paddingHorizontal: REGULAR_HORIZONTAL_PADDING,
   },
   detentSelector: {
     position: 'absolute',
-    left: 5,
     top: 7,
     bottom: 7,
     borderRadius: 24,
@@ -474,15 +482,6 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.pill,
     backgroundColor: 'rgba(255,255,255,0.24)',
     transform: [{ skewX: '-18deg' }],
-  },
-  detentGlow: {
-    position: 'absolute',
-    left: 8,
-    right: 8,
-    bottom: 5,
-    height: 3,
-    borderRadius: RADIUS.pill,
-    opacity: 0.72,
   },
   tabPressable: {
     flex: 1,
