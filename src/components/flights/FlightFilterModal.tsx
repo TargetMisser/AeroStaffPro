@@ -57,7 +57,7 @@ export default function FlightFilterModal({
                 onApplySelectedAirlines(next);
               }}
             >
-              <Text style={{ color: colors.primary, fontWeight: '700', fontSize: 13 }}>
+              <Text style={{ color: colors.primaryText, fontWeight: '700', fontSize: 13 }}>
                 {allSelected ? t('flightFilterDeselAll') : t('flightFilterSelAll')}
               </Text>
             </TouchableOpacity>

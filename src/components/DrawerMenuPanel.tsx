@@ -3,10 +3,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { type ThemeColors } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
 import AeroStaffLogo from './AeroStaffLogo';
 import FrostedSurface from './FrostedSurface';
 import BoardReveal from './motion/BoardReveal';
 import TactilePressable from './motion/TactilePressable';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 export type DrawerItem = {
   id: string;
@@ -113,6 +115,7 @@ export default function DrawerMenuPanel({
   onSelect,
   surfaceVariant = 'app',
 }: DrawerMenuPanelProps) {
+  const { t } = useLanguage();
   const surface = getDrawerSurface(colors, surfaceVariant);
   const styles = useMemo(() => makeStyles(colors, surface), [colors, surface]);
 
@@ -136,7 +139,7 @@ export default function DrawerMenuPanel({
               <Text style={styles.opsTitle}>Operations</Text>
             </View>
           </View>
-          <TactilePressable onPress={onClose} animatedStyle={styles.opsClose} depth={2} pressedScale={0.94} haptic="selection">
+          <TactilePressable onPress={onClose} animatedStyle={styles.opsClose} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
             <MaterialIcons name="close" size={18} color="rgba(204,251,241,0.72)" />
           </TactilePressable>
         </View>
@@ -148,7 +151,7 @@ export default function DrawerMenuPanel({
           style={styles.headerGradient}
         >
           <AeroStaffLogo variant="large" monochrome />
-          <TactilePressable onPress={onClose} animatedStyle={styles.closeIconBtn} depth={2} pressedScale={0.94} haptic="selection">
+          <TactilePressable onPress={onClose} animatedStyle={styles.closeIconBtn} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
             <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.72)" />
           </TactilePressable>
         </LinearGradient>
@@ -225,7 +228,7 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
     opsBrandRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: SPACING.md,
       flex: 1,
     },
     opsLogoBox: {
@@ -255,7 +258,7 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
     opsClose: {
       width: 34,
       height: 34,
-      borderRadius: 12,
+      borderRadius: RADIUS.md,
       borderWidth: 1,
       borderColor: 'rgba(45,212,191,0.24)',
       backgroundColor: 'rgba(2,8,12,0.36)',
@@ -266,9 +269,9 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
+      paddingHorizontal: SPACING.xl,
       paddingTop: surface.isOperations ? 16 : 20,
-      paddingBottom: 8,
+      paddingBottom: SPACING.sm,
     },
     sectionLabel: {
       fontSize: 10,
@@ -313,7 +316,7 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
     itemCopy: { flex: 1 },
     itemLabel: { fontSize: 14, fontWeight: '600', color: c.text },
     itemSub: { fontSize: 11, color: c.isDark ? 'rgba(229,233,240,0.70)' : c.textMuted, marginTop: 1 },
-    divider: { height: 1, backgroundColor: c.border, marginHorizontal: 18, marginTop: 16 },
+    divider: { height: 1, backgroundColor: c.border, marginHorizontal: 18, marginTop: SPACING.lg },
     version: {
       fontSize: 11,
       color: c.isDark ? 'rgba(229,233,240,0.66)' : c.textMuted,

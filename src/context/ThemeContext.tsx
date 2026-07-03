@@ -24,6 +24,10 @@ export type ThemeColors = {
   primary: string;
   primaryDark: string;
   primaryLight: string;
+  /* Arancio/teal per TESTO su card e bg: nel tema chiaro primary (2.7:1) non
+     è leggibile come testo, primaryText sì (>=4.5:1). Per icone e superfici
+     continuare a usare primary. */
+  primaryText: string;
   // Glass tokens
   glass: string;
   glassBorder: string;
@@ -58,10 +62,11 @@ const LIGHT: ThemeColors = {
   cardSecondary:  '#F2F2F7',
   text:           '#1C1C1E',
   textSub:        '#48484A',
-  textMuted:      'rgba(60,60,67,0.45)',
+  textMuted:      'rgba(60,60,67,0.68)', // alpha 0.45 → 0.68: a 2.39:1 non era leggibile; ora ~4.3:1, come nel tema scuro
   primary:        '#F47B16',
   primaryDark:    '#C2520A',
   primaryLight:   '#FFEDD5',
+  primaryText:    '#C2520A',
   glass:          '#FFFFFF',
   glassBorder:    'transparent',
   glassStrong:    '#FFFFFF',
@@ -69,16 +74,18 @@ const LIGHT: ThemeColors = {
   appBar:         'rgba(242,242,247,0.85)',
   tabBar:         'rgba(255,255,255,0.90)',
   tabIconActive:  '#F47B16',
-  tabIconInactive:'rgba(60,60,67,0.38)',
+  tabIconInactive:'rgba(60,60,67,0.60)',
   tabLabelActive: '#F47B16',
   pillActive:     'rgba(244,123,22,0.14)',
-  success:        '#10B981',
+  // Fill semantici scuriti per reggere WCAG AA (≥4.5:1) usati come testo su
+  // card/bg. Gli sfondi chip *Soft restano sulle tinte brillanti originali.
+  success:        '#047857',
   successSoft:    'rgba(16,185,129,0.13)',
-  warning:        '#F59E0B',
+  warning:        '#B45309',
   warningSoft:    'rgba(245,158,11,0.13)',
-  danger:         '#EF4444',
+  danger:         '#DC2626',
   dangerSoft:     'rgba(239,68,68,0.13)',
-  info:           '#3B82F6',
+  info:           '#2563EB',
   infoSoft:       'rgba(59,130,246,0.13)',
   neutral:        '#64748B',
   statusBar:      'dark-content',
@@ -96,6 +103,7 @@ const DARK: ThemeColors = {
   primary:        '#2DD4BF',
   primaryDark:    '#99F6E4',
   primaryLight:   'rgba(45,212,191,0.18)',
+  primaryText:    '#2DD4BF',
   glass:          '#111A1F',
   glassBorder:    'rgba(45,212,191,0.24)',
   glassStrong:    '#19262D',

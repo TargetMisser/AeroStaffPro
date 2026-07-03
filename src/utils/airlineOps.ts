@@ -1,3 +1,5 @@
+import { canonicalAirlineKey } from './airlineAliases';
+
 export type HexColor = `#${string}`;
 
 export type AirlineOps = {
@@ -28,62 +30,6 @@ export const AIRLINE_OPS: Array<{ key: string; ops: AirlineOps }> = [
   { key: 'scandinavian',    ops: { checkInOpen: 120, checkInClose: 40, gateOpen: 30, gateClose: 20 } },
   { key: 'flydubai',        ops: { checkInOpen: 180, checkInClose: 60, gateOpen: 40, gateClose: 20 } },
 ];
-
-const AIRLINE_ALIASES: Record<string, string[]> = {
-  ryanair: ['ryanair', 'fr', 'ryr'],
-  easyjet: ['easyjet', 'easy jet', 'u2', 'ec', 'ds', 'eju', 'ezy', 'ezs'],
-  wizz: ['wizz', 'wizz air', 'w6', 'w4', 'w9', 'wzz', 'wmt', 'wuk'],
-  volotea: ['volotea', 'v7'],
-  vueling: ['vueling', 'vy'],
-  transavia: ['transavia', 'transavia france', 'transavia holland', 'hv', 'to', 'tra', 'tvf'],
-  'aer lingus': ['aer lingus', 'ei'],
-  'british airways': ['british airways', 'ba', 'baw'],
-  sas: ['sas', 'scandinavian', 'sk'],
-  flydubai: ['flydubai', 'fz', 'fdb'],
-  aeroitalia: ['aeroitalia', 'xz'],
-  'air arabia maroc': ['air arabia maroc', '3o', 'mac'],
-  'air arabia': ['air arabia', 'g9', 'abz'],
-  'air dolomiti': ['air dolomiti', 'en', 'dla'],
-  buzz: ['buzz', 'rr', 'rys'],
-  dhl: ['dhl', 'qy', 'bcs'],
-  eurowings: ['eurowings', 'ew', 'ewg'],
-  'ita airways': ['ita airways', 'ita', 'az', 'ity'],
-  lufthansa: ['lufthansa', 'lh', 'dlh'],
-};
-
-function normalizeAirlineText(value: unknown): string {
-  if (typeof value !== 'string' && typeof value !== 'number') return '';
-  return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function compactAirlineText(value: unknown): string {
-  return normalizeAirlineText(value).replace(/\s+/g, '');
-}
-
-function airlineAliasMatches(value: string, alias: string): boolean {
-  const normalizedAlias = normalizeAirlineText(alias);
-  const compactAlias = compactAirlineText(alias);
-  if (!value || !normalizedAlias || !compactAlias) return false;
-
-  if (compactAlias.length <= 3) {
-    return value.split(' ').includes(compactAlias) || compactAirlineText(value) === compactAlias;
-  }
-
-  return compactAirlineText(value).includes(compactAlias);
-}
-
-function canonicalAirlineKey(value: unknown): string {
-  const normalized = normalizeAirlineText(value);
-  if (!normalized) return '';
-
-  for (const [key, aliases] of Object.entries(AIRLINE_ALIASES)) {
-    if (aliases.some(alias => airlineAliasMatches(normalized, alias))) {
-      return key;
-    }
-  }
-
-  return normalized;
-}
 
 export function getAirlineOps(name: string): AirlineOps {
   const key = canonicalAirlineKey(name);

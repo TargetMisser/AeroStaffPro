@@ -13,6 +13,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAirport, type AirportProfile } from '../context/AirportContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import {
   AIRPORT_PRESETS,
   formatAirportSettingLabel,
@@ -21,6 +22,7 @@ import {
   normalizeAirportCode,
 } from '../utils/airportSettings';
 import { AIRLINE_COLORS, AIRLINE_DISPLAY_NAMES } from '../utils/airlineOps';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 type Props = {
   visible: boolean;
@@ -183,7 +185,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
               <Text style={styles.title}>{t('profileTitle')}</Text>
               <Text style={styles.subtitle}>{t('profileSubtitle')}</Text>
             </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
               <MaterialIcons name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
@@ -225,6 +227,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
                         style={styles.profileAction}
                         onPress={() => openEditor(profile)}
                         activeOpacity={0.8}
+                        accessibilityRole="button" accessibilityLabel={t('profileEdit')}
                       >
                         <MaterialIcons name="edit" size={18} color={colors.primary} />
                       </TouchableOpacity>
@@ -274,8 +277,8 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
                         onPress={() => setDraftAirportCode(airport.code)}
                         activeOpacity={0.8}
                       >
-                        <Text style={[styles.quickPickCode, active && { color: colors.primary }]}>{airport.code}</Text>
-                        <Text style={[styles.quickPickCity, active && { color: colors.primary }]}>{airport.city}</Text>
+                        <Text style={[styles.quickPickCode, active && { color: colors.primaryText }]}>{airport.code}</Text>
+                        <Text style={[styles.quickPickCity, active && { color: colors.primaryText }]}>{airport.city}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -307,7 +310,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
                         activeOpacity={0.85}
                       >
                         <View style={[styles.airlineDot, { backgroundColor: dot }]} />
-                        <Text style={[styles.airlineText, checked && { color: colors.primary }]}>{label}</Text>
+                        <Text style={[styles.airlineText, checked && { color: colors.primaryText }]}>{label}</Text>
                         <MaterialIcons
                           name={checked ? 'check-circle' : 'radio-button-unchecked'}
                           size={18}
@@ -380,7 +383,7 @@ function makeStyles(colors: ThemeColors) {
     header: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: 12,
+      gap: SPACING.md,
       paddingHorizontal: 18,
       paddingTop: 18,
       paddingBottom: 14,
@@ -388,12 +391,11 @@ function makeStyles(colors: ThemeColors) {
       borderBottomColor: colors.border,
     },
     title: {
-      fontSize: 18,
-      fontWeight: '800',
+      ...TYPE.headline,
       color: colors.text,
     },
     subtitle: {
-      marginTop: 4,
+      marginTop: SPACING.xs,
       fontSize: 13,
       lineHeight: 18,
       color: colors.textSub,
@@ -431,7 +433,7 @@ function makeStyles(colors: ThemeColors) {
     profileBadge: {
       width: 48,
       height: 48,
-      borderRadius: 16,
+      borderRadius: RADIUS.lg,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -442,8 +444,8 @@ function makeStyles(colors: ThemeColors) {
     profileTitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      marginBottom: 4,
+      gap: SPACING.sm,
+      marginBottom: SPACING.xs,
     },
     profileName: {
       fontSize: 15,
@@ -457,21 +459,20 @@ function makeStyles(colors: ThemeColors) {
       marginTop: 2,
     },
     activePill: {
-      paddingHorizontal: 8,
+      paddingHorizontal: SPACING.sm,
       paddingVertical: 3,
-      borderRadius: 999,
+      borderRadius: RADIUS.pill,
       backgroundColor: colors.primary,
     },
     activePillText: {
-      fontSize: 10,
-      fontWeight: '800',
+      ...TYPE.micro,
       color: '#fff',
       letterSpacing: 0.4,
     },
     profileAction: {
       width: 36,
       height: 36,
-      borderRadius: 12,
+      borderRadius: RADIUS.md,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: colors.card,
@@ -480,7 +481,7 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      padding: 16,
+      padding: SPACING.lg,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       backgroundColor: colors.card,
@@ -488,7 +489,7 @@ function makeStyles(colors: ThemeColors) {
     secondaryBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: SPACING.sm,
       paddingHorizontal: 14,
       paddingVertical: 11,
       borderRadius: 14,
@@ -497,13 +498,13 @@ function makeStyles(colors: ThemeColors) {
     secondaryBtnText: {
       fontSize: 13,
       fontWeight: '700',
-      color: colors.primary,
+      color: colors.primaryText,
     },
     primaryBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      paddingHorizontal: 16,
+      gap: SPACING.sm,
+      paddingHorizontal: SPACING.lg,
       paddingVertical: 11,
       borderRadius: 14,
       backgroundColor: colors.primary,
@@ -516,7 +517,7 @@ function makeStyles(colors: ThemeColors) {
     deleteBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: SPACING.sm,
       paddingHorizontal: 10,
       paddingVertical: 10,
     },
@@ -530,14 +531,14 @@ function makeStyles(colors: ThemeColors) {
       fontWeight: '800',
       color: colors.textSub,
       letterSpacing: 0.5,
-      marginBottom: 8,
+      marginBottom: SPACING.sm,
     },
     input: {
       borderWidth: 1,
       borderColor: colors.border,
       borderRadius: 14,
       paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingVertical: SPACING.md,
       fontSize: 15,
       color: colors.text,
       backgroundColor: colors.cardSecondary,
@@ -545,11 +546,11 @@ function makeStyles(colors: ThemeColors) {
     },
     quickPicks: {
       gap: 10,
-      paddingBottom: 8,
-      paddingRight: 8,
+      paddingBottom: SPACING.sm,
+      paddingRight: SPACING.sm,
     },
     quickPickChip: {
-      paddingHorizontal: 12,
+      paddingHorizontal: SPACING.md,
       paddingVertical: 10,
       borderRadius: 14,
       borderWidth: 1,
@@ -575,8 +576,8 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      marginTop: 4,
-      marginBottom: 8,
+      marginTop: SPACING.xs,
+      marginBottom: SPACING.sm,
     },
     airlineHeaderActions: {
       flexDirection: 'row',
@@ -586,7 +587,7 @@ function makeStyles(colors: ThemeColors) {
     linkText: {
       fontSize: 12,
       fontWeight: '700',
-      color: colors.primary,
+      color: colors.primaryText,
     },
     airlineGrid: {
       gap: 10,
@@ -596,7 +597,7 @@ function makeStyles(colors: ThemeColors) {
       alignItems: 'center',
       gap: 10,
       paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingVertical: SPACING.md,
       borderRadius: 14,
       borderWidth: 1,
       borderColor: colors.border,

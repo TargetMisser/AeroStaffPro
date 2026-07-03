@@ -7,8 +7,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
 import { secureWipeAsyncStorageItem } from '../utils/secureWipe';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const PASSWORDS_KEY   = 'aerostaff_passwords_v1';
 const PIN_KEY         = 'aerostaff_pin_v1';
@@ -106,7 +108,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
   return (
     <View style={s.overlay}>
       <View style={s.box}>
-        <MaterialIcons name="lock" size={32} color={colors.primary} style={{ marginBottom: 12 }} />
+        <MaterialIcons name="lock" size={32} color={colors.primary} style={{ marginBottom: SPACING.md }} />
         <Text style={s.title}>{title}</Text>
         <View style={s.dots}>
           {[0,1,2,3].map(i => (
@@ -117,7 +119,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
           {keys.map((k, i) => (
             k === '' ? <View key={i} style={s.keyEmpty} /> :
             k === '⌫' ? (
-              <TouchableOpacity key={i} style={s.key} onPress={del} activeOpacity={0.7}>
+              <TouchableOpacity key={i} style={s.key} onPress={del} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('a11yBackspace')}>
                 <MaterialIcons name="backspace" size={20} color={colors.text} />
               </TouchableOpacity>
             ) : (
@@ -128,7 +130,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
           ))}
         </View>
         {onCancel && (
-          <TouchableOpacity onPress={onCancel} style={{ marginTop: 16 }}>
+          <TouchableOpacity onPress={onCancel} style={{ marginTop: SPACING.lg }}>
             <Text style={{ color: colors.textSub, fontSize: 14 }}>Annulla</Text>
           </TouchableOpacity>
         )}
@@ -140,6 +142,7 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
 // ─── Password Row ─────────────────────────────────────────────────────────────
 function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry; onEdit: () => void; onDelete: () => void }) {
   const { colors } = useAppTheme();
+  const { t } = useLanguage();
   const s = useMemo(() => makeRowStyles(colors), [colors]);
   const [revealed, setRevealed] = useState(false);
 
@@ -150,17 +153,17 @@ function PasswordRowComponent({ item, onEdit, onDelete }: { item: PasswordEntry;
         {item.username ? <Text style={s.username}>{item.username}</Text> : null}
         <View style={s.pwRow}>
           <Text style={s.pw}>{revealed ? item.password : '••••••••'}</Text>
-          <TouchableOpacity onPress={() => setRevealed(r => !r)} style={s.eyeBtn}>
+          <TouchableOpacity onPress={() => setRevealed(r => !r)} style={s.eyeBtn} accessibilityRole="button" accessibilityLabel={t(revealed ? 'a11yHidePassword' : 'a11yShowPassword')}>
             <MaterialIcons name={revealed ? 'visibility-off' : 'visibility'} size={16} color={colors.textSub} />
           </TouchableOpacity>
         </View>
         {item.notes ? <Text style={s.notes}>{item.notes}</Text> : null}
       </View>
       <View style={s.actions}>
-        <TouchableOpacity style={s.editBtn} onPress={onEdit}>
+        <TouchableOpacity style={s.editBtn} onPress={onEdit} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
           <MaterialIcons name="edit" size={17} color={colors.primary} />
         </TouchableOpacity>
-        <TouchableOpacity style={s.delBtn} onPress={onDelete}>
+        <TouchableOpacity style={s.delBtn} onPress={onDelete} accessibilityRole="button" accessibilityLabel={t('delete')}>
           <MaterialIcons name="delete-outline" size={17} color="#EF4444" />
         </TouchableOpacity>
       </View>
@@ -328,7 +331,7 @@ export default function PasswordScreen() {
             onDelete={() => deleteEntry(item.id)}
           />
         )}
-        contentContainerStyle={{ padding: 16, paddingBottom: 96 }}
+        contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 96 }}
         ListEmptyComponent={
           <View style={s.empty}>
             <MaterialIcons name="lock-open" size={48} color={colors.border} />
@@ -367,12 +370,12 @@ export default function PasswordScreen() {
                 secureTextEntry={!showPw}
                 autoCapitalize="none"
               />
-              <TouchableOpacity onPress={() => setShowPw(p => !p)} style={s.eyeModal}>
+              <TouchableOpacity onPress={() => setShowPw(p => !p)} style={s.eyeModal} accessibilityRole="button" accessibilityLabel={t(showPw ? 'a11yHidePassword' : 'a11yShowPassword')}>
                 <MaterialIcons name={showPw ? 'visibility-off' : 'visibility'} size={20} color={colors.textSub} />
               </TouchableOpacity>
             </View>
 
-            <Text style={[s.label, { marginTop: 12 }]}>{t('passwordNotesLabel')}</Text>
+            <Text style={[s.label, { marginTop: SPACING.md }]}>{t('passwordNotesLabel')}</Text>
             <TextInput style={[s.input, s.inputMulti]} value={modal.notes} onChangeText={v => setModal(m => ({ ...m, notes: v }))} placeholder="es. scade ogni 90 giorni…" placeholderTextColor={colors.textMuted} multiline numberOfLines={3} textAlignVertical="top" />
 
             <View style={s.modalBtns}>
@@ -395,12 +398,12 @@ export default function PasswordScreen() {
 function makePinStyles(c: ThemeColors) {
   return StyleSheet.create({
     overlay: { flex: 1, backgroundColor: c.bg, justifyContent: 'center', alignItems: 'center' },
-    box:     { alignItems: 'center', padding: 32, width: '100%', maxWidth: 320 },
-    title:   { fontSize: 16, fontWeight: '700', color: c.text, marginBottom: 24 },
-    dots:    { flexDirection: 'row', gap: 16, marginBottom: 32 },
-    dot:     { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: c.primary, backgroundColor: 'transparent' },
+    box:     { alignItems: 'center', padding: SPACING.xxxl, width: '100%', maxWidth: 320 },
+    title:   { ...TYPE.subhead, color: c.text, marginBottom: SPACING.xxl },
+    dots:    { flexDirection: 'row', gap: SPACING.lg, marginBottom: SPACING.xxxl },
+    dot:     { width: 16, height: 16, borderRadius: RADIUS.sm, borderWidth: 2, borderColor: c.primary, backgroundColor: 'transparent' },
     dotFilled: { backgroundColor: c.primary },
-    grid:    { flexDirection: 'row', flexWrap: 'wrap', width: 240, justifyContent: 'center', gap: 12 },
+    grid:    { flexDirection: 'row', flexWrap: 'wrap', width: 240, justifyContent: 'center', gap: SPACING.md },
     key:     { width: 64, height: 64, borderRadius: 32, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
     keyEmpty:{ width: 64, height: 64 },
     keyText: { fontSize: 22, fontWeight: '600', color: c.text },
@@ -409,15 +412,15 @@ function makePinStyles(c: ThemeColors) {
 
 function makeRowStyles(c: ThemeColors) {
   return StyleSheet.create({
-    card:    { backgroundColor: c.card, borderRadius: 16, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: c.glassBorder, shadowColor: c.primary, shadowOpacity: c.isDark ? 0 : 0.08, shadowRadius: 8, elevation: c.isDark ? 0 : 3 },
+    card:    { backgroundColor: c.card, borderRadius: RADIUS.lg, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: c.glassBorder, shadowColor: c.primary, shadowOpacity: c.isDark ? 0 : 0.08, shadowRadius: 8, elevation: c.isDark ? 0 : 3 },
     cardLeft:{ flex: 1 },
     name:    { fontSize: 15, fontWeight: '700', color: c.primaryDark, marginBottom: 2 },
-    username:{ fontSize: 12, color: c.textSub, marginBottom: 4 },
+    username:{ fontSize: 12, color: c.textSub, marginBottom: SPACING.xs },
     pwRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
     pw:      { fontSize: 13, color: c.text, letterSpacing: 1 },
     eyeBtn:  { padding: 2 },
-    notes:   { fontSize: 11, color: c.textMuted, fontStyle: 'italic', marginTop: 4 },
-    actions: { flexDirection: 'column', gap: 6, marginLeft: 8 },
+    notes:   { fontSize: 11, color: c.textMuted, fontStyle: 'italic', marginTop: SPACING.xs },
+    actions: { flexDirection: 'column', gap: 6, marginLeft: SPACING.sm },
     editBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: c.primaryLight, justifyContent: 'center', alignItems: 'center' },
     delBtn:  { width: 32, height: 32, borderRadius: 9, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
   });
@@ -426,30 +429,30 @@ function makeRowStyles(c: ThemeColors) {
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
     root:         { flex: 1, backgroundColor: c.bg },
-    toolbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
-    titleRow:     { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    title:        { fontSize: 17, fontWeight: '700', color: c.primaryDark },
-    toolbarActions:{ flexDirection: 'row', alignItems: 'center', gap: 8 },
+    toolbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
+    titleRow:     { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    title:        { ...TYPE.headline, color: c.primaryDark },
+    toolbarActions:{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
     iconBtn:      { width: 36, height: 36, borderRadius: 10, backgroundColor: c.cardSecondary, justifyContent: 'center', alignItems: 'center' },
     iconBtnActive:{ backgroundColor: c.primary },
-    addBtn:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+    addBtn:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
     addBtnTxt:    { color: '#fff', fontWeight: '600', fontSize: 13 },
-    empty:        { alignItems: 'center', marginTop: 80, gap: 8 },
+    empty:        { alignItems: 'center', marginTop: 80, gap: SPACING.sm },
     emptyTxt:     { fontSize: 16, fontWeight: '600', color: c.textSub },
     emptySubTxt:  { fontSize: 13, color: c.textMuted },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalScrollContent: { flexGrow: 1, justifyContent: 'flex-end' },
-    modalBox:     { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '92%' },
-    modalTitle:   { fontSize: 18, fontWeight: '700', color: c.primaryDark, marginBottom: 20 },
-    label:        { fontSize: 12, fontWeight: '600', color: c.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
+    modalBox:     { backgroundColor: c.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.xxl, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '92%' },
+    modalTitle:   { ...TYPE.headline, color: c.primaryDark, marginBottom: SPACING.xl },
+    label:        { ...TYPE.caption, color: c.textSub, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
     input:        { backgroundColor: c.bg, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15, color: c.text, marginBottom: 14 },
     inputMulti:   { height: 80, paddingTop: 10 },
-    pwInputRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+    pwInputRow:   { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 14 },
     eyeModal:     { padding: 10 },
-    modalBtns:    { flexDirection: 'row', gap: 10, marginTop: 8 },
-    cancelBtn:    { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: c.bg, alignItems: 'center', borderWidth: 1, borderColor: c.border },
+    modalBtns:    { flexDirection: 'row', gap: 10, marginTop: SPACING.sm },
+    cancelBtn:    { flex: 1, paddingVertical: 14, borderRadius: RADIUS.md, backgroundColor: c.bg, alignItems: 'center', borderWidth: 1, borderColor: c.border },
     cancelTxt:    { fontSize: 15, fontWeight: '600', color: c.textSub },
-    saveBtn:      { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: c.primary, alignItems: 'center' },
+    saveBtn:      { flex: 1, paddingVertical: 14, borderRadius: RADIUS.md, backgroundColor: c.primary, alignItems: 'center' },
     saveTxt:      { fontSize: 15, fontWeight: '700', color: '#fff' },
   });
 }

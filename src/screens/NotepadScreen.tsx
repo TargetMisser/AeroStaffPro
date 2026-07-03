@@ -6,7 +6,9 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
+import { SPACING } from '../theme/spacing';
 
 const STORAGE_KEY = 'aerostaff_notepad_v1';
 
@@ -15,26 +17,26 @@ function makeStyles(c: ThemeColors) {
     root: { flex: 1, backgroundColor: c.bg },
     toolbar: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 16, paddingVertical: 12,
+      paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
     },
-    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    title: { fontSize: 17, fontWeight: '700', color: c.primaryDark },
-    actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    iconBtn: { padding: 8, borderRadius: 10 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    title: { ...TYPE.headline, color: c.primaryDark },
+    actions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    iconBtn: { padding: SPACING.sm, borderRadius: 10 },
     saveBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
       backgroundColor: c.primary, borderRadius: 10,
-      paddingHorizontal: 14, paddingVertical: 8,
+      paddingHorizontal: 14, paddingVertical: SPACING.sm,
     },
     // Dims the entire save button (background + icon + label) when content is
     // already saved — intentional: the full-button fade signals an inactive state.
     saveBtnDim: { opacity: 0.55 },
-    saveTxt: { color: '#fff', fontWeight: '600', fontSize: 13 },
+    saveTxt: { ...TYPE.callout, color: '#fff' },
     statusBar: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
-      paddingHorizontal: 16, paddingVertical: 6,
+      paddingHorizontal: SPACING.lg, paddingVertical: 6,
       backgroundColor: c.bg,
       borderBottomWidth: 1, borderBottomColor: c.border,
     },
@@ -109,7 +111,7 @@ export default function NotepadScreen() {
           <Text style={s.title}>{t('notepadTitle')}</Text>
         </View>
         <View style={s.actions}>
-          <TouchableOpacity onPress={clear} style={s.iconBtn}>
+          <TouchableOpacity onPress={clear} style={s.iconBtn} accessibilityRole="button" accessibilityLabel={t('delete')}>
             <MaterialIcons name="delete-outline" size={22} color="#EF4444" />
           </TouchableOpacity>
           <TouchableOpacity

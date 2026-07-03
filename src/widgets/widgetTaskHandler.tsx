@@ -1,5 +1,6 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Calendar from 'expo-calendar';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
@@ -104,13 +105,79 @@ function resolveWidgetShift(shiftData: WidgetShiftData): ResolvedWidgetShift | '
   return null;
 }
 
+/*---------------------------------------------------------------------------*\
+| Lo snapshot turni (WIDGET_SHIFT_KEY) è scritto dall'app e copre solo oggi e |
+| domani: se l'app non viene aperta per più di un giorno, il widget restava   |
+| su "nessun turno" fino alla successiva apertura. Qui il task del widget     |
+| rilegge da solo i turni dal calendario di sistema (stessa logica delle      |
+| schermate) e riscrive lo snapshot. Solo verifica del permesso, mai prompt:  |
+| in un contesto headless non c'è UI. In caso di errore si torna al vecchio   |
+| comportamento basato sullo snapshot esistente.                              |
+\*---------------------------------------------------------------------------*/
+async function refreshShiftSnapshotFromCalendar(): Promise<WidgetShiftData | null> {
+  try {
+    const { status } = await Calendar.getCalendarPermissionsAsync();
+    if (status !== 'granted') return null;
+
+    const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
+    if (!cal) return null;
+
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
+    const tomorrowStart = addDays(todayStart, 1);
+    const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
+
+    let shiftToday: { start: number; end: number } | null = null;
+    let shiftTomorrow: { start: number; end: number } | null = null;
+    let isRestDay = false;
+    const events = await Calendar.getEventsAsync([cal.id], todayStart, tomorrowEnd);
+    for (const e of events) {
+      if (e.title.includes('Riposo')) {
+        const evtDay = new Date(e.startDate);
+        if (evtDay >= todayStart && evtDay <= todayEnd) isRestDay = true;
+        continue;
+      }
+      if (!e.title.includes('Lavoro')) continue;
+      const start = new Date(e.startDate).getTime() / 1000;
+      const end = new Date(e.endDate).getTime() / 1000;
+      const evtDay = new Date(e.startDate);
+      if (evtDay >= todayStart && evtDay <= todayEnd) {
+        shiftToday = { start, end };
+        isRestDay = false;
+      } else if (evtDay >= tomorrowStart && evtDay <= tomorrowEnd) {
+        shiftTomorrow = { start, end };
+      }
+    }
+
+    const snapshot: WidgetShiftData = {
+      date: toLocalIso(todayStart),
+      shiftToday,
+      isRestDay,
+      nextShift: shiftTomorrow ? { date: toLocalIso(tomorrowStart), ...shiftTomorrow } : null,
+    };
+    await AsyncStorage.setItem(WIDGET_SHIFT_KEY, JSON.stringify(snapshot));
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+async function readShiftSnapshot(): Promise<WidgetShiftData | null> {
+  const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
+  let shiftData: WidgetShiftData | null = shiftRaw ? JSON.parse(shiftRaw) : null;
+  if (!shiftData || shiftData.date !== toLocalIso()) {
+    shiftData = (await refreshShiftSnapshotFromCalendar()) ?? shiftData;
+  }
+  return shiftData;
+}
+
 // ─── Read cached data written by the main app ──────────────────────────────────
 export async function getWidgetData(): Promise<WidgetData> {
   try {
-    const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
+    const shiftData = await readShiftSnapshot();
 
-    if (shiftRaw) {
-      const shiftData: WidgetShiftData = JSON.parse(shiftRaw);
+    if (shiftData) {
       const resolved = resolveWidgetShift(shiftData);
       if (resolved === 'rest') return { state: 'rest' };
       if (resolved) {
@@ -153,10 +220,9 @@ async function renderThemedWidget(props: WidgetTaskHandlerProps, data: WidgetDat
 // ─── Fetch fresh widget data from the live provider + cached shift key ────────
 export async function fetchFreshWidgetData(): Promise<WidgetData> {
   try {
-    const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
-    if (!shiftRaw) return getWidgetData();
+    const shiftData = await readShiftSnapshot();
+    if (!shiftData) return getWidgetData();
 
-    const shiftData: WidgetShiftData = JSON.parse(shiftRaw);
     const resolved = resolveWidgetShift(shiftData);
     if (resolved === 'rest') return { state: 'rest' };
     if (!resolved) return { state: 'no_shift' };

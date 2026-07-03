@@ -6,7 +6,10 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+import { TYPE } from '../theme/typography';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const STORAGE_KEY = 'manuals_data_v2';
 
@@ -329,6 +332,7 @@ function RichBodyText({ text, colors }: { text: string; colors: any }) {
 
 // ─── Commands Tab component ──────────────────────────────────────────────────
 function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any }) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const lower = search.toLowerCase();
   const filtered = lower
@@ -340,14 +344,14 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
   return (
     <View style={{ flex: 1 }}>
       <View style={{
-        backgroundColor: colors.card, borderRadius: 8, marginBottom: 12,
+        backgroundColor: colors.card, borderRadius: RADIUS.sm, marginBottom: SPACING.md,
         borderWidth: 1, borderColor: colors.border,
         flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10,
       }}>
         <MaterialIcons name="search" size={18} color={colors.textMuted} />
         <TextInput
           style={{
-            flex: 1, paddingVertical: 9, paddingHorizontal: 8,
+            flex: 1, paddingVertical: 9, paddingHorizontal: SPACING.sm,
             fontSize: 13, color: colors.text,
             fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' }),
           }}
@@ -359,17 +363,17 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
           autoCapitalize="none"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
+          <TouchableOpacity onPress={() => setSearch('')} accessibilityRole="button" accessibilityLabel={t('a11yClearSearch')}>
             <MaterialIcons name="close" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
 
       {categories.map(cat => (
-        <View key={cat} style={{ marginBottom: 12 }}>
+        <View key={cat} style={{ marginBottom: SPACING.md }}>
           <View style={{
             borderLeftWidth: 3, borderLeftColor: colors.primary,
-            paddingLeft: 8, marginBottom: 6,
+            paddingLeft: SPACING.sm, marginBottom: 6,
           }}>
             <Text style={{
               fontSize: 10, fontWeight: '700', color: colors.textMuted,
@@ -380,9 +384,9 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
           </View>
           {filtered.filter(c => c.category === cat).map((c, i) => (
             <View key={i} style={{
-              backgroundColor: colors.card, borderRadius: 8,
+              backgroundColor: colors.card, borderRadius: RADIUS.sm,
               borderWidth: 1, borderColor: colors.border,
-              paddingHorizontal: 12, paddingVertical: 9, marginBottom: 4,
+              paddingHorizontal: SPACING.md, paddingVertical: 9, marginBottom: SPACING.xs,
               flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <Text style={{
@@ -397,7 +401,7 @@ function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any
                   )
                 )}
               </Text>
-              <Text style={{ fontSize: 12, color: colors.text, flexShrink: 1, textAlign: 'right', marginLeft: 12 }}>
+              <Text style={{ fontSize: 12, color: colors.text, flexShrink: 1, textAlign: 'right', marginLeft: SPACING.md }}>
                 {c.desc}
               </Text>
             </View>
@@ -429,7 +433,7 @@ function makeItemStyles(c: ThemeColors) {
       flexDirection: 'row', alignItems: 'center', gap: 10,
       padding: 13,
     },
-    title: { fontSize: 13, fontWeight: '600', color: c.text, flex: 1 },
+    title: { ...TYPE.callout, color: c.text, flex: 1 },
     body: {
       paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2,
       borderTopWidth: 1, borderTopColor: c.cardSecondary,
@@ -450,6 +454,7 @@ function ManualItemRow({
   editMode: boolean;
   onEdit: () => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = useAppTheme();
   const itemStyles = useMemo(() => makeItemStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
@@ -469,7 +474,7 @@ function ManualItemRow({
         />
         <Text style={itemStyles.title}>{item.title}</Text>
         {editMode && (
-          <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
             <MaterialIcons name="edit" size={16} color={colors.textMuted} />
           </TouchableOpacity>
         )}
@@ -487,13 +492,13 @@ function ManualItemRow({
 function makeSectionStyles(c: ThemeColors) {
   return StyleSheet.create({
     wrapper: {
-      marginBottom: 12,
+      marginBottom: SPACING.md,
     },
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingVertical: 10, paddingHorizontal: 4,
+      paddingVertical: 10, paddingHorizontal: SPACING.xs,
       borderBottomWidth: 1, borderBottomColor: c.border,
-      marginBottom: 8,
+      marginBottom: SPACING.sm,
     },
     title: { fontSize: 12, fontWeight: '700', color: c.textSub, letterSpacing: 0.8 },
     body:  { paddingLeft: 0 },
@@ -511,6 +516,7 @@ function SectionBlock({
   onAddItem: () => void;
   onEditItem: (itemIdx: number) => void;
 }) {
+  const { t } = useLanguage();
   const { colors } = useAppTheme();
   const sectionStyles = useMemo(() => makeSectionStyles(colors), [colors]);
   const [open, setOpen] = useState(true);
@@ -524,9 +530,9 @@ function SectionBlock({
     <View style={sectionStyles.wrapper}>
       <TouchableOpacity style={sectionStyles.header} onPress={toggle} activeOpacity={0.8}>
         <Text style={sectionStyles.title}>{section.title}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
           {editMode && (
-            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity onPress={onEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
               <MaterialIcons name="edit" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           )}
@@ -548,7 +554,7 @@ function SectionBlock({
           ))}
           {editMode && (
             <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 4 }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.xs }}
               onPress={onAddItem}
             >
               <MaterialIcons name="add" size={14} color={colors.textSub} />
@@ -564,16 +570,16 @@ function SectionBlock({
 const modalStyles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   scrollContent: { flexGrow: 1, justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 36, maxHeight: '92%' },
-  title: { fontSize: 17, fontWeight: '700', marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '600', marginBottom: 4, marginTop: 12 },
-  input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 9, fontSize: 14 },
+  sheet: { borderTopLeftRadius: RADIUS.xl, borderTopRightRadius: RADIUS.xl, padding: SPACING.xl, paddingBottom: 36, maxHeight: '92%' },
+  title: { ...TYPE.headline, marginBottom: SPACING.lg },
+  label: { ...TYPE.caption, marginBottom: SPACING.xs, marginTop: SPACING.md },
+  input: { borderWidth: 1, borderRadius: RADIUS.sm, paddingHorizontal: SPACING.md, paddingVertical: 9, fontSize: 14 },
   inputMulti: { minHeight: 100, paddingTop: 9 },
-  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
+  colorRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: SPACING.sm },
   colorDot: { width: 28, height: 28, borderRadius: 14 },
   colorDotSelected: { borderWidth: 3, borderColor: '#000', transform: [{ scale: 1.2 }] },
-  btnRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 20 },
-  btn: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: 8 },
+  btnRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: SPACING.sm, marginTop: SPACING.xl },
+  btn: { paddingHorizontal: 18, paddingVertical: 9, borderRadius: RADIUS.sm },
   btnCancel: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#ccc' },
   btnSave: {},
   btnDanger: { marginRight: 'auto', backgroundColor: '#FEE2E2' },
@@ -587,27 +593,27 @@ function makeStyles(c: ThemeColors) {
     root: { flex: 1, backgroundColor: c.bg },
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 10,
-      paddingHorizontal: 16, paddingVertical: 13,
+      paddingHorizontal: SPACING.lg, paddingVertical: 13,
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
     },
-    headerTitle: { fontSize: 17, fontWeight: '700', color: c.primaryDark },
+    headerTitle: { ...TYPE.headline, color: c.primaryDark },
     airlineBar: {
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
       maxHeight: 62,
     },
     airlineBarContent: {
-      paddingHorizontal: 12, paddingVertical: 10, gap: 8,
+      paddingHorizontal: SPACING.md, paddingVertical: 10, gap: SPACING.sm,
     },
     airlineChip: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
       paddingHorizontal: 14, paddingVertical: 7,
-      borderRadius: 20, borderWidth: 1.5, borderColor: c.border,
+      borderRadius: RADIUS.xl, borderWidth: 1.5, borderColor: c.border,
       backgroundColor: c.card,
     },
     airlineCode: { fontSize: 11, fontWeight: '800', color: c.textSub },
-    airlineName: { fontSize: 12, fontWeight: '600', color: c.textSub },
+    airlineName: { ...TYPE.caption, color: c.textSub },
     content:    { flex: 1 },
     contentPad: { padding: 14, paddingBottom: 80 },
     banner: {
@@ -615,14 +621,14 @@ function makeStyles(c: ThemeColors) {
     },
     bannerCode: { fontSize: 28, fontWeight: '900', letterSpacing: 1 },
     bannerName: { fontSize: 15, fontWeight: '600', marginTop: 2 },
-    bannerSub:  { fontSize: 12, marginTop: 4 },
+    bannerSub:  { fontSize: 12, marginTop: SPACING.xs },
     addBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
-      paddingVertical: 10, paddingHorizontal: 12,
-      borderWidth: 1, borderStyle: 'dashed', borderRadius: 8,
-      marginBottom: 8,
+      paddingVertical: 10, paddingHorizontal: SPACING.md,
+      borderWidth: 1, borderStyle: 'dashed', borderRadius: RADIUS.sm,
+      marginBottom: SPACING.sm,
     },
-    addBtnText: { fontSize: 13, fontWeight: '600' },
+    addBtnText: { ...TYPE.callout },
   });
 }
 
@@ -956,6 +962,7 @@ function ItemModal({
 }
 
 export default function ManualsScreen() {
+  const { t } = useLanguage();
   const { colors } = useAppTheme();
   const s = useMemo(() => makeStyles(colors), [colors]);
   const [airlines, setAirlines] = useState<Airline[]>(DEFAULT_AIRLINES);
@@ -997,7 +1004,7 @@ export default function ManualsScreen() {
       <View style={s.header}>
         <MaterialIcons name="menu-book" size={22} color={colors.primary} />
         <Text style={s.headerTitle}>Manuali DCS</Text>
-        <TouchableOpacity onPress={() => setEditMode(v => !v)} style={{ marginLeft: 'auto' }}>
+        <TouchableOpacity onPress={() => setEditMode(v => !v)} style={{ marginLeft: 'auto' }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
           <MaterialIcons
             name="edit"
             size={20}
@@ -1071,7 +1078,7 @@ export default function ManualsScreen() {
                 key={tab}
                 onPress={() => setActiveTab(tab)}
                 style={{
-                  paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8,
+                  paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm,
                   backgroundColor: activeTab === tab ? colors.primary : 'transparent',
                   borderWidth: activeTab === tab ? 0 : 1,
                   borderColor: colors.border,

@@ -32,7 +32,8 @@ import {
   type ParsedSchedule, type ParsedEmployee,
 } from '../utils/pdfShiftParser';
 import { useLanguage } from '../context/LanguageContext';
-import { TYPE } from '../theme/typography';
+import { TYPE, WEIGHT } from '../theme/typography';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const STORAGE_KEY = '@shift_import_name';
 
@@ -648,6 +649,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     }
   };
 
+  // Sposta la vista settimana di ±1 settimana; aggiornare visibleMonth quando
+  // si cambia mese fa ricaricare gli eventi del nuovo intervallo (mese ±7gg).
+  const goToWeek = (delta: number) => {
+    const next = fromIsoDate(selectedDay);
+    next.setDate(next.getDate() + delta * 7);
+    const iso = toLocalIso(next);
+    setSelectedDay(iso);
+    if (!isSameMonth(visibleMonth, iso)) {
+      setVisibleMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+    }
+  };
+
   const handleMonthChange = (day: DateData) => {
     const nextMonth = new Date(day.year, day.month - 1, 1);
     setVisibleMonth(nextMonth);
@@ -874,7 +887,6 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 <View style={s.weekHeader}>
                   <View>
                     <Text style={s.weekTitle}>{t('calModeWeek')}</Text>
-                    <Text style={s.weekRange}>{weekRangeLabel}</Text>
                   </View>
                   <View style={s.weekTotalPill}>
                     <Text style={s.weekTotalValue}>{weekHoursSummary.totalHours.toFixed(1)} h</Text>
@@ -882,6 +894,28 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                       {t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}
                     </Text>
                   </View>
+                </View>
+
+                <View style={s.weekNavRow}>
+                  <TouchableOpacity
+                    style={s.weekNavBtn}
+                    onPress={() => goToWeek(-1)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('calPrevWeek')}
+                  >
+                    <MaterialIcons name="chevron-left" size={24} color={colors.primaryText} />
+                  </TouchableOpacity>
+                  <Text style={s.weekNavLabel}>{weekRangeLabel}</Text>
+                  <TouchableOpacity
+                    style={s.weekNavBtn}
+                    onPress={() => goToWeek(1)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('calNextWeek')}
+                  >
+                    <MaterialIcons name="chevron-right" size={24} color={colors.primaryText} />
+                  </TouchableOpacity>
                 </View>
 
                 {selectedWeekDays.map(day => {
@@ -949,7 +983,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         <View style={s.modalOverlay}>
           <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setEditMenuOpen(false)} />
           <View style={[s.editMenuContent, { backgroundColor: colors.card === 'transparent' ? colors.cardSecondary : colors.card }]}>
-            <Text style={[s.modalTitle, { color: colors.text, marginBottom: 16 }]}>Modifica Turni</Text>
+            <Text style={[s.modalTitle, { color: colors.text, marginBottom: SPACING.lg }]}>Modifica Turni</Text>
             <TouchableOpacity style={[s.editMenuOption, { backgroundColor: colors.primaryLight }]} onPress={() => { setEditMenuOpen(false); startImport(); }}>
               <MaterialIcons name="picture-as-pdf" size={24} color={colors.primary} />
               <View style={{ flex: 1 }}>
@@ -977,9 +1011,9 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
           <View style={s.modalScrollContent}>
             <View style={[s.manualModalContent, { backgroundColor: colors.card === 'transparent' ? colors.cardSecondary : colors.card }]}>
             {/* Header fisso */}
-            <View style={[s.modalHeader, { paddingHorizontal: 24, paddingTop: 24 }]}>
+            <View style={[s.modalHeader, { paddingHorizontal: SPACING.xxl, paddingTop: SPACING.xxl }]}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calAddShiftTitle')}</Text>
-              <TouchableOpacity onPress={() => setManualModalOpen(false)}>
+              <TouchableOpacity onPress={() => setManualModalOpen(false)} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
                 <MaterialIcons name="close" size={24} color={colors.textSub} />
               </TouchableOpacity>
             </View>
@@ -989,7 +1023,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 keyboardShouldPersistTaps="handled"
                 nestedScrollEnabled
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 40 }}
+                contentContainerStyle={{ paddingHorizontal: SPACING.xxl, paddingBottom: 40 }}
               >
               {/* Data */}
               <Text style={[s.manualLabel, { color: colors.textSub }]}>{t('calDataLabel')}</Text>
@@ -998,13 +1032,13 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 value={manualDate.split('-').reverse().join('/')}
                 editable={false}
               />
-              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 12 }}>
+              <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: SPACING.md }}>
                 Seleziona un giorno dal calendario per cambiare la data
               </Text>
 
               {/* Tipo */}
               <Text style={[s.manualLabel, { color: colors.textSub }]}>{t('calTypeLabel')}</Text>
-              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: SPACING.lg }}>
                 {(['Lavoro', 'Riposo'] as const).map(shiftType => (
                   <TouchableOpacity
                     key={shiftType}
@@ -1041,7 +1075,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     bgColor={colors.card === 'transparent' ? colors.cardSecondary : colors.card}
                     borderColor={colors.border}
                   />
-                  <Text style={[s.manualLabel, { color: colors.textSub, marginTop: 16 }]}>{t('calEndTime')}</Text>
+                  <Text style={[s.manualLabel, { color: colors.textSub, marginTop: SPACING.lg }]}>{t('calEndTime')}</Text>
                   <TimeCarouselPicker
                     key={pickerKey * 2 + 1}
                     hour={manualEndH}
@@ -1057,7 +1091,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 </>
               )}
 
-              <TouchableOpacity style={[s.primaryBtn, { backgroundColor: colors.primary, marginTop: 24 }]} onPress={saveManualShift}>
+              <TouchableOpacity style={[s.primaryBtn, { backgroundColor: colors.primary, marginTop: SPACING.xxl }]} onPress={saveManualShift}>
                 <Text style={s.primaryBtnText}>{t('calSaveShift')}</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -1088,7 +1122,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calImportTitle')}</Text>
               {importStep !== 'saving' && (
-                <TouchableOpacity onPress={() => { setImportModalVisible(false); setImportStep('idle'); setImportFileCount(0); }}>
+                <TouchableOpacity onPress={() => { setImportModalVisible(false); setImportStep('idle'); setImportFileCount(0); }} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
                   <MaterialIcons name="close" size={24} color={colors.textSub} />
                 </TouchableOpacity>
               )}
@@ -1140,7 +1174,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                       <Text style={[s.previewDate, { color: colors.text }]}>{fmtDate(shift.date)}</Text>
                       {shift.type === 'work' ? (
                         <View style={[s.previewPill, { backgroundColor: colors.primaryLight }]}>
-                          <Text style={[s.previewPillText, { color: colors.primary }]}>
+                          <Text style={[s.previewPillText, { color: colors.primaryText }]}>
                             {shift.start} - {shift.end}
                           </Text>
                         </View>
@@ -1152,7 +1186,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     </View>
                   ))}
                 </ScrollView>
-                <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+                <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.lg }}>
                   <TouchableOpacity
                     style={[s.secondaryBtn, { borderColor: colors.border }]}
                     onPress={() => setImportStep('pickName')}
@@ -1193,18 +1227,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
-    pageHeader: { backgroundColor: c.card, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
+    pageHeader: { backgroundColor: c.card, paddingHorizontal: SPACING.lg, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
     pageTitle: { ...TYPE.title, color: c.primaryDark },
     pageSub: { fontSize: 11, color: c.textSub, letterSpacing: 1.5, marginTop: 3 },
-    importBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+    importBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: SPACING.sm, borderRadius: 10 },
     importBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
     viewModeRow: {
       flexDirection: 'row',
-      gap: 8,
-      marginHorizontal: 16,
+      gap: SPACING.sm,
+      marginHorizontal: SPACING.lg,
       marginTop: 14,
       backgroundColor: c.card,
-      borderRadius: 16,
+      borderRadius: RADIUS.lg,
       padding: 6,
       borderWidth: c.isDark ? 1 : 0,
       borderColor: c.glassBorder,
@@ -1215,17 +1249,17 @@ function makeStyles(c: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      borderRadius: 12,
+      borderRadius: RADIUS.md,
       paddingVertical: 10,
     },
     viewModeText: { fontSize: 13, fontWeight: '800' },
     calendarCard: {
       backgroundColor: c.card,
-      borderRadius: 20,
-      marginHorizontal: 16,
-      marginTop: 16,
-      paddingHorizontal: 12,
-      paddingTop: 8,
+      borderRadius: RADIUS.xl,
+      marginHorizontal: SPACING.lg,
+      marginTop: SPACING.lg,
+      paddingHorizontal: SPACING.md,
+      paddingTop: SPACING.sm,
       paddingBottom: 14,
       shadowColor: c.primary,
       shadowOpacity: c.isDark ? 0 : 0.08,
@@ -1234,8 +1268,8 @@ function makeStyles(c: ThemeColors) {
       borderWidth: c.isDark ? 1 : 0,
       borderColor: c.glassBorder,
     },
-    monthCalendar: { borderRadius: 16 },
-    monthCalendarHeader: { paddingBottom: 8, marginBottom: 6 },
+    monthCalendar: { borderRadius: RADIUS.lg },
+    monthCalendarHeader: { paddingBottom: SPACING.sm, marginBottom: 6 },
     dayCellWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
     dayCellInner: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'transparent' },
     dayCellInnerSelected: { backgroundColor: c.primary },
@@ -1247,22 +1281,22 @@ function makeStyles(c: ThemeColors) {
     dayCellTextSelected: { color: '#fff' },
     dayDotsRow: { minHeight: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 3 },
     dayDot: { width: 5, height: 5, borderRadius: 2.5, marginHorizontal: 1.5 },
-    calendarLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, paddingHorizontal: 6, paddingTop: 8 },
-    legendItem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    calendarLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.lg, paddingHorizontal: 6, paddingTop: SPACING.sm },
+    legendItem: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
     legendDot: { width: 8, height: 8, borderRadius: 4 },
     legendTodayRing: { width: 12, height: 12, borderRadius: 6, borderWidth: 1.5, borderColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     legendTodayCenter: { width: 4, height: 4, borderRadius: 2, backgroundColor: c.primary },
     legendText: { ...TYPE.caption, color: c.textSub },
     calendarSummary: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.border },
     calendarSummaryLabel: { color: c.textSub, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-    calendarSummaryValue: { color: c.primary, fontSize: 28, fontWeight: '800', marginTop: 6 },
-    calendarSummaryMeta: { ...TYPE.callout, color: c.textSub, marginTop: 4 },
+    calendarSummaryValue: { color: c.primaryText, fontSize: 28, fontWeight: '800', marginTop: 6 },
+    calendarSummaryMeta: { ...TYPE.callout, color: c.textSub, marginTop: SPACING.xs },
     weekCard: {
       backgroundColor: c.card,
-      borderRadius: 20,
-      marginHorizontal: 16,
-      marginTop: 16,
-      padding: 16,
+      borderRadius: RADIUS.xl,
+      marginHorizontal: SPACING.lg,
+      marginTop: SPACING.lg,
+      padding: SPACING.lg,
       shadowColor: c.primary,
       shadowOpacity: c.isDark ? 0 : 0.08,
       shadowRadius: 10,
@@ -1270,19 +1304,21 @@ function makeStyles(c: ThemeColors) {
       borderWidth: c.isDark ? 1 : 0,
       borderColor: c.glassBorder,
     },
-    weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 },
+    weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
     weekTitle: { color: c.primaryDark, fontSize: 20, fontWeight: '900' },
-    weekRange: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'uppercase' },
-    weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'flex-end' },
-    weekTotalValue: { color: c.primary, fontSize: 18, fontWeight: '900' },
+    weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 14 },
+    weekNavBtn: { width: 40, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
+    weekNavLabel: { flex: 1, textAlign: 'center', color: c.textSub, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+    weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 14, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, alignItems: 'flex-end' },
+    weekTotalValue: { color: c.primaryText, fontSize: 18, fontWeight: '900' },
     weekTotalLabel: { ...TYPE.micro, color: c.primaryDark, marginTop: 1 },
     weekRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: SPACING.md,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 16,
+      borderRadius: RADIUS.lg,
       padding: 10,
       marginTop: 9,
       backgroundColor: c.bg,
@@ -1292,7 +1328,7 @@ function makeStyles(c: ThemeColors) {
       borderRadius: 14,
       backgroundColor: c.card,
       alignItems: 'center',
-      paddingVertical: 8,
+      paddingVertical: SPACING.sm,
       borderWidth: 1,
       borderColor: c.border,
     },
@@ -1304,17 +1340,17 @@ function makeStyles(c: ThemeColors) {
     weekShiftTitle: { fontSize: 16, fontWeight: '900' },
     weekShiftMeta: { color: c.text, fontSize: 15, fontWeight: '800', marginTop: 5 },
     weekFlightMeta: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3 },
-    weekRestRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    weekRestRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
     weekRestText: { color: c.success, fontSize: 16, fontWeight: '900' },
     weekEmptyText: { color: c.textSub, fontSize: 14, fontWeight: '700' },
     mainCard: {
       backgroundColor: c.card, borderRadius: 14,
-      marginHorizontal: 16, marginTop: 16,
-      padding: 20,
+      marginHorizontal: SPACING.lg, marginTop: SPACING.lg,
+      padding: SPACING.xl,
       shadowColor: c.primary, shadowOpacity: c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: c.isDark ? 0 : 4, borderWidth: c.isDark ? 1 : 0, borderColor: c.glassBorder,
       minHeight: 160,
     },
-    selectedDayHeader: { marginBottom: 12, paddingRight: 90 },
+    selectedDayHeader: { marginBottom: SPACING.md, paddingRight: 90 },
     selectedDayLabel: { color: c.textSub, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
     weatherBadge: {
       position: 'absolute', top: 14, right: 14,
@@ -1325,50 +1361,50 @@ function makeStyles(c: ThemeColors) {
     weatherIcon: { marginRight: 2 },
     weatherPlace: { fontSize: 10, color: c.textSub, fontWeight: '600' },
     weatherText: { ...TYPE.caption, color: c.text },
-    shiftTypeRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14, marginTop: 6 },
-    shiftIconBox: { width: 44, height: 44, backgroundColor: c.primaryLight, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+    shiftTypeRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: 14, marginTop: 6 },
+    shiftIconBox: { width: 44, height: 44, backgroundColor: c.primaryLight, borderRadius: RADIUS.md, justifyContent: 'center', alignItems: 'center' },
     shiftTypeName: { ...TYPE.headline, color: c.primaryDark },
     timeRow: { flexDirection: 'row', alignItems: 'center' },
-    timeText: { ...TYPE.title, color: c.primary },
-    flightBadge: { marginTop: 14, backgroundColor: c.primaryLight, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
+    timeText: { ...TYPE.title, color: c.primaryText },
+    flightBadge: { marginTop: 14, backgroundColor: c.primaryLight, borderRadius: 10, paddingHorizontal: 14, paddingVertical: SPACING.sm, alignSelf: 'flex-start' },
     flightBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    flightBadgeText: { color: c.primary, fontWeight: '700', fontSize: 13 },
+    flightBadgeText: { color: c.primaryText, fontWeight: '700', fontSize: 13 },
     restRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
-    restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.successSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.successSoft, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
     restText: { ...TYPE.headline, color: c.success },
-    emptyText: { ...TYPE.body, textAlign: 'center', color: c.textSub, marginTop: 20 },
+    emptyText: { ...TYPE.body, textAlign: 'center', color: c.textSub, marginTop: SPACING.xl },
     // Modal
     modalOverlay: { flex: 1, justifyContent: 'flex-end' },
     modalBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
     modalScrollContent: { flex: 1, justifyContent: 'flex-end' },
-    modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 100, maxHeight: '92%' },
+    modalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.xxl, paddingBottom: 100, maxHeight: '92%' },
     manualModalContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 0, maxHeight: '92%' },
-    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md },
     modalTitle: { ...TYPE.headline },
-    centerBox: { alignItems: 'center', paddingVertical: 40, gap: 12 },
+    centerBox: { alignItems: 'center', paddingVertical: 40, gap: SPACING.md },
     stepText: { fontSize: 16, fontWeight: '600' },
-    stepLabel: { ...TYPE.body, marginBottom: 12 },
-    nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderRadius: 8, marginBottom: 4 },
+    stepLabel: { ...TYPE.body, marginBottom: SPACING.md },
+    nameRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: SPACING.md, borderBottomWidth: 1, borderRadius: RADIUS.sm, marginBottom: SPACING.xs },
     nameText: { fontSize: 15, fontWeight: '500' },
-    previewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1 },
+    previewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: SPACING.xs, borderBottomWidth: 1 },
     previewDate: { fontSize: 14, fontWeight: '600' },
-    previewPill: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8 },
+    previewPill: { paddingHorizontal: SPACING.md, paddingVertical: 5, borderRadius: RADIUS.sm },
     previewPillText: { fontSize: 13, fontWeight: '700' },
-    secondaryBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
+    secondaryBtn: { flex: 1, paddingVertical: SPACING.md, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
     secondaryBtnText: { fontSize: 14, fontWeight: '600' },
-    primaryBtn: { flex: 2, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-    primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+    primaryBtn: { flex: 2, paddingVertical: SPACING.md, borderRadius: 10, alignItems: 'center' },
+    primaryBtnText: { color: '#fff', fontSize: 14, fontWeight: WEIGHT.semibold },
     // Edit menu
-    editMenuContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
-    editMenuOption: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16, borderRadius: 14, marginBottom: 10 },
+    editMenuContent: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: SPACING.xxl, paddingBottom: 40 },
+    editMenuOption: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: SPACING.lg, borderRadius: 14, marginBottom: 10 },
     editMenuLabel: { fontSize: 15, fontWeight: '600' },
     editMenuSub: { fontSize: 12, marginTop: 2 },
     // Manual entry
     manualLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 6 },
-    manualInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12, fontSize: 16, marginBottom: 4 },
+    manualInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: SPACING.md, fontSize: 16, marginBottom: SPACING.xs },
     manualTimeRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
     manualTimeInput: { flex: 1, textAlign: 'center' },
-    manualTypeBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, alignItems: 'center' },
+    manualTypeBtn: { flex: 1, paddingVertical: SPACING.md, borderRadius: 10, borderWidth: 1.5, alignItems: 'center' },
     manualTypeInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   });
 }

@@ -20,6 +20,7 @@ function loadTsModule(relativePath, mocks = {}) {
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2020,
       esModuleInterop: true,
+      jsx: ts.JsxEmit.React,
     },
   }).outputText;
   const module = { exports: {} };
@@ -654,8 +655,84 @@ async function testRuntimeDiagnostics() {
   }
 }
 
+
+async function testWidgetShiftSelfHeal() {
+  // Regressione: snapshot turni di ieri + turno di oggi presente nel
+  // calendario di sistema -> il widget deve auto-rigenerare lo snapshot
+  // invece di mostrare "nessun turno" finche' l'app non viene aperta.
+  const toIso = date => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+  // Turno 00:00-23:59 così il test non dipende dall'ora in cui gira.
+  const shiftStart = new Date(today); shiftStart.setHours(0, 0, 0, 0);
+  const shiftEnd = new Date(today); shiftEnd.setHours(23, 59, 0, 0);
+
+  const store = new Map();
+  store.set('widget_shift_v1', JSON.stringify({
+    date: toIso(yesterday),
+    shiftToday: null,
+    isRestDay: false,
+    nextShift: null,
+  }));
+
+  const asyncStorageMock = {
+    getItem: async key => (store.has(key) ? store.get(key) : null),
+    setItem: async (key, value) => { store.set(key, value); },
+    multiSet: async pairs => { for (const [k, v] of pairs) store.set(k, v); },
+  };
+  const calendarMock = {
+    EntityTypes: { EVENT: 'event' },
+    getCalendarPermissionsAsync: async () => ({ status: 'granted' }),
+    getCalendarsAsync: async () => [{ id: 'cal1', allowsModifications: true, isPrimary: true }],
+    getEventsAsync: async () => [
+      { id: 'e1', title: 'Lavoro', startDate: shiftStart.toISOString(), endDate: shiftEnd.toISOString() },
+    ],
+  };
+
+  const handler = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+    '@react-native-async-storage/async-storage': asyncStorageMock,
+    'expo-calendar': calendarMock,
+    'react-native-android-widget': {},
+    './ShiftWidget': { ShiftWidget: () => null },
+    './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light', themeSnapshot: undefined }) },
+    '../utils/liveArrivalEta': { applyLiveDepartureStatus: (deps) => deps, fetchAdsbAircraft: async () => [] },
+    '../utils/flightProviders/staffMonitorProvider': { staffMonitorProvider: { supports: () => false, fetch: async () => ({ allDepartures: [] }) } },
+    react: require('react'),
+  });
+
+  const data = await handler.getWidgetData();
+  assert(
+    data.state === 'work' || data.state === 'work_empty',
+    `stale shift snapshot should self-heal from the calendar, got state=${data.state}`,
+  );
+
+  const rewritten = JSON.parse(store.get('widget_shift_v1'));
+  assert(rewritten.date === toIso(today), 'the shift snapshot should be rewritten with today\'s date');
+  assert(rewritten.shiftToday && typeof rewritten.shiftToday.start === 'number', 'the rewritten snapshot should contain today\'s shift window');
+
+  // Permesso calendario negato -> nessun crash e fallback allo snapshot esistente.
+  const handlerDenied = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+    '@react-native-async-storage/async-storage': asyncStorageMock,
+    'expo-calendar': { ...calendarMock, getCalendarPermissionsAsync: async () => ({ status: 'denied' }) },
+    'react-native-android-widget': {},
+    './ShiftWidget': { ShiftWidget: () => null },
+    './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light', themeSnapshot: undefined }) },
+    '../utils/liveArrivalEta': { applyLiveDepartureStatus: (deps) => deps, fetchAdsbAircraft: async () => [] },
+    '../utils/flightProviders/staffMonitorProvider': { staffMonitorProvider: { supports: () => false, fetch: async () => ({ allDepartures: [] }) } },
+    react: require('react'),
+  });
+  const denied = await handlerDenied.getWidgetData();
+  assert(typeof denied.state === 'string', 'denied calendar permission should still return a widget state');
+}
+
 async function main() {
   await testDateFormat();
+  await testWidgetShiftSelfHeal();
   await testThemeMode();
   await testSecureWipe();
   await testFlightProviderSettings();

@@ -46,6 +46,7 @@ import {
   type FlightProviderDiagnosticsSnapshot,
 } from '../utils/fr24api';
 import { formatProviderDiagnostic } from '../utils/flightDiagnostics';
+import { SPACING, RADIUS } from '../theme/spacing';
 import {
   getStaffMonitorDebugColumns,
   getStaffMonitorDebugFlights,
@@ -142,7 +143,7 @@ function ThemeCard({ option, selected, onSelect, activeLabel }: {
       <View style={styles.themeInfo}>
         <View style={styles.themeInfoTop}>
           <MaterialIcons name={option.icon} size={18} color={selected ? colors.primary : colors.textSub} />
-          <Text style={[styles.themeLabel, { color: colors.text }, selected && { color: colors.primary }]}>
+          <Text style={[styles.themeLabel, { color: colors.text }, selected && { color: colors.primaryText }]}>
             {option.label}
           </Text>
           {selected && (
@@ -679,9 +680,9 @@ export default function SettingsScreen({
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('sectionTheme')}</Text>
 
       {isLoading ? (
-        <View style={[styles.card, { backgroundColor: colors.card, alignItems: 'center', padding: 24 }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, alignItems: 'center', padding: SPACING.xxl }]}>
           <ActivityIndicator color={colors.primary} />
-          <Text style={[styles.rowSub, { color: colors.textMuted, marginTop: 8 }]}>
+          <Text style={[styles.rowSub, { color: colors.textMuted, marginTop: SPACING.sm }]}>
             {t('themeLoading')}
           </Text>
         </View>
@@ -787,7 +788,7 @@ export default function SettingsScreen({
             {checkingUpdate
               ? <ActivityIndicator size={14} color={colors.primary} />
               : <MaterialIcons name="refresh" size={16} color={colors.primary} />}
-            <Text style={[styles.updateBtnTxt, { color: colors.primary }]}>
+            <Text style={[styles.updateBtnTxt, { color: colors.primaryText }]}>
               {checkingUpdate ? 'Controllo…' : 'Controlla'}
             </Text>
           </TouchableOpacity>
@@ -991,6 +992,7 @@ export default function SettingsScreen({
               style={[styles.providerCloseBtn, { backgroundColor: colors.cardSecondary }]}
               onPress={closeProviderModal}
               activeOpacity={0.85}
+              accessibilityRole="button" accessibilityLabel={t('a11yClose')}
             >
               <MaterialIcons name="close" size={22} color={colors.text} />
             </TouchableOpacity>
@@ -1373,6 +1375,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshProviderDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1423,17 +1426,17 @@ export default function SettingsScreen({
                 </Text>
               )}
 
-              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: SPACING.lg }]}>
                 {t('flightDebugStaffMonitorParser')}
               </Text>
               <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>
                 {staffMonitorDebug || t('flightDebugNoStaffMonitorDebug')}
               </Text>
 
-              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: SPACING.lg }]}>
                 {t('flightDebugStaffMonitorRawArrivals')}
               </Text>
-              <Text style={[styles.providerOptionSub, { color: colors.textMuted, marginBottom: 8 }]}>
+              <Text style={[styles.providerOptionSub, { color: colors.textMuted, marginBottom: SPACING.sm }]}>
                 {t('flightDebugStaffMonitorRawArrivalsSub')}
               </Text>
               <Text
@@ -1468,6 +1471,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshNotificationDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1528,7 +1532,7 @@ export default function SettingsScreen({
                       : t('notificationDebugNoPending')}
                   </Text>
 
-                  <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+                  <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: SPACING.lg }]}>
                     {t('notificationDebugDuplicateList')}
                   </Text>
                   <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>
@@ -1540,7 +1544,7 @@ export default function SettingsScreen({
                       : t('notificationDebugNoDuplicates')}
                   </Text>
 
-                  <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+                  <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: SPACING.lg }]}>
                     {t('notificationDebugLastEvents')}
                   </Text>
                   <View style={styles.debugProviderList}>
@@ -1593,6 +1597,7 @@ export default function SettingsScreen({
               style={[styles.providerCloseBtn, { backgroundColor: colors.cardSecondary }]}
               onPress={closeDebugModal}
               activeOpacity={0.85}
+              accessibilityRole="button" accessibilityLabel={t('a11yClose')}
             >
               <MaterialIcons name="close" size={22} color={colors.text} />
             </TouchableOpacity>
@@ -1677,6 +1682,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshProviderDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1727,17 +1733,17 @@ export default function SettingsScreen({
                 </Text>
               )}
 
-              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: SPACING.lg }]}>
                 {t('flightDebugStaffMonitorParser')}
               </Text>
               <Text style={[styles.debugMono, { color: colors.textMuted, backgroundColor: colors.bg, borderColor: colors.border }]}>
                 {staffMonitorDebug || t('flightDebugNoStaffMonitorDebug')}
               </Text>
 
-              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: 16 }]}>
+              <Text style={[styles.modalLabel, { color: colors.textMuted, marginTop: SPACING.lg }]}>
                 {t('flightDebugStaffMonitorRawArrivals')}
               </Text>
-              <Text style={[styles.providerOptionSub, { color: colors.textMuted, marginBottom: 8 }]}>
+              <Text style={[styles.providerOptionSub, { color: colors.textMuted, marginBottom: SPACING.sm }]}>
                 {t('flightDebugStaffMonitorRawArrivalsSub')}
               </Text>
               <Text
@@ -1772,6 +1778,7 @@ export default function SettingsScreen({
                   style={[styles.providerRefreshBtn, { backgroundColor: colors.cardSecondary, borderColor: colors.border }]}
                   onPress={() => { refreshNotificationDebug().catch(() => {}); }}
                   activeOpacity={0.85}
+                  accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
                 >
                   <MaterialIcons name="refresh" size={18} color={colors.primary} />
                 </TouchableOpacity>
@@ -1851,23 +1858,23 @@ export default function SettingsScreen({
 
 const styles = StyleSheet.create({
   root:    { flex: 1 },
-  content: { padding: 16, paddingBottom: 96 },
+  content: { padding: SPACING.lg, paddingBottom: 96 },
   banner: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: 16, padding: 18, marginBottom: 20,
+    borderRadius: RADIUS.lg, padding: 18, marginBottom: SPACING.xl,
     shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
   },
-  bannerIcon:  { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  bannerIcon:  { width: 52, height: 52, borderRadius: RADIUS.lg, justifyContent: 'center', alignItems: 'center' },
   bannerTitle: { ...TYPE.headline },
   bannerSub:   { fontSize: 12, marginTop: 2 },
 
-  sectionTitle: { ...TYPE.overline, marginBottom: 8, paddingLeft: 4, marginTop: 4 },
+  sectionTitle: { ...TYPE.overline, marginBottom: SPACING.sm, paddingLeft: SPACING.xs, marginTop: SPACING.xs },
 
   // Theme grid
-  themeGrid: { flexDirection: 'row', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
+  themeGrid: { flexDirection: 'row', gap: 10, marginBottom: SPACING.xl, flexWrap: 'wrap' },
   themeCard: {
     flex: 1, minWidth: 100,
-    borderRadius: 16, borderWidth: 2,
+    borderRadius: RADIUS.lg, borderWidth: 2,
     overflow: 'hidden',
   },
   themeCardSelected: {
@@ -1875,39 +1882,39 @@ const styles = StyleSheet.create({
   },
   preview: { height: 80, justifyContent: 'space-between' },
   previewBar:     { height: 12, width: '100%' },
-  previewContent: { flex: 1, padding: 6, gap: 4 },
+  previewContent: { flex: 1, padding: 6, gap: SPACING.xs },
   previewCard:    { height: 10, borderRadius: 4, width: '100%' },
   previewTab:     { height: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   previewDot:     { width: 8, height: 8, borderRadius: 4 },
   themeInfo:      { padding: 10 },
-  themeInfoTop:   { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 3, flexWrap: 'wrap' },
+  themeInfoTop:   { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 3, flexWrap: 'wrap' },
   themeLabel:     { fontSize: 13, fontWeight: '700' },
-  activeBadge:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, flexShrink: 0 },
+  activeBadge:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.sm, flexShrink: 0 },
   activeBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
   themeSub:       { fontSize: 10, lineHeight: 14 },
 
   // Generic rows
   card: {
-    borderRadius: 16, marginBottom: 20,
+    borderRadius: RADIUS.lg, marginBottom: SPACING.xl,
     shadowColor: '#F47B16', shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06, shadowRadius: 6, elevation: 2, overflow: 'hidden',
   },
   divider: { height: 1, marginLeft: 56 },
-  row:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 13, gap: 12 },
+  row:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: 13, gap: SPACING.md },
   iconWrap:{ width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   rowText: { flex: 1 },
   rowLabel:{ fontSize: 14, fontWeight: '600' },
   rowSub:  { fontSize: 12, marginTop: 1 },
-  modalOverlay: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(15,23,42,0.48)' },
-  modalCopy: { fontSize: 13, lineHeight: 20, marginBottom: 16 },
-  modalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: 8 },
+  modalOverlay: { flex: 1, justifyContent: 'center', padding: SPACING.xl, backgroundColor: 'rgba(15,23,42,0.48)' },
+  modalCopy: { fontSize: 13, lineHeight: 20, marginBottom: SPACING.lg },
+  modalLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 0.8, marginBottom: SPACING.sm },
   modalInput: {
     ...TYPE.subhead,
     borderWidth: 1,
     borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 16,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   modalActions: { flexDirection: 'row', gap: 10 },
   modalBtn: { flex: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
@@ -1919,7 +1926,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 18,
     paddingTop: Platform.OS === 'android' ? 26 : 54,
-    paddingBottom: 16,
+    paddingBottom: SPACING.lg,
     borderBottomWidth: 1,
   },
   providerCloseBtn: {
@@ -1932,13 +1939,13 @@ const styles = StyleSheet.create({
   providerHeaderText: { flex: 1 },
   providerTitle: { fontSize: 22, fontWeight: '900' },
   providerSubtitle: { fontSize: 13, lineHeight: 18, marginTop: 2 },
-  providerContent: { padding: 16, paddingBottom: 42 },
+  providerContent: { padding: SPACING.lg, paddingBottom: 42 },
   providerOptions: { gap: 10, marginBottom: 22 },
-  providerSectionHelp: { fontSize: 12, lineHeight: 17, marginTop: -2, marginBottom: 12, paddingHorizontal: 4 },
+  providerSectionHelp: { fontSize: 12, lineHeight: 17, marginTop: -2, marginBottom: SPACING.md, paddingHorizontal: SPACING.xs },
   providerOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: SPACING.md,
     borderRadius: 18,
     borderWidth: 1,
     padding: 14,
@@ -1954,10 +1961,10 @@ const styles = StyleSheet.create({
   providerOptionTitle: { fontSize: 15, fontWeight: '800' },
   providerOptionSub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   providerKeyCard: {
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    padding: 16,
-    marginBottom: 20,
+    padding: SPACING.lg,
+    marginBottom: SPACING.xl,
   },
   providerKeyCardFeatured: {
     borderWidth: 2,
@@ -1967,7 +1974,7 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 4,
   },
-  gatewayToggle: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  gatewayToggle: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
   gatewayBtn: {
     flex: 1,
     borderWidth: 1,
@@ -1976,9 +1983,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   gatewayBtnText: { fontSize: 12, fontWeight: '900' },
-  providerKeyTop: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
-  providerKeyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  providerKeyBadge: { borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  providerKeyTop: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: 14 },
+  providerKeyTitleRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexWrap: 'wrap' },
+  providerKeyBadge: { borderRadius: RADIUS.pill, paddingHorizontal: SPACING.sm, paddingVertical: 3 },
   providerKeyBadgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5, textTransform: 'uppercase' },
   providerLinkGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   providerLinkBtn: {
@@ -1987,7 +1994,7 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 13,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 10,
   },
   providerLinkText: { fontSize: 12, fontWeight: '800' },
@@ -1999,13 +2006,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  debugMetaGrid: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  debugMetaWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
+  debugMetaGrid: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.md },
+  debugMetaWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginBottom: SPACING.md },
   debugMetaPill: { flex: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 9 },
   debugMetaPillSmall: { minWidth: 92, flexGrow: 1, borderRadius: 13, paddingHorizontal: 10, paddingVertical: 9 },
   debugMetaLabel: { ...TYPE.micro, textTransform: 'uppercase' },
   debugMetaValue: { fontSize: 15, fontWeight: '900', marginTop: 2 },
-  debugProviderList: { gap: 8 },
+  debugProviderList: { gap: SPACING.sm },
   debugProviderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2020,7 +2027,7 @@ const styles = StyleSheet.create({
   debugMono: {
     borderWidth: 1,
     borderRadius: 14,
-    padding: 12,
+    padding: SPACING.md,
     fontSize: 11,
     lineHeight: 16,
   },
@@ -2028,10 +2035,10 @@ const styles = StyleSheet.create({
   notificationClearBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
     borderWidth: 1,
     borderRadius: 13,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 10,
   },
   notificationClearText: { color: '#DC2626', fontSize: 12, fontWeight: '900' },
@@ -2093,31 +2100,31 @@ const styles = StyleSheet.create({
 
   // Update card
   updateCard: {
-    borderRadius: 16, marginBottom: 20, padding: 16,
+    borderRadius: RADIUS.lg, marginBottom: SPACING.xl, padding: SPACING.lg,
     borderWidth: 1,
     shadowColor: '#F47B16', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
   },
-  updateTop:     { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  updateTop:     { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: 14 },
   updateIconWrap:{ width: 44, height: 44, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   updateTitle:   { fontSize: 15, fontWeight: '700' },
   updateSub:     { fontSize: 12, marginTop: 2 },
-  newBadge:      { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  newBadge:      { paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: 10 },
   newBadgeTxt:   { fontSize: 11, fontWeight: '800', color: '#fff' },
   updateActions: { flexDirection: 'row', gap: 10 },
   updateBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    borderRadius: 12, paddingVertical: 10, paddingHorizontal: 16,
+    borderRadius: RADIUS.md, paddingVertical: 10, paddingHorizontal: SPACING.lg,
   },
   updateBtnTxt: { fontSize: 13, fontWeight: '700' },
 
   // Backup tiles
-  backupRow: { flexDirection: 'row', gap: 12, marginBottom: 20 },
+  backupRow: { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.xl },
   backupTile: {
-    flex: 1, borderRadius: 16, padding: 18, alignItems: 'center', gap: 8,
+    flex: 1, borderRadius: RADIUS.lg, padding: 18, alignItems: 'center', gap: SPACING.sm,
     borderWidth: 1,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
   },
-  backupTileIcon: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+  backupTileIcon: { width: 52, height: 52, borderRadius: RADIUS.lg, justifyContent: 'center', alignItems: 'center' },
   backupTileLabel:{ fontSize: 14, fontWeight: '800' },
   backupTileSub:  { fontSize: 11, textAlign: 'center' },
 });

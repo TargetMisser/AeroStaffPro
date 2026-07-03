@@ -301,6 +301,54 @@ assert(detectedAirlines.includes('transavia'), 'airport airline discovery should
 assert(!detectedAirlines.some(key => key.startsWith('compagnia')), 'airport airline discovery should drop generic company placeholders');
 assert(!['xue', 'si', 'q1', 'ki', 'jt', 'sconosciuta'].some(key => detectedAirlines.includes(key)), 'airport airline discovery should drop raw unknown airline codes');
 
+const shortNamedAirlines = airportSettings.extractAirportAirlinesFromSchedule(['SAS', 'DHL', 'Scandinavian Airlines']);
+assert(shortNamedAirlines.includes('sas'), 'canonical airlines with 3-letter names must survive the raw-code filter');
+assert(shortNamedAirlines.includes('dhl'), 'DHL must survive the raw-code filter');
+assert(shortNamedAirlines.filter(key => key === 'sas').length === 1, 'SAS and Scandinavian Airlines should collapse into one key');
+
+// Regressione "voli che non gestisco": una compagnia appena rilevata nello
+// schedule non deve mai finire selezionata da sola nel filtro.
+assert(
+  airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: ['ryanair', 'easyjet'],
+    previousSelectedAirlines: ['ryanair', 'easyjet'],
+    nextAirportAirlines: ['ryanair', 'easyjet', 'british airways'],
+  }) === null,
+  'newly detected airlines must not be auto-selected',
+);
+assert(
+  JSON.stringify(airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: ['ryanair', 'easyjet'],
+    previousSelectedAirlines: ['ryanair', 'easyjet'],
+    nextAirportAirlines: ['ryanair', 'volotea'],
+  })) === JSON.stringify(['ryanair']),
+  'airlines removed from the airport list must be pruned from the selection',
+);
+assert(
+  JSON.stringify(airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: [],
+    previousSelectedAirlines: ['ryanair'],
+    nextAirportAirlines: ['ryanair'],
+  })) === JSON.stringify([]),
+  'a profile without saved airlines clears the selection',
+);
+assert(
+  airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: [],
+    previousSelectedAirlines: [],
+    nextAirportAirlines: ['ryanair'],
+  }) === null,
+  'an already-empty selection needs no reconciliation',
+);
+assert(
+  airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: ['ryanair'],
+    previousSelectedAirlines: ['ryanair'],
+    nextAirportAirlines: ['ryanair'],
+  }) === null,
+  'an unchanged selection needs no reconciliation',
+);
+
 const merged = adapter.mergeFlightLists([scheduledOnly], [scheduledOnly, delayed], 'departure');
 assert(merged.length === 2, 'merge should dedupe cached and fresh flights');
 
