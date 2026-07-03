@@ -649,6 +649,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     }
   };
 
+  // Sposta la vista settimana di ±1 settimana; aggiornare visibleMonth quando
+  // si cambia mese fa ricaricare gli eventi del nuovo intervallo (mese ±7gg).
+  const goToWeek = (delta: number) => {
+    const next = fromIsoDate(selectedDay);
+    next.setDate(next.getDate() + delta * 7);
+    const iso = toLocalIso(next);
+    setSelectedDay(iso);
+    if (!isSameMonth(visibleMonth, iso)) {
+      setVisibleMonth(new Date(next.getFullYear(), next.getMonth(), 1));
+    }
+  };
+
   const handleMonthChange = (day: DateData) => {
     const nextMonth = new Date(day.year, day.month - 1, 1);
     setVisibleMonth(nextMonth);
@@ -875,7 +887,6 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 <View style={s.weekHeader}>
                   <View>
                     <Text style={s.weekTitle}>{t('calModeWeek')}</Text>
-                    <Text style={s.weekRange}>{weekRangeLabel}</Text>
                   </View>
                   <View style={s.weekTotalPill}>
                     <Text style={s.weekTotalValue}>{weekHoursSummary.totalHours.toFixed(1)} h</Text>
@@ -883,6 +894,28 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                       {t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}
                     </Text>
                   </View>
+                </View>
+
+                <View style={s.weekNavRow}>
+                  <TouchableOpacity
+                    style={s.weekNavBtn}
+                    onPress={() => goToWeek(-1)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('calPrevWeek')}
+                  >
+                    <MaterialIcons name="chevron-left" size={24} color={colors.primaryText} />
+                  </TouchableOpacity>
+                  <Text style={s.weekNavLabel}>{weekRangeLabel}</Text>
+                  <TouchableOpacity
+                    style={s.weekNavBtn}
+                    onPress={() => goToWeek(1)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('calNextWeek')}
+                  >
+                    <MaterialIcons name="chevron-right" size={24} color={colors.primaryText} />
+                  </TouchableOpacity>
                 </View>
 
                 {selectedWeekDays.map(day => {
@@ -1271,9 +1304,11 @@ function makeStyles(c: ThemeColors) {
       borderWidth: c.isDark ? 1 : 0,
       borderColor: c.glassBorder,
     },
-    weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.md, marginBottom: 14 },
+    weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
     weekTitle: { color: c.primaryDark, fontSize: 20, fontWeight: '900' },
-    weekRange: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'uppercase' },
+    weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 14 },
+    weekNavBtn: { width: 40, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
+    weekNavLabel: { flex: 1, textAlign: 'center', color: c.textSub, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
     weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 14, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, alignItems: 'flex-end' },
     weekTotalValue: { color: c.primaryText, fontSize: 18, fontWeight: '900' },
     weekTotalLabel: { ...TYPE.micro, color: c.primaryDark, marginTop: 1 },
