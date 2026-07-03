@@ -44,6 +44,7 @@ import {
   useReducedMotionPreference,
 } from './src/utils/motion';
 import { ONBOARDING_SETUP_STORAGE_KEY, shouldShowOnboarding } from './src/utils/appSetup';
+import { SPACING, RADIUS } from './src/theme/spacing';
 
 installGlobalCrashHandler();
 
@@ -461,13 +462,13 @@ const styles = StyleSheet.create({
   appBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingBottom: 10,
     borderBottomWidth: 1,
     overflow: 'hidden',
   },
-  iconBtn: { padding: 6, borderRadius: 8, marginRight: 6 },
-  titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconBtn: { padding: 6, borderRadius: RADIUS.sm, marginRight: 6 },
+  titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   appBarTitle: { fontSize: 18, fontWeight: '700', letterSpacing: 0.3 },
   avatar: {
     width: 34, height: 34, borderRadius: 17,

@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const ARION_INBOX_URL = 'https://prd-arion-ap.firebaseapp.com/messages/inbox';
 
@@ -173,7 +174,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 10,
     borderBottomWidth: 1,
   },
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
   navButton: {
     width: 34,
     height: 34,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -191,7 +192,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   secureDot: { width: 7, height: 7, borderRadius: 99 },
   urlText: { flex: 1, fontSize: 12, fontWeight: '800' },
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: SPACING.xxl,
   },
   errorIcon: {
     width: 64,
@@ -226,14 +227,14 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   errorTitle: { fontSize: 21, fontWeight: '900', textAlign: 'center' },
-  errorCopy: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 8 },
-  errorMeta: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 12 },
+  errorCopy: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: SPACING.sm },
+  errorMeta: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: SPACING.md },
   errorActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  primaryBtn: { borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12 },
+  primaryBtn: { borderRadius: 14, paddingHorizontal: 18, paddingVertical: SPACING.md },
   primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
-  secondaryBtn: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12 },
+  secondaryBtn: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 18, paddingVertical: SPACING.md },
   secondaryBtnText: { fontSize: 14, fontWeight: '900' },
 });

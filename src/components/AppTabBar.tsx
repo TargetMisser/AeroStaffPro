@@ -3,6 +3,7 @@ import { Animated, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import FrostedSurface from './FrostedSurface';
 import TactilePressable from './motion/TactilePressable';
+import { SPACING, RADIUS } from '../theme/spacing';
 import {
   motionDurations,
   motionEasing,
@@ -470,7 +471,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: 24,
     left: 8,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     backgroundColor: 'rgba(255,255,255,0.24)',
     transform: [{ skewX: '-18deg' }],
   },
@@ -480,7 +481,7 @@ const styles = StyleSheet.create({
     right: 8,
     bottom: 5,
     height: 3,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     opacity: 0.72,
   },
   tabPressable: {
@@ -505,19 +506,19 @@ const styles = StyleSheet.create({
     bottom: 4,
     width: 18,
     height: 3,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
   },
   opsDeck: {
     flex: 1,
     paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingVertical: SPACING.sm,
     gap: 7,
   },
   opsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    paddingHorizontal: SPACING.xs,
   },
   opsKicker: {
     color: 'rgba(204,251,241,0.58)',
@@ -584,7 +585,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderWidth: 1,
     borderColor: 'rgba(204,251,241,0.14)',
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     paddingHorizontal: 5,
     paddingVertical: 1,
   },

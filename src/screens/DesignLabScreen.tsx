@@ -5,6 +5,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import CinematicMotionBoard from '../dev/CinematicMotionBoard';
 import DesignDirectionPreview from '../dev/DesignDirectionPreview';
 import { DESIGN_DIRECTIONS } from '../dev/designDirections';
+import { SPACING } from '../theme/spacing';
 
 export default function DesignLabScreen() {
   const { colors } = useAppTheme();
@@ -106,14 +107,14 @@ function makeStyles(isDark: boolean) {
       paddingVertical: 13,
     },
     selectorText: { fontSize: 14, fontWeight: '900' },
-    motionSection: { gap: 5, marginTop: 4 },
+    motionSection: { gap: 5, marginTop: SPACING.xs },
     motionKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
     motionTitle: { fontSize: 24, fontWeight: '900', letterSpacing: -0.5 },
     motionCopy: { fontSize: 13, lineHeight: 19 },
     notesCard: {
       borderWidth: 1,
       borderRadius: 24,
-      padding: 16,
+      padding: SPACING.lg,
       gap: 10,
       shadowColor: '#000',
       shadowOpacity: isDark ? 0.24 : 0.08,

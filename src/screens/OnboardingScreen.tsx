@@ -9,6 +9,7 @@ import { useAirport } from '../context/AirportContext';
 import { formatAirportSettingLabel } from '../utils/airportSettings';
 import { getFlightProviderSettingsState, type FlightProviderSettingsState } from '../utils/flightProviderSettings';
 import { getNotificationDebugSnapshot, NOTIF_ENABLED_KEY, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
+import { SPACING, RADIUS } from '../theme/spacing';
 import {
   buildSetupChecklist,
   ONBOARDING_SETUP_STORAGE_KEY,
@@ -246,13 +247,13 @@ export default function OnboardingScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { padding: 16, paddingBottom: 116, gap: 14 },
-  heroText: { flex: 1, gap: 4 },
+  content: { padding: SPACING.lg, paddingBottom: 116, gap: 14 },
+  heroText: { flex: 1, gap: SPACING.xs },
   heroIcon: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   kicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -0.7 },
   copy: { fontSize: 13, lineHeight: 19 },
-  progressCard: { borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  progressCard: { borderWidth: 1, borderRadius: RADIUS.xl, padding: SPACING.lg, flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   progressTitle: { fontSize: 18, fontWeight: '900' },
   progressSub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   steps: { gap: 10 },
@@ -263,15 +264,15 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 15, fontWeight: '900' },
   required: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   stepDetail: { fontSize: 12, lineHeight: 17 },
-  stepAction: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  stepAction: { borderWidth: 1, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: SPACING.sm },
   stepActionText: { fontSize: 12, fontWeight: '900' },
   airportCard: { borderWidth: 1, borderRadius: 18, padding: 14 },
   airportLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
   airportValue: { fontSize: 15, fontWeight: '900', marginTop: 3 },
   footerActions: { flexDirection: 'row', gap: 10 },
-  secondaryBtn: { flex: 1, borderWidth: 1, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  secondaryBtn: { flex: 1, borderWidth: 1, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: 'center' },
   secondaryText: { fontSize: 14, fontWeight: '900' },
-  primaryBtn: { flex: 1.3, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  primaryBtn: { flex: 1.3, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: 'center' },
   primaryText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });
 
@@ -280,7 +281,7 @@ function makeStyles(isOperations: boolean) {
     hero: {
       borderWidth: 1,
       borderRadius: isOperations ? 26 : 22,
-      padding: 16,
+      padding: SPACING.lg,
       flexDirection: 'row',
       gap: 14,
       alignItems: 'center',

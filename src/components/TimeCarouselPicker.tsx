@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const ITEM_H = 42;
 const VISIBLE = 5;
@@ -190,10 +191,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     borderWidth: 1,
     overflow: 'hidden',
-    paddingHorizontal: 8,
+    paddingHorizontal: SPACING.sm,
     marginVertical: 2,
   },
   selectionRect: {
@@ -201,7 +202,7 @@ const styles = StyleSheet.create({
     left: 3,
     right: 3,
     height: ITEM_H,
-    borderRadius: 8,
+    borderRadius: RADIUS.sm,
     borderWidth: 1.5,
     zIndex: 1,
   },
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
   colon: {
     fontSize: 24,
     fontWeight: '700',
-    marginHorizontal: 4,
+    marginHorizontal: SPACING.xs,
     marginBottom: 1,
   },
   fade: {

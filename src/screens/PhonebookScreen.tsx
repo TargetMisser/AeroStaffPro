@@ -8,6 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const STORAGE_KEY = 'aerostaff_phonebook_v1';
 
@@ -52,37 +53,37 @@ function makeModalStyles(c: ThemeColors) {
     sheet: {
       backgroundColor: c.card,
       borderTopLeftRadius: 24, borderTopRightRadius: 24,
-      padding: 20, paddingBottom: 36, maxHeight: '92%',
+      padding: SPACING.xl, paddingBottom: 36, maxHeight: '92%',
     },
     handle: {
       width: 40, height: 4, borderRadius: 2,
       backgroundColor: c.border,
       alignSelf: 'center', marginBottom: 18,
     },
-    title: { ...TYPE.headline, color: c.primaryDark, marginBottom: 16 },
-    label: { ...TYPE.caption, color: c.textSub, marginBottom: 6, marginTop: 12 },
+    title: { ...TYPE.headline, color: c.primaryDark, marginBottom: SPACING.lg },
+    label: { ...TYPE.caption, color: c.textSub, marginBottom: 6, marginTop: SPACING.md },
     input: {
-      borderWidth: 1.5, borderColor: c.border, borderRadius: 12,
+      borderWidth: 1.5, borderColor: c.border, borderRadius: RADIUS.md,
       paddingHorizontal: 14, paddingVertical: 11,
       fontSize: 15, color: c.text, backgroundColor: c.cardSecondary,
     },
-    catRow: { marginBottom: 4 },
+    catRow: { marginBottom: SPACING.xs },
     catChip: {
       paddingHorizontal: 14, paddingVertical: 7,
-      borderRadius: 20, borderWidth: 1.5, borderColor: c.border,
-      marginRight: 8, backgroundColor: c.card,
+      borderRadius: RADIUS.xl, borderWidth: 1.5, borderColor: c.border,
+      marginRight: SPACING.sm, backgroundColor: c.card,
     },
     catTxt: { ...TYPE.caption, color: c.textSub },
-    actions: { flexDirection: 'row', gap: 10, marginTop: 20 },
+    actions: { flexDirection: 'row', gap: 10, marginTop: SPACING.xl },
     cancelBtn: {
       flex: 1, borderWidth: 1.5, borderColor: c.border,
-      borderRadius: 12, paddingVertical: 13, alignItems: 'center',
+      borderRadius: RADIUS.md, paddingVertical: 13, alignItems: 'center',
     },
     cancelTxt: { fontSize: 14, fontWeight: '600', color: c.textSub },
     saveBtn: {
       flex: 2, backgroundColor: c.primary,
-      borderRadius: 12, paddingVertical: 13,
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+      borderRadius: RADIUS.md, paddingVertical: 13,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm,
     },
     saveTxt: { fontSize: 14, fontWeight: '700', color: '#fff' },
   });
@@ -217,19 +218,19 @@ function makeRowStyles(c: ThemeColors) {
       shadowColor: '#000', shadowOffset: { width: 0, height: 1 },
       shadowOpacity: c.isDark ? 0 : 0.05, shadowRadius: 4, elevation: c.isDark ? 0 : 2, borderWidth: c.isDark ? 1 : 0, borderColor: c.border,
     },
-    dot: { width: 4, borderRadius: 2, alignSelf: 'stretch', marginRight: 12 },
+    dot: { width: 4, borderRadius: 2, alignSelf: 'stretch', marginRight: SPACING.md },
     info: { flex: 1 },
-    topRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
+    topRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 3 },
     name:   { fontSize: 14, fontWeight: '700', color: c.text, flex: 1 },
     badge: {
-      paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+      paddingHorizontal: SPACING.sm, paddingVertical: 2, borderRadius: 10,
     },
     badgeTxt: { fontSize: 10, fontWeight: '700' },
     number: { fontSize: 13, color: c.textSub, fontWeight: '500' },
     note:   { fontSize: 11, color: c.textMuted, marginTop: 2 },
     callBtn: {
       width: 36, height: 36, borderRadius: 18,
-      justifyContent: 'center', alignItems: 'center', marginLeft: 8,
+      justifyContent: 'center', alignItems: 'center', marginLeft: SPACING.sm,
     },
     editBtn: { padding: 6, marginLeft: 2 },
   });
@@ -297,7 +298,7 @@ function makeStyles(c: ThemeColors) {
     root: { flex: 1, backgroundColor: c.bg },
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 10,
-      paddingHorizontal: 16, paddingVertical: 12,
+      paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
     },
@@ -305,31 +306,31 @@ function makeStyles(c: ThemeColors) {
     addBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
       backgroundColor: c.primary, borderRadius: 10,
-      paddingHorizontal: 12, paddingVertical: 8,
+      paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
     },
     addTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
     searchRow: {
       flexDirection: 'row', alignItems: 'center', gap: 10,
-      margin: 12, paddingHorizontal: 14, paddingVertical: 10,
+      margin: SPACING.md, paddingHorizontal: 14, paddingVertical: 10,
       backgroundColor: c.card, borderRadius: 14,
       borderWidth: 1.5, borderColor: c.border,
     },
     searchInput: { flex: 1, fontSize: 14, color: c.text },
     filterBar: { maxHeight: 50, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
-    filterContent: { paddingHorizontal: 12, paddingVertical: 9, gap: 8 },
+    filterContent: { paddingHorizontal: SPACING.md, paddingVertical: 9, gap: SPACING.sm },
     filterChip: {
       paddingHorizontal: 14, paddingVertical: 6,
-      borderRadius: 20, borderWidth: 1.5, borderColor: c.border,
+      borderRadius: RADIUS.xl, borderWidth: 1.5, borderColor: c.border,
       backgroundColor: c.card,
     },
     filterChipActive: { backgroundColor: c.primary, borderColor: c.primary },
     filterTxt: { ...TYPE.caption, color: c.textSub },
     filterTxtActive: { color: '#fff' },
     list: { flex: 1 },
-    listPad: { padding: 16, paddingBottom: 96 },
+    listPad: { padding: SPACING.lg, paddingBottom: 96 },
     groupHeader: {
-      flexDirection: 'row', alignItems: 'center', gap: 8,
-      marginBottom: 8, marginTop: 6,
+      flexDirection: 'row', alignItems: 'center', gap: SPACING.sm,
+      marginBottom: SPACING.sm, marginTop: 6,
     },
     groupDot: { width: 8, height: 8, borderRadius: 4 },
     groupLabel: { fontSize: 11, fontWeight: '700', color: c.textSub, letterSpacing: 0.8, flex: 1 },

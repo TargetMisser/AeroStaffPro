@@ -8,6 +8,7 @@ import AeroStaffLogo from './AeroStaffLogo';
 import FrostedSurface from './FrostedSurface';
 import BoardReveal from './motion/BoardReveal';
 import TactilePressable from './motion/TactilePressable';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 export type DrawerItem = {
   id: string;
@@ -227,7 +228,7 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
     opsBrandRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
+      gap: SPACING.md,
       flex: 1,
     },
     opsLogoBox: {
@@ -257,7 +258,7 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
     opsClose: {
       width: 34,
       height: 34,
-      borderRadius: 12,
+      borderRadius: RADIUS.md,
       borderWidth: 1,
       borderColor: 'rgba(45,212,191,0.24)',
       backgroundColor: 'rgba(2,8,12,0.36)',
@@ -268,9 +269,9 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 20,
+      paddingHorizontal: SPACING.xl,
       paddingTop: surface.isOperations ? 16 : 20,
-      paddingBottom: 8,
+      paddingBottom: SPACING.sm,
     },
     sectionLabel: {
       fontSize: 10,
@@ -315,7 +316,7 @@ function makeStyles(c: ThemeColors, surface: DrawerSurfaceConfig) {
     itemCopy: { flex: 1 },
     itemLabel: { fontSize: 14, fontWeight: '600', color: c.text },
     itemSub: { fontSize: 11, color: c.isDark ? 'rgba(229,233,240,0.70)' : c.textMuted, marginTop: 1 },
-    divider: { height: 1, backgroundColor: c.border, marginHorizontal: 18, marginTop: 16 },
+    divider: { height: 1, backgroundColor: c.border, marginHorizontal: 18, marginTop: SPACING.lg },
     version: {
       fontSize: 11,
       color: c.isDark ? 'rgba(229,233,240,0.66)' : c.textMuted,

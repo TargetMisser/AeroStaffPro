@@ -13,6 +13,7 @@ import { fetchAirportScheduleRaw } from '../utils/fr24api';
 import { filterFlightsByAirlines, getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import { useLanguage } from '../context/LanguageContext';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 enableLegacyAndroidLayoutAnimation();
 
@@ -161,7 +162,7 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
       )}
 
       {/* Legenda */}
-      <View style={[s.legend, inline && { paddingHorizontal: 0, paddingBottom: 8 }]}>
+      <View style={[s.legend, inline && { paddingHorizontal: 0, paddingBottom: SPACING.sm }]}>
         <View style={s.legendItem}>
           <View style={[s.legendDot, { backgroundColor: CI_COLOR }]} />
           <Text style={[s.legendText, { color: colors.textSub }]}>Check-in</Text>
@@ -179,14 +180,14 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
         </View>
       ) : error ? (
         <View style={[s.center, inline && { minHeight: 80 }]}>
-          <Text style={{ color: colors.textSub, fontSize: 14, marginBottom: 12 }}>Errore nel caricamento</Text>
+          <Text style={{ color: colors.textSub, fontSize: 14, marginBottom: SPACING.md }}>Errore nel caricamento</Text>
           <TouchableOpacity onPress={fetchFlights} style={[s.retryBtn, { backgroundColor: colors.primary }]}>
             <Text style={{ color: '#fff', fontWeight: '700' }}>Riprova</Text>
           </TouchableOpacity>
         </View>
       ) : flights.length === 0 ? (
         <View style={[s.center, inline && { minHeight: 80 }]}>
-          <MaterialIcons name="flight-takeoff" size={30} color={colors.textMuted} style={{ marginBottom: 8 }} />
+          <MaterialIcons name="flight-takeoff" size={30} color={colors.textMuted} style={{ marginBottom: SPACING.sm }} />
           <Text style={{ color: colors.textSub, fontSize: 14 }}>Nessuna partenza nel turno</Text>
         </View>
       ) : (
@@ -321,20 +322,20 @@ function makeStyles(c: ThemeColors) {
     },
     handleRow: { alignItems: 'center', paddingTop: 10, paddingBottom: 6 },
     handle: { width: 36, height: 4, borderRadius: 2 },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 },
+    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.xl, paddingBottom: 10 },
     title: { ...TYPE.headline },
     subtitle: { fontSize: 12, marginTop: 2 },
-    closeBtn: { padding: 8, borderRadius: 20 },
-    legend: { flexDirection: 'row', gap: 16, paddingHorizontal: 20, paddingBottom: 12 },
+    closeBtn: { padding: SPACING.sm, borderRadius: RADIUS.xl },
+    legend: { flexDirection: 'row', gap: SPACING.lg, paddingHorizontal: SPACING.xl, paddingBottom: SPACING.md },
     legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     legendDot: { width: 10, height: 10, borderRadius: 5 },
     legendText: { fontSize: 11, fontWeight: '600' },
     center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    retryBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 10 },
+    retryBtn: { paddingHorizontal: SPACING.xl, paddingVertical: 10, borderRadius: 10 },
     scrollArea: { flex: 1 },
 
     // Righello orizzontale in alto
-    rulerWrap: { flexDirection: 'row', paddingHorizontal: 12, marginBottom: 4, height: 32 },
+    rulerWrap: { flexDirection: 'row', paddingHorizontal: SPACING.md, marginBottom: SPACING.xs, height: 32 },
     rulerLabelSpace: { width: 80 },
     ruler: { flex: 1, position: 'relative' },
     rulerTick: { position: 'absolute', top: 0, alignItems: 'center', transform: [{ translateX: -1 }] },
@@ -345,8 +346,8 @@ function makeStyles(c: ThemeColors) {
     nowTick: { width: 2, height: 10, backgroundColor: '#EF4444', borderRadius: 1 },
 
     // Righe voli
-    flightRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1 },
-    flightLabelWrap: { width: 80, flexDirection: 'row', alignItems: 'center', gap: 4 },
+    flightRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderBottomWidth: 1 },
+    flightLabelWrap: { width: 80, flexDirection: 'row', alignItems: 'center', gap: SPACING.xs },
     airlineDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
     flightLabel: { fontSize: 11, fontWeight: '700', flexShrink: 1 },
     flightDest: { fontSize: 10, fontWeight: '600' },
@@ -355,16 +356,16 @@ function makeStyles(c: ThemeColors) {
     ganttArea: { flex: 1, height: 36, position: 'relative', justifyContent: 'center' },
     ganttGridLine: { position: 'absolute', top: 0, bottom: 0, width: 1, opacity: 0.25 },
     ganttNowLine: { position: 'absolute', top: 0, bottom: 0, width: 2, backgroundColor: '#EF4444', opacity: 0.5, zIndex: 5 },
-    ganttBar: { position: 'absolute', height: 14, borderRadius: 3, justifyContent: 'center', paddingHorizontal: 4 },
+    ganttBar: { position: 'absolute', height: 14, borderRadius: 3, justifyContent: 'center', paddingHorizontal: SPACING.xs },
     ganttBarCI: { backgroundColor: CI_COLOR, top: 2 },
     ganttBarGate: { backgroundColor: GATE_COLOR, bottom: 2 },
     ganttBarText: { fontSize: 8, fontWeight: '800', color: '#fff' },
     depMarker: { position: 'absolute', top: 0, bottom: 0, borderLeftWidth: 2, borderStyle: 'dashed' },
 
     // Card espansa
-    expandedCard: { borderRadius: 10, padding: 12, marginHorizontal: 12, marginBottom: 4, borderWidth: 1 },
-    expandedTitle: { fontSize: 14, fontWeight: '700', marginBottom: 8 },
-    expandedRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+    expandedCard: { borderRadius: 10, padding: SPACING.md, marginHorizontal: SPACING.md, marginBottom: SPACING.xs, borderWidth: 1 },
+    expandedTitle: { fontSize: 14, fontWeight: '700', marginBottom: SPACING.sm },
+    expandedRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.xs },
     expandedLabel: { fontSize: 11, fontWeight: '600' },
     expandedValue: { fontSize: 11, fontWeight: '700' },
   });

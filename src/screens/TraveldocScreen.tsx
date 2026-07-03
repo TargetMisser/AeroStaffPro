@@ -6,6 +6,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import TactilePressable from '../components/motion/TactilePressable';
 import { TYPE, WEIGHT } from '../theme/typography';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const DARK_CSS_JS = `
 (function() {
@@ -66,7 +67,7 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
       )}
       {hasActivated && loadError && !loading && (
         <View style={[styles.loadingWrap, { backgroundColor: colors.bg }]}>
-          <Text style={[styles.loadingText, { color: colors.textSub, marginBottom: 16 }]}>
+          <Text style={[styles.loadingText, { color: colors.textSub, marginBottom: SPACING.lg }]}>
             Caricamento lento o errore di rete.
           </Text>
           <TactilePressable
@@ -98,15 +99,15 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
 }
 
 const styles = StyleSheet.create({
-  header: { paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1 },
+  header: { paddingHorizontal: SPACING.lg, paddingVertical: 14, borderBottomWidth: 1 },
   title: { ...TYPE.title },
   sub: { fontSize: 12, marginTop: 2 },
-  loadingWrap: { position: 'absolute', top: 60, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10, paddingHorizontal: 20 },
-  loadingText: { marginTop: 12, fontSize: 14, textAlign: 'center' },
+  loadingWrap: { position: 'absolute', top: 60, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10, paddingHorizontal: SPACING.xl },
+  loadingText: { marginTop: SPACING.md, fontSize: 14, textAlign: 'center' },
   retryBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingHorizontal: SPACING.xxl,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
