@@ -121,7 +121,7 @@ Fast-forward `main` through an empty `[skip ci]` sync commit so the release tag 
 npm run qa:emulator -- --install-release v2.7.31
 ```
 
-Capture all four selected tabs, compare selector and selected-button centers from UI dumps, and require zero offset.
+Capture all four selected tabs, compare selector and selected-button centers from UI dumps, and require at most 1 px offset for device-pixel rounding.
 
 - [ ] **Step 5: Restore the user branch**
 
