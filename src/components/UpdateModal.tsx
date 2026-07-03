@@ -211,7 +211,7 @@ export default function UpdateModal({ info, onDismiss }: Props) {
               activeOpacity={0.8}
             >
               <MaterialIcons name="open-in-browser" size={16} color={colors.primary} />
-              <Text style={[styles.btnText, { color: colors.primary }]}>GitHub</Text>
+              <Text style={[styles.btnText, { color: colors.primaryText }]}>GitHub</Text>
             </TouchableOpacity>
 
             <TouchableOpacity

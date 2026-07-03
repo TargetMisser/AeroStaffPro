@@ -147,7 +147,7 @@ export default function OnboardingScreen({
           <MaterialIcons name="tune" size={28} color={colors.primary} />
         </View>
         <View style={styles.heroText}>
-          <Text style={[styles.kicker, { color: colors.primary }]}>SETUP GUIDATO</Text>
+          <Text style={[styles.kicker, { color: colors.primaryText }]}>SETUP GUIDATO</Text>
           <Text style={[styles.title, { color: colors.text }]}>Prepara AeroStaff Pro</Text>
           <Text style={[styles.copy, { color: colors.textSub }]}>
             Configura il minimo utile: aeroporto, calendario, fonti voli, notifiche e widget.
@@ -187,28 +187,28 @@ export default function OnboardingScreen({
             <View style={styles.stepText}>
               <View style={styles.stepTitleRow}>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>{item.title}</Text>
-                {item.required && <Text style={[styles.required, { color: colors.primary }]}>richiesto</Text>}
+                {item.required && <Text style={[styles.required, { color: colors.primaryText }]}>richiesto</Text>}
               </View>
               <Text style={[styles.stepDetail, { color: colors.textSub }]}>{item.detail}</Text>
             </View>
             {item.id === 'profile' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={onOpenProfiles}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>Apri</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>Apri</Text>
               </TouchableOpacity>
             )}
             {item.id === 'calendar' && item.status !== 'ready' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={requestCalendar}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>Consenti</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>Consenti</Text>
               </TouchableOpacity>
             )}
             {item.id === 'flightData' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={onOpenFlightApis}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>API</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>API</Text>
               </TouchableOpacity>
             )}
             {item.id === 'notifications' && item.status !== 'ready' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={requestNotifications}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>Attiva</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>Attiva</Text>
               </TouchableOpacity>
             )}
           </View>

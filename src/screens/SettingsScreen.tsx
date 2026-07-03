@@ -142,7 +142,7 @@ function ThemeCard({ option, selected, onSelect, activeLabel }: {
       <View style={styles.themeInfo}>
         <View style={styles.themeInfoTop}>
           <MaterialIcons name={option.icon} size={18} color={selected ? colors.primary : colors.textSub} />
-          <Text style={[styles.themeLabel, { color: colors.text }, selected && { color: colors.primary }]}>
+          <Text style={[styles.themeLabel, { color: colors.text }, selected && { color: colors.primaryText }]}>
             {option.label}
           </Text>
           {selected && (
@@ -787,7 +787,7 @@ export default function SettingsScreen({
             {checkingUpdate
               ? <ActivityIndicator size={14} color={colors.primary} />
               : <MaterialIcons name="refresh" size={16} color={colors.primary} />}
-            <Text style={[styles.updateBtnTxt, { color: colors.primary }]}>
+            <Text style={[styles.updateBtnTxt, { color: colors.primaryText }]}>
               {checkingUpdate ? 'Controllo…' : 'Controlla'}
             </Text>
           </TouchableOpacity>

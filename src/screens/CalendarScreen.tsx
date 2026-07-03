@@ -1140,7 +1140,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                       <Text style={[s.previewDate, { color: colors.text }]}>{fmtDate(shift.date)}</Text>
                       {shift.type === 'work' ? (
                         <View style={[s.previewPill, { backgroundColor: colors.primaryLight }]}>
-                          <Text style={[s.previewPillText, { color: colors.primary }]}>
+                          <Text style={[s.previewPillText, { color: colors.primaryText }]}>
                             {shift.start} - {shift.end}
                           </Text>
                         </View>
@@ -1255,7 +1255,7 @@ function makeStyles(c: ThemeColors) {
     legendText: { ...TYPE.caption, color: c.textSub },
     calendarSummary: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.border },
     calendarSummaryLabel: { color: c.textSub, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
-    calendarSummaryValue: { color: c.primary, fontSize: 28, fontWeight: '800', marginTop: 6 },
+    calendarSummaryValue: { color: c.primaryText, fontSize: 28, fontWeight: '800', marginTop: 6 },
     calendarSummaryMeta: { ...TYPE.callout, color: c.textSub, marginTop: 4 },
     weekCard: {
       backgroundColor: c.card,
@@ -1274,7 +1274,7 @@ function makeStyles(c: ThemeColors) {
     weekTitle: { color: c.primaryDark, fontSize: 20, fontWeight: '900' },
     weekRange: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3, textTransform: 'uppercase' },
     weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'flex-end' },
-    weekTotalValue: { color: c.primary, fontSize: 18, fontWeight: '900' },
+    weekTotalValue: { color: c.primaryText, fontSize: 18, fontWeight: '900' },
     weekTotalLabel: { ...TYPE.micro, color: c.primaryDark, marginTop: 1 },
     weekRow: {
       flexDirection: 'row',
@@ -1329,10 +1329,10 @@ function makeStyles(c: ThemeColors) {
     shiftIconBox: { width: 44, height: 44, backgroundColor: c.primaryLight, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
     shiftTypeName: { ...TYPE.headline, color: c.primaryDark },
     timeRow: { flexDirection: 'row', alignItems: 'center' },
-    timeText: { ...TYPE.title, color: c.primary },
+    timeText: { ...TYPE.title, color: c.primaryText },
     flightBadge: { marginTop: 14, backgroundColor: c.primaryLight, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, alignSelf: 'flex-start' },
     flightBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    flightBadgeText: { color: c.primary, fontWeight: '700', fontSize: 13 },
+    flightBadgeText: { color: c.primaryText, fontWeight: '700', fontSize: 13 },
     restRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
     restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.successSoft, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
     restText: { ...TYPE.headline, color: c.success },

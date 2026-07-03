@@ -115,7 +115,7 @@ export default function ArionInboxScreen() {
                 <Text style={styles.primaryBtnText}>Riprova</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={openExternal} activeOpacity={0.85}>
-                <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>Browser</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.primaryText }]}>Browser</Text>
               </TouchableOpacity>
             </View>
           </View>

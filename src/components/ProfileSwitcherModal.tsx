@@ -276,8 +276,8 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
                         onPress={() => setDraftAirportCode(airport.code)}
                         activeOpacity={0.8}
                       >
-                        <Text style={[styles.quickPickCode, active && { color: colors.primary }]}>{airport.code}</Text>
-                        <Text style={[styles.quickPickCity, active && { color: colors.primary }]}>{airport.city}</Text>
+                        <Text style={[styles.quickPickCode, active && { color: colors.primaryText }]}>{airport.code}</Text>
+                        <Text style={[styles.quickPickCity, active && { color: colors.primaryText }]}>{airport.city}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -309,7 +309,7 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
                         activeOpacity={0.85}
                       >
                         <View style={[styles.airlineDot, { backgroundColor: dot }]} />
-                        <Text style={[styles.airlineText, checked && { color: colors.primary }]}>{label}</Text>
+                        <Text style={[styles.airlineText, checked && { color: colors.primaryText }]}>{label}</Text>
                         <MaterialIcons
                           name={checked ? 'check-circle' : 'radio-button-unchecked'}
                           size={18}
@@ -497,7 +497,7 @@ function makeStyles(colors: ThemeColors) {
     secondaryBtnText: {
       fontSize: 13,
       fontWeight: '700',
-      color: colors.primary,
+      color: colors.primaryText,
     },
     primaryBtn: {
       flexDirection: 'row',
@@ -586,7 +586,7 @@ function makeStyles(colors: ThemeColors) {
     linkText: {
       fontSize: 12,
       fontWeight: '700',
-      color: colors.primary,
+      color: colors.primaryText,
     },
     airlineGrid: {
       gap: 10,

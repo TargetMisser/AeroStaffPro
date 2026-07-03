@@ -24,6 +24,10 @@ export type ThemeColors = {
   primary: string;
   primaryDark: string;
   primaryLight: string;
+  /* Arancio/teal per TESTO su card e bg: nel tema chiaro primary (2.7:1) non
+     è leggibile come testo, primaryText sì (>=4.5:1). Per icone e superfici
+     continuare a usare primary. */
+  primaryText: string;
   // Glass tokens
   glass: string;
   glassBorder: string;
@@ -62,6 +66,7 @@ const LIGHT: ThemeColors = {
   primary:        '#F47B16',
   primaryDark:    '#C2520A',
   primaryLight:   '#FFEDD5',
+  primaryText:    '#C2520A',
   glass:          '#FFFFFF',
   glassBorder:    'transparent',
   glassStrong:    '#FFFFFF',
@@ -98,6 +103,7 @@ const DARK: ThemeColors = {
   primary:        '#2DD4BF',
   primaryDark:    '#99F6E4',
   primaryLight:   'rgba(45,212,191,0.18)',
+  primaryText:    '#2DD4BF',
   glass:          '#111A1F',
   glassBorder:    'rgba(45,212,191,0.24)',
   glassStrong:    '#19262D',
