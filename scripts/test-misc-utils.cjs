@@ -53,6 +53,7 @@ function loadTsModule(relativePath, mocks = {}) {
     Error,
     setTimeout,
     clearTimeout,
+    AbortController,
     ...(mocks.__globals ?? {}),
   };
   vm.runInNewContext(output, sandbox, { filename: absolutePath });
@@ -730,9 +731,102 @@ async function testWidgetShiftSelfHeal() {
   assert(typeof denied.state === 'string', 'denied calendar permission should still return a widget state');
 }
 
+async function testWidgetCacheFirstPaint() {
+  const toIso = date => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const fmt = ts => {
+    const date = new Date(ts * 1000);
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  };
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const shiftStart = Math.floor(today.getTime() / 1000);
+  const shiftEnd = shiftStart + (23 * 60 + 59) * 60;
+  const shiftLabel = `${fmt(shiftStart)} – ${fmt(shiftEnd)}`;
+  const store = new Map([
+    ['widget_shift_v1', JSON.stringify({
+      date: toIso(today),
+      shiftToday: { start: shiftStart, end: shiftEnd },
+      isRestDay: false,
+      nextShift: null,
+    })],
+    ['widget_data_cache_v1', JSON.stringify({
+      state: 'work',
+      shiftLabel,
+      updatedAt: '08:00',
+      flights: [{
+        flightNumber: 'FR1234',
+        destinationIata: 'STN',
+        departureTime: '10:00',
+        ciOpen: '08:00',
+        ciClose: '09:20',
+        gateOpen: '09:30',
+        gateClose: '09:40',
+        airlineColor: '#FFCC00',
+        departureTs: shiftStart + 10 * 60 * 60,
+      }],
+    })],
+    ['aerostaff_flight_filter_v1', JSON.stringify([])],
+  ]);
+  const asyncStorageMock = {
+    getItem: async key => (store.has(key) ? store.get(key) : null),
+    setItem: async (key, value) => { store.set(key, value); },
+  };
+  const calendarMock = {
+    EntityTypes: { EVENT: 'event' },
+    getCalendarPermissionsAsync: async () => ({ status: 'granted' }),
+    getCalendarsAsync: async () => [],
+    getEventsAsync: async () => [],
+  };
+  let resolveProvider;
+  const providerWait = new Promise(resolve => { resolveProvider = resolve; });
+  const handler = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+    '@react-native-async-storage/async-storage': asyncStorageMock,
+    'expo-calendar': calendarMock,
+    '../utils/airportSettings': {
+      buildFr24ScheduleUrl: code => `https://example.test/${code}`,
+      getAirportInfo: code => ({ code, name: 'Pisa', city: 'Pisa', icao: 'LIRP', isCustom: false }),
+      getStoredAirportAirlines: async () => [],
+      getStoredAirportCode: async () => 'PSA',
+      storeDetectedAirportAirlines: async () => {},
+    },
+    '../utils/liveArrivalEta': {
+      applyLiveDepartureStatus: departures => departures,
+      fetchAdsbAircraft: async () => [],
+    },
+    '../utils/flightProviders/staffMonitorProvider': {
+      staffMonitorProvider: {
+        supports: () => true,
+        fetch: async () => providerWait,
+      },
+    },
+    './ShiftWidget': { ShiftWidget: () => null },
+    './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light', themeSnapshot: undefined }) },
+    'react-native-android-widget': {},
+    react: require('react'),
+  });
+  assert(handler.WIDGET_REFRESH_TIMEOUT_MS === 6_000, 'widget network refresh should have a six-second hard deadline');
+  const renders = [];
+  const taskPromise = handler.widgetTaskHandler({
+    widgetAction: 'WIDGET_UPDATE',
+    widgetInfo: { widgetName: 'ShiftFlights', widgetId: 7, width: 320, height: 180 },
+    renderWidget: value => { renders.push(value); },
+  });
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert(renders.length === 1, 'widget update should paint cached content before network completion');
+  resolveProvider({ allArrivals: [], allDepartures: [] });
+  await taskPromise;
+  assert(renders.length === 2, 'widget update should repaint after fresh data replaces the cached state');
+}
+
 async function main() {
   await testDateFormat();
   await testWidgetShiftSelfHeal();
+  await testWidgetCacheFirstPaint();
   await testThemeMode();
   await testSecureWipe();
   await testFlightProviderSettings();

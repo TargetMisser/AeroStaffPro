@@ -17,6 +17,8 @@ export const WIDGET_CACHE_KEY = 'widget_data_cache_v1';
 /** Key used to store today's shift data so the widget can self-update */
 export const WIDGET_SHIFT_KEY = 'widget_shift_v1';
 
+export const WIDGET_REFRESH_TIMEOUT_MS = 6_000;
+
 // ─── Types ──────────────────────────────────────────────────────────────────────
 export type WidgetFlight = {
   flightNumber: string;
@@ -217,6 +219,18 @@ async function renderThemedWidget(props: WidgetTaskHandlerProps, data: WidgetDat
   );
 }
 
+async function withWidgetRefreshTimeout<T>(operation: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('WIDGET_REFRESH_TIMEOUT')), WIDGET_REFRESH_TIMEOUT_MS);
+  });
+  try {
+    return await Promise.race([operation, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 // ─── Fetch fresh widget data from the live provider + cached shift key ────────
 export async function fetchFreshWidgetData(): Promise<WidgetData> {
   try {
@@ -324,27 +338,33 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
   }
 }
 
+async function renderCachedThenRefresh(props: WidgetTaskHandlerProps): Promise<void> {
+  const cached = await getWidgetData();
+  await renderThemedWidget(props, cached);
+
+  try {
+    const fresh = await withWidgetRefreshTimeout(fetchFreshWidgetData());
+    if (JSON.stringify(fresh) !== JSON.stringify(cached)) {
+      await renderThemedWidget(props, fresh);
+    }
+  } catch {
+    // The cached widget is already painted; keep it on transient refresh failures.
+  }
+}
+
 // ─── Task handler ───────────────────────────────────────────────────────────────
 export async function widgetTaskHandler(props: WidgetTaskHandlerProps) {
   switch (props.widgetAction) {
     case 'WIDGET_ADDED':
-    case 'WIDGET_RESIZED': {
-      const data = await getWidgetData();
-      await renderThemedWidget(props, data);
-      break;
-    }
-
+    case 'WIDGET_RESIZED':
     case 'WIDGET_UPDATE': {
-      // Fetch fresh data from FR24 + cached shift on periodic updates
-      const data = await fetchFreshWidgetData();
-      await renderThemedWidget(props, data);
+      await renderCachedThenRefresh(props);
       break;
     }
 
     case 'WIDGET_CLICK': {
       if (props.clickAction === 'REFRESH') {
-        const data = await fetchFreshWidgetData();
-        await renderThemedWidget(props, data);
+        await renderCachedThenRefresh(props);
       }
       break;
     }
