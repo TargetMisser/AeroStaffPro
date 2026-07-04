@@ -1,26 +1,24 @@
 # AeroStaff Pro
 
-AeroStaff Pro is a premium React Native application designed specifically for airport ground staff and flight crew shift operations. It brings together operational schedules, real-time flight telemetry, custom widgets, Wear OS integration, and daily workspace tools into a singular, glassmorphic cockpit interface.
+AeroStaff Pro is a React Native app for airport shift work. It keeps the things that usually end up scattered across calendars, screenshots, notes, staff tools, and flight boards in one place.
 
-## Key Features
+## What It Does
 
-- **Dynamic Shift Scheduling**: Seamlessly track shift rosters using interactive **Month** and **Week** views. Includes real-time visual timeline indicators, weather overlays, and flight workload summaries.
-- **Roster File Parsing**: Automatically import and convert official roster schedules and PDF files into interactive calendar events using offline parser engines.
-- **Real-Time Flight Telemetry**: Track operative departures and arrivals directly from the airfield with support for multi-source data fallbacks (FR24 API, StaffMonitor PSA, AeroDataBox, and AirLabs).
-- **EasyJet Overlap Mode**: A high-precision monitoring system that automatically triggers when multiple easyJet flights overlap in the same time frame. It displays a real-time orange dashboard monitor with exact-second countdowns and schedules unified sticky notifications in the system tray.
-- **Deep Airline App Links**: Open specific flights and routes directly inside native tracking platforms like Flightradar24 with single-touch handlers.
-- **Android Widgets & Wear OS Companion**: View current shift timelines, flight schedules, and next-shift widgets right from the home screen or on a Wear OS smartwatch.
-- **Crew Operations Chest**: Store operational manuals (DCS reference, ground handling checklists), notepad, personal contacts, and credentials securely.
-- **Smart Notification Engine**: Configure customized arrival, departure, and shift reminders with precise timing.
+- Tracks shifts with month and week views.
+- Imports shift rosters from files and screenshots.
+- Shows same-day and next-day flight activity for the selected airport.
+- Supports flight data providers such as AirLabs and Flightradar24 through user-provided API keys.
+- Opens flights in Flightradar24 when the installed app can handle the route.
+- Provides Android widgets and a Wear OS companion for quick shift and flight information.
+- Stores operational notes, contacts, manuals, passwords, and useful links.
+- Includes notification controls for flight and shift reminders.
 
 ## Interface Preview
 
 <p align="center">
-  <img src="assets/demo_home.png" width="260" alt="Home Screen Dashboard" />
+  <img src="assets/demo_home.png" width="380" alt="Home Screen Dashboard" />
   &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/demo_flights.png" width="260" alt="Flights List View" />
-  &nbsp;&nbsp;&nbsp;&nbsp;
-  <img src="assets/demo_calendar.png" width="260" alt="Calendar Shifts View" />
+  <img src="assets/demo_flights.png" width="380" alt="Flights List View" />
 </p>
 
 ## Development Note
@@ -87,7 +85,7 @@ npm run github:branches:audit
 
 APK files are published in [GitHub Releases](https://github.com/TargetMisser/AeroStaffPro/releases).
 
-Latest stable release: **v2.7.16**
+Latest stable release: **v2.7.31**
 
 To install the Android app:
 

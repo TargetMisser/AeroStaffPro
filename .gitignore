@@ -58,3 +58,6 @@ emulator-*.png
 # generated native folders
 /ios
 .dual-graph/
+
+# local scratch/smoke scripts and QA output
+tmp/

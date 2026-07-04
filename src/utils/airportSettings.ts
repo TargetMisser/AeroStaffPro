@@ -1,5 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ALLOWED_AIRLINES, AIRLINE_DISPLAY_NAMES } from './airlineOps';
+import {
+  AIRLINE_ALIASES,
+  canonicalAirlineKey,
+  compactAirlineText,
+  normalizeAirlineText,
+} from './airlineAliases';
 
 export type AirportPreset = {
   code: string;
@@ -53,34 +59,12 @@ const airportAirlinesCache: Record<string, string[]> = Object.fromEntries(
 );
 
 function normalizeAirlineKey(value: string | null | undefined): string {
-  return (value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return normalizeAirlineText(value);
 }
 
 function compactAirlineKey(value: string | null | undefined): string {
-  return normalizeAirlineKey(value).replace(/\s+/g, '');
+  return compactAirlineText(value);
 }
-
-const AIRLINE_CANONICAL_RULES: Array<{ canonical: string; needles: string[] }> = [
-  { canonical: 'ryanair', needles: ['ryanair', 'fr', 'ryr'] },
-  { canonical: 'easyjet', needles: ['easyjet', 'easy jet', 'easyjet europe', 'easyjet switzerland', 'easyjet uk', 'u2', 'ec', 'ds', 'eju', 'ezy', 'ezs'] },
-  { canonical: 'wizz', needles: ['wizz', 'wizz air', 'wizz air malta', 'wizz air uk', 'wizz air abu dhabi', 'w6', 'w4', 'w9', 'wzz', 'wmt', 'wuk'] },
-  { canonical: 'volotea', needles: ['volotea', 'v7'] },
-  { canonical: 'vueling', needles: ['vueling', 'vy'] },
-  { canonical: 'transavia', needles: ['transavia france', 'transavia holland', 'transavia airlines', 'transavia', 'hv', 'to', 'tra', 'tvf'] },
-  { canonical: 'aer lingus', needles: ['aer lingus', 'ei'] },
-  { canonical: 'british airways', needles: ['british airways', 'ba', 'baw'] },
-  { canonical: 'sas', needles: ['sas', 'scandinavian', 'sk'] },
-  { canonical: 'flydubai', needles: ['flydubai', 'fz', 'fdb'] },
-  { canonical: 'aeroitalia', needles: ['aeroitalia', 'xz'] },
-  { canonical: 'air arabia maroc', needles: ['air arabia maroc', '3o', 'mac'] },
-  { canonical: 'air arabia', needles: ['air arabia', 'g9', 'abz'] },
-  { canonical: 'air dolomiti', needles: ['air dolomiti', 'en', 'dla'] },
-  { canonical: 'buzz', needles: ['buzz', 'rr', 'rys'] },
-  { canonical: 'dhl', needles: ['dhl', 'qy', 'bcs'] },
-  { canonical: 'eurowings', needles: ['eurowings', 'ew', 'ewg'] },
-  { canonical: 'ita airways', needles: ['ita airways', 'ita', 'az', 'ity'] },
-  { canonical: 'lufthansa', needles: ['lufthansa', 'lh', 'dlh'] },
-];
 
 function isGenericAirlinePlaceholder(value: string): boolean {
   return value === 'sconosciuta'
@@ -94,20 +78,6 @@ function isLikelyRawAirlineCode(value: string): boolean {
   return /^[a-z0-9]{1,3}$/.test(compactAirlineKey(value));
 }
 
-function airlineRuleMatches(value: string, needle: string): boolean {
-  const normalizedNeedle = normalizeAirlineKey(needle);
-  const compactNeedle = compactAirlineKey(needle);
-  if (!normalizedNeedle || !compactNeedle) {
-    return false;
-  }
-
-  if (compactNeedle.length <= 3) {
-    return value.split(' ').includes(compactNeedle) || compactAirlineKey(value) === compactNeedle;
-  }
-
-  return compactAirlineKey(value).includes(compactNeedle);
-}
-
 function canonicalizeAirlineKey(value: string | null | undefined): string {
   const normalized = normalizeAirlineKey(value);
   if (!normalized) {
@@ -118,10 +88,9 @@ function canonicalizeAirlineKey(value: string | null | undefined): string {
     return '';
   }
 
-  for (const rule of AIRLINE_CANONICAL_RULES) {
-    if (rule.needles.some(needle => airlineRuleMatches(normalized, needle))) {
-      return rule.canonical;
-    }
+  const canonical = canonicalAirlineKey(normalized);
+  if (AIRLINE_ALIASES[canonical]) {
+    return canonical;
   }
 
   if (isLikelyRawAirlineCode(normalized)) {
@@ -255,6 +224,31 @@ export async function storeDetectedAirportAirlines(code: string | null | undefin
   );
 
   return next;
+}
+
+/*---------------------------------------------------------------------------*\
+| Riconcilia il filtro compagnie quando la lista dell'aeroporto cambia (i     |
+| provider aggiungono le compagnie rilevate nello schedule, charter inclusi). |
+| Regole:                                                                     |
+|  - profilo senza compagnie salvate → filtro vuoto (nessun filtro attivo);   |
+|  - chiavi sparite dalla lista aeroporto → tolte dalla selezione;            |
+|  - compagnie NUOVE rilevate → mai selezionate in automatico: comparirebbero |
+|    in bacheca voli che l'utente non gestisce.                               |
+| Ritorna null quando la selezione corrente può restare invariata.            |
+\*---------------------------------------------------------------------------*/
+export function reconcileSelectedAirlines(options: {
+  savedProfileAirlines: string[];
+  previousSelectedAirlines: string[];
+  nextAirportAirlines: string[];
+}): string[] | null {
+  const { savedProfileAirlines, previousSelectedAirlines, nextAirportAirlines } = options;
+
+  if (savedProfileAirlines.length === 0) {
+    return previousSelectedAirlines.length > 0 ? [] : null;
+  }
+
+  const pruned = previousSelectedAirlines.filter(key => nextAirportAirlines.includes(key));
+  return pruned.length === previousSelectedAirlines.length ? null : pruned;
 }
 
 export function getAirportAirlines(code: string | null | undefined): string[] {

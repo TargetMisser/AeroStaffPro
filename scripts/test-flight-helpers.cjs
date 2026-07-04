@@ -301,6 +301,54 @@ assert(detectedAirlines.includes('transavia'), 'airport airline discovery should
 assert(!detectedAirlines.some(key => key.startsWith('compagnia')), 'airport airline discovery should drop generic company placeholders');
 assert(!['xue', 'si', 'q1', 'ki', 'jt', 'sconosciuta'].some(key => detectedAirlines.includes(key)), 'airport airline discovery should drop raw unknown airline codes');
 
+const shortNamedAirlines = airportSettings.extractAirportAirlinesFromSchedule(['SAS', 'DHL', 'Scandinavian Airlines']);
+assert(shortNamedAirlines.includes('sas'), 'canonical airlines with 3-letter names must survive the raw-code filter');
+assert(shortNamedAirlines.includes('dhl'), 'DHL must survive the raw-code filter');
+assert(shortNamedAirlines.filter(key => key === 'sas').length === 1, 'SAS and Scandinavian Airlines should collapse into one key');
+
+// Regressione "voli che non gestisco": una compagnia appena rilevata nello
+// schedule non deve mai finire selezionata da sola nel filtro.
+assert(
+  airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: ['ryanair', 'easyjet'],
+    previousSelectedAirlines: ['ryanair', 'easyjet'],
+    nextAirportAirlines: ['ryanair', 'easyjet', 'british airways'],
+  }) === null,
+  'newly detected airlines must not be auto-selected',
+);
+assert(
+  JSON.stringify(airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: ['ryanair', 'easyjet'],
+    previousSelectedAirlines: ['ryanair', 'easyjet'],
+    nextAirportAirlines: ['ryanair', 'volotea'],
+  })) === JSON.stringify(['ryanair']),
+  'airlines removed from the airport list must be pruned from the selection',
+);
+assert(
+  JSON.stringify(airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: [],
+    previousSelectedAirlines: ['ryanair'],
+    nextAirportAirlines: ['ryanair'],
+  })) === JSON.stringify([]),
+  'a profile without saved airlines clears the selection',
+);
+assert(
+  airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: [],
+    previousSelectedAirlines: [],
+    nextAirportAirlines: ['ryanair'],
+  }) === null,
+  'an already-empty selection needs no reconciliation',
+);
+assert(
+  airportSettings.reconcileSelectedAirlines({
+    savedProfileAirlines: ['ryanair'],
+    previousSelectedAirlines: ['ryanair'],
+    nextAirportAirlines: ['ryanair'],
+  }) === null,
+  'an unchanged selection needs no reconciliation',
+);
+
 const merged = adapter.mergeFlightLists([scheduledOnly], [scheduledOnly, delayed], 'departure');
 assert(merged.length === 2, 'merge should dedupe cached and fresh flights');
 
@@ -338,6 +386,373 @@ assert(
   adapter.mergeFlightLists([liveDuplicateOld], [sameNumberDifferentRoute], 'departure').length === 2,
   'merge should not collapse the same flight number on a different route',
 );
+
+// ─── Ghost flight eviction (unconfirmed cached flights must decay) ──────────
+const ghostNowMs = Date.UTC(2026, 5, 12, 8, 0, 0);
+const ghostFlight = {
+  flight: {
+    identification: { number: { default: 'FR9999' } },
+    airline: { name: 'Ryanair' },
+    airport: { destination: { code: { iata: 'STN' }, name: 'London Stansted' } },
+    time: { scheduled: { departure: Math.floor(ghostNowMs / 1000) + 10 * 3600 }, estimated: {}, real: {} },
+  },
+};
+const confirmedFlight = {
+  flight: {
+    identification: { number: { default: 'BA0617' } },
+    airline: { name: 'British Airways' },
+    airport: { destination: { code: { iata: 'LGW' }, name: 'London Gatwick' } },
+    time: { scheduled: { departure: Math.floor(ghostNowMs / 1000) + 11 * 3600 }, estimated: {}, real: {} },
+  },
+};
+
+const stampedMerge = adapter.mergeFlightLists([], [ghostFlight, confirmedFlight], 'departure', ghostNowMs);
+assert(
+  stampedMerge.every(item => item._seenAtMs === ghostNowMs),
+  'merge should stamp fresh flights with the time a provider confirmed them',
+);
+
+// 2.5 hours later only BA0617 is still reported by the providers
+const laterMs = ghostNowMs + 2.5 * 60 * 60 * 1000;
+const decayedMerge = adapter.mergeFlightLists(stampedMerge, [confirmedFlight], 'departure', laterMs);
+const ghostAfterMerge = decayedMerge.find(item => item.flight.identification.number.default === 'FR9999');
+assert(ghostAfterMerge && ghostAfterMerge._seenAtMs === ghostNowMs, 'cached-only flights should keep their original confirmation stamp');
+
+const unseenPruned = adapter.pruneUnseenFlights(decayedMerge, laterMs);
+assert(
+  !unseenPruned.some(item => item.flight.identification.number.default === 'FR9999'),
+  'a flight no provider has confirmed for over two hours should be evicted even with a future schedule',
+);
+assert(
+  unseenPruned.some(item => item.flight.identification.number.default === 'BA0617'),
+  'flights still reported by providers must survive the unseen eviction',
+);
+assert(
+  adapter.pruneUnseenFlights(stampedMerge, ghostNowMs + 60 * 60 * 1000).length === 2,
+  'recently confirmed flights must not be evicted',
+);
+assert(
+  adapter.pruneUnseenFlights([{ flight: { identification: { number: { default: 'XX1' } } } }], laterMs).length === 1,
+  'flights without a confirmation stamp (legacy cache) must be kept',
+);
+
+// ─── StaffMonitor clock anchoring around midnight ────────────────────────────
+const staffMonitorProviderModule = loadTsModule('src/utils/flightProviders/staffMonitorProvider.ts');
+const lateNight = new Date(2026, 5, 12, 0, 30, 0);   // 00:30 local
+const yesterdayLate = Math.floor(new Date(2026, 5, 11, 23, 50, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('23:50', lateNight) === yesterdayLate,
+  'at 00:30 a 23:50 monitor time is yesterday evening, not a ghost flight tonight',
+);
+const todayEarly = Math.floor(new Date(2026, 5, 12, 0, 10, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('00:10', lateNight) === todayEarly,
+  'at 00:30 a 00:10 monitor time is twenty minutes ago today',
+);
+const todayMorning = Math.floor(new Date(2026, 5, 12, 6, 15, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('06:15', lateNight) === todayMorning,
+  'upcoming morning flights stay anchored to today',
+);
+const beforeMidnight = new Date(2026, 5, 12, 23, 50, 0);
+const tomorrowEarly = Math.floor(new Date(2026, 5, 13, 0, 10, 0).getTime() / 1000);
+assert(
+  staffMonitorProviderModule.parseStaffMonitorClock('00:10', beforeMidnight) === tomorrowEarly,
+  'at 23:50 a 00:10 monitor time is tomorrow just after midnight',
+);
+
+// ─── Live arrival ETA overlay (open ADS-B data) ──────────────────────────────
+const liveEta = loadTsModule('src/utils/liveArrivalEta.ts');
+const PSA_LAT = 43.6839, PSA_LON = 10.3927;
+
+// FCO-PSA is ~140nm; sanity-check the great-circle helper
+const fcoDistance = liveEta.haversineNm(41.8003, 12.2389, PSA_LAT, PSA_LON);
+assert(fcoDistance > 130 && fcoDistance < 150, `haversine FCO-PSA should be ~140nm, got ${fcoDistance.toFixed(1)}`);
+
+assert(liveEta.normalizeCallsignToFlightNumber('RYR4521') === 'FR4521', 'numeric Ryanair callsigns map to IATA flight numbers');
+assert(liveEta.normalizeCallsignToFlightNumber('RYR52GT') === '', 'alphanumeric callsigns must not be mistaken for flight numbers');
+assert(liveEta.normalizeCallsignToFlightNumber('EJU8319 ') === 'U28319', 'easyJet Europe callsigns map to U2 numbers');
+assert(liveEta.normalizeRegistration('ei-dWa ') === 'EIDWA', 'registrations normalize dashes and case');
+
+const inboundAircraft = {
+  registration: 'EI-DWA',
+  callsign: 'RYR9876',
+  lat: 42.5, lon: 11.2,           // ~85nm a sud-est di PSA
+  groundSpeedKt: 400,
+  altitude: 30000,
+  track: 333,                     // verso PSA (nord-ovest)
+};
+const etaInbound = liveEta.estimateEtaSeconds(inboundAircraft, PSA_LAT, PSA_LON);
+assert(etaInbound != null && etaInbound > 10 * 60 && etaInbound < 45 * 60,
+  `an inbound aircraft 85nm out at 400kt should land in 15-40 min, got ${etaInbound}`);
+
+const outboundAircraft = { ...inboundAircraft, track: 150 };  // si allontana
+assert(liveEta.estimateEtaSeconds(outboundAircraft, PSA_LAT, PSA_LON) === null,
+  'an aircraft flying away from the airport must not produce an ETA');
+assert(liveEta.estimateEtaSeconds({ ...inboundAircraft, altitude: 'ground' }, PSA_LAT, PSA_LON) === null,
+  'aircraft on the ground must not produce an ETA');
+assert(liveEta.estimateEtaSeconds({ ...inboundAircraft, groundSpeedKt: 30 }, PSA_LAT, PSA_LON) === null,
+  'implausibly slow targets (ground vehicles, taxiing) must not produce an ETA');
+
+const nowSec = 1_800_000_000;
+const arrivalByReg = {
+  flight: {
+    identification: { number: { default: 'FR9876' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 30 * 60 }, estimated: { arrival: nowSec + 30 * 60 }, real: {} },
+  },
+};
+const landedArrival = {
+  flight: {
+    identification: { number: { default: 'BA0617' } },
+    aircraft: { registration: 'G-EUYO' },
+    time: { scheduled: { arrival: nowSec - 600 }, estimated: {}, real: { arrival: nowSec - 300 } },
+  },
+};
+const overlaid = liveEta.applyLiveArrivalEtas(
+  [arrivalByReg, landedArrival],
+  [inboundAircraft],
+  PSA_LAT, PSA_LON, nowSec,
+);
+assert(overlaid[0].flight.time.estimated.arrival === nowSec + etaInbound,
+  'arrivals matched by registration should get the live ETA');
+assert(overlaid[0].flight._etaSource === 'adsb', 'live ETAs should be tagged with their source');
+assert(arrivalByReg.flight.time.estimated.arrival === nowSec + 30 * 60,
+  'the overlay must not mutate the input items');
+assert(overlaid[1].flight.time.estimated.arrival === undefined,
+  'landed flights must keep their real times untouched');
+
+const wrongRotation = {
+  flight: {
+    identification: { number: { default: 'FR1111' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 10 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const rotationGuard = liveEta.applyLiveArrivalEtas([wrongRotation], [inboundAircraft], PSA_LAT, PSA_LON, nowSec);
+assert(rotationGuard[0].flight.time.estimated.arrival === undefined,
+  'a live ETA hours away from the schedule is a different rotation and must be ignored');
+
+// Same airframe, two rotations within tolerance: only the closest schedule
+// gets the live ETA (the real case that produced ghost ETAs in testing:
+// FR1492 19:25 and FR8269 23:30 both flown by 9H-QAG).
+const earlyRotation = {
+  flight: {
+    identification: { number: { default: 'FR1492' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 25 * 60 }, estimated: {}, real: {} },
+  },
+};
+const lateRotation = {
+  flight: {
+    identification: { number: { default: 'FR8269' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 2.8 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const rotations = liveEta.applyLiveArrivalEtas([lateRotation, earlyRotation], [inboundAircraft], PSA_LAT, PSA_LON, nowSec);
+assert(rotations[1].flight.time.estimated.arrival === nowSec + etaInbound,
+  'the rotation closest to the live ETA gets the overlay');
+assert(rotations[0].flight.time.estimated.arrival === undefined,
+  'the later rotation of the same airframe must not inherit the live ETA');
+
+// ─── Live departure status (open ADS-B takeoff detection) ────────────────────
+// Same idea as the arrival ETA but mirrored: an airframe already airborne and
+// climbing AWAY from PSA has taken off, so the live position beats the FIDS.
+const departedAircraft = {
+  registration: 'EI-DXY',
+  callsign: 'RYR3344',
+  lat: 43.30, lon: 10.85,   // ~30nm a sud-est di PSA
+  groundSpeedKt: 350,
+  altitude: 9000,
+  track: 130,               // in salita verso sud-est, si allontana dal campo
+};
+const sinceDep = liveEta.estimateSecondsSinceDeparture(departedAircraft, PSA_LAT, PSA_LON);
+assert(sinceDep != null && sinceDep > 3 * 60 && sinceDep < 12 * 60,
+  `a departure ~30nm out at 350kt should have left 4-9 min ago, got ${sinceDep && Math.round(sinceDep / 60)}min`);
+assert(liveEta.estimateSecondsSinceDeparture({ ...departedAircraft, track: 310 }, PSA_LAT, PSA_LON) === null,
+  'an inbound aircraft (track toward the field) must not read as a departure');
+assert(liveEta.estimateSecondsSinceDeparture({ ...departedAircraft, altitude: 'ground' }, PSA_LAT, PSA_LON) === null,
+  'an aircraft on the ground has not taken off');
+assert(liveEta.estimateSecondsSinceDeparture({ ...departedAircraft, lat: PSA_LAT + 0.01, lon: PSA_LON }, PSA_LAT, PSA_LON) === null,
+  'an aircraft right over the field is too ambiguous to call departed');
+// outboundAircraft is ~85nm out heading away: aligned outbound, but past the
+// near-field takeoff window, so it must not be reported as a fresh departure.
+assert(liveEta.estimateSecondsSinceDeparture(outboundAircraft, PSA_LAT, PSA_LON) === null,
+  'an outbound aircraft already far from the field is past the takeoff window');
+
+const depNowSec = 1_800_000_000;
+const departureOutbound = {
+  flight: {
+    identification: { number: { default: 'FR3344' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec - 6 * 60 }, estimated: {}, real: {} },
+  },
+};
+const stillScheduledDep = {
+  flight: {
+    identification: { number: { default: 'U21234' } },
+    aircraft: { registration: 'GEZAB' },
+    time: { scheduled: { departure: depNowSec + 40 * 60 }, estimated: {}, real: {} },
+  },
+};
+const depOverlaid = liveEta.applyLiveDepartureStatus(
+  [departureOutbound, stillScheduledDep],
+  [departedAircraft],
+  PSA_LAT, PSA_LON, depNowSec,
+);
+assert(typeof depOverlaid[0].flight.time.real.departure === 'number',
+  'a departure whose aircraft is airborne and outbound gets a real takeoff time');
+assert(depOverlaid[0].flight.time.real.departure < depNowSec,
+  'the takeoff time is in the past (the aircraft is already airborne)');
+assert(depOverlaid[0].flight._departureStatusSource === 'adsb',
+  'a live takeoff is tagged with its source');
+assert(depOverlaid[1].flight.time.real.departure === undefined,
+  'a departure with no matching airborne aircraft keeps its scheduled time');
+assert(departureOutbound.flight.time.real.departure === undefined,
+  'applyLiveDepartureStatus must not mutate the input');
+
+const alreadyDeparted = {
+  flight: {
+    identification: { number: { default: 'FR3344' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec - 30 * 60 }, estimated: {}, real: { departure: depNowSec - 25 * 60 } },
+  },
+};
+const keepReal = liveEta.applyLiveDepartureStatus([alreadyDeparted], [departedAircraft], PSA_LAT, PSA_LON, depNowSec);
+assert(keepReal[0].flight.time.real.departure === depNowSec - 25 * 60,
+  'a departure that already has a real time is left untouched');
+
+const wrongRotationDep = {
+  flight: {
+    identification: { number: { default: 'FR9001' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec + 6 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const guardDep = liveEta.applyLiveDepartureStatus([wrongRotationDep], [departedAircraft], PSA_LAT, PSA_LON, depNowSec);
+assert(guardDep[0].flight.time.real.departure === undefined,
+  'a takeoff hours from the schedule is a different rotation and must be ignored');
+
+console.log('Live departure status tests passed.');
+
+// ─── Origin-departure estimate (ADS-B route + elapsed flight) ────────────────
+// elapsed = distance flown / groundspeed. Bucharest-ish origin ~520nm out,
+// aircraft 85nm from PSA at 400kt => flown ~435nm => ~65 min airborne.
+const ROM_LAT = 44.57, ROM_LON = 26.10;   // Bucharest Otopeni
+const elapsed = liveEta.estimateElapsedSeconds(inboundAircraft, ROM_LAT, ROM_LON, PSA_LAT, PSA_LON);
+assert(elapsed != null && elapsed > 40 * 60 && elapsed < 90 * 60,
+  `a mid-route inbound should have been flying 40-90 min, got ${elapsed && Math.round(elapsed / 60)}min`);
+assert(liveEta.estimateElapsedSeconds({ ...inboundAircraft, altitude: 'ground' }, ROM_LAT, ROM_LON, PSA_LAT, PSA_LON) === null,
+  'a grounded aircraft yields no elapsed estimate');
+// origin essentially at the airport => nothing flown yet => null (not a bogus 0)
+assert(liveEta.estimateElapsedSeconds(inboundAircraft, PSA_LAT + 0.05, PSA_LON, PSA_LAT, PSA_LON) === null,
+  'an aircraft that has barely left (origin ~= destination) yields no estimate');
+
+(async () => {
+  liveEta._clearRouteCache();
+  const route = { originIata: 'OTP', originIcao: 'LROP', originName: 'Bucharest', originLat: ROM_LAT, originLon: ROM_LON };
+  const routeLookup = async () => route;
+
+  const inboundArr = {
+    flight: {
+      identification: { number: { default: 'W61467' } },
+      aircraft: { registration: 'HALWA' },
+      airport: { origin: { name: 'BUCAREST' }, destination: { code: { iata: 'PSA' } } },
+      time: { scheduled: { arrival: nowSec + 20 * 60 }, estimated: {}, real: {} },
+    },
+  };
+  const aircraftW6 = { ...inboundAircraft, registration: 'HALWA', callsign: 'WZZ1467' };
+  const out = await liveEta.applyLiveOriginDepartures([inboundArr], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  assert(typeof out[0].flight.time.estimated.departure === 'number',
+    'a matched airborne arrival gets an estimated origin-departure time');
+  assert(out[0].flight.time.estimated.departure < nowSec,
+    'the estimated departure is in the past (the aircraft is already airborne)');
+  assert(out[0].flight._departureSource === 'adsb-estimate',
+    'the estimated departure is tagged as an ADS-B estimate');
+  assert(out[0].flight.airport.origin.code.iata === 'OTP',
+    'the origin airport code is back-filled from the route when the feed only had a name');
+  assert(inboundArr.flight.time.estimated.departure === undefined,
+    'applyLiveOriginDepartures must not mutate the input');
+
+  // A flight that already has a provider departure time must be left untouched.
+  const withProviderDep = {
+    flight: {
+      identification: { number: { default: 'FR1000' } },
+      aircraft: { registration: 'HALWA' },
+      time: { scheduled: { arrival: nowSec + 20 * 60, departure: nowSec - 30 * 60 }, estimated: {}, real: {} },
+    },
+  };
+  const keep = await liveEta.applyLiveOriginDepartures([withProviderDep], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  assert(keep[0].flight.time.estimated.departure === undefined && keep[0].flight._departureSource === undefined,
+    'a provider-supplied departure time must win over the ADS-B estimate');
+
+  // Rotation guard: one airframe, two future arrivals -> only the leg closest to
+  // the projected arrival (now + ETA) gets the estimated departure.
+  const legNow = {
+    flight: {
+      identification: { number: { default: 'W61467' } },
+      aircraft: { registration: 'HALWA' },
+      airport: { origin: { name: 'BUCAREST' } },
+      time: { scheduled: { arrival: nowSec + etaInbound }, estimated: {}, real: {} },
+    },
+  };
+  const legLater = {
+    flight: {
+      identification: { number: { default: 'W61999' } },
+      aircraft: { registration: 'HALWA' },
+      airport: { origin: { name: 'BUCAREST' } },
+      time: { scheduled: { arrival: nowSec + etaInbound + 2.5 * 60 * 60 }, estimated: {}, real: {} },
+    },
+  };
+  const legs = await liveEta.applyLiveOriginDepartures([legLater, legNow], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  assert(typeof legs[1].flight.time.estimated.departure === 'number',
+    'the current leg (closest to ETA) gets the estimated departure');
+  assert(legs[0].flight.time.estimated.departure === undefined,
+    'a later rotation of the same airframe must not inherit the estimated departure');
+
+  console.log('Origin-departure estimate tests passed.');
+})().catch(err => { console.error(err); process.exit(1); });
+
+// ─── fetchAdsbAircraft: browser-like headers and aircraft list parsing ──────
+async function runLiveEtaFetchTests() {
+  const requests = [];
+  const liveEtaWithFetch = loadTsModule('src/utils/liveArrivalEta.ts', {
+    __globals: {
+      fetch: async (url, init) => {
+        requests.push({ url, headers: init?.headers ?? {} });
+        return {
+          ok: true,
+          json: async () => ({ ac: [{ r: 'EIDWA', flight: 'RYR9876', lat: 42.5, lon: 11.2, gs: 400, alt_baro: 30000, track: 333 }] }),
+        };
+      },
+    },
+  });
+
+  const aircraft = await liveEtaWithFetch.fetchAdsbAircraft(PSA_LAT, PSA_LON);
+  assert(requests.length === 1, 'fetchAdsbAircraft should call fetch exactly once when the first endpoint succeeds');
+  assert(requests[0].url === `https://api.adsb.lol/v2/point/${PSA_LAT}/${PSA_LON}/${liveEta.ADSB_RADIUS_NM}`,
+    'fetchAdsbAircraft should hit the adsb.lol point endpoint with lat/lon/radius');
+  assert(/Mozilla/.test(requests[0].headers['User-Agent'] ?? ''),
+    'fetchAdsbAircraft must send a browser-like User-Agent so anti-bot edges return JSON instead of a challenge page');
+  assert(aircraft.length === 1 && aircraft[0].registration === 'EIDWA' && aircraft[0].callsign === 'RYR9876',
+    'fetchAdsbAircraft should parse the aircraft list from the "ac" field');
+
+  // First endpoint fails (e.g. anti-bot challenge) -> falls back to the second one.
+  const fallbackRequests = [];
+  const liveEtaWithFallback = loadTsModule('src/utils/liveArrivalEta.ts', {
+    __globals: {
+      fetch: async url => {
+        fallbackRequests.push(url);
+        if (fallbackRequests.length === 1) return { ok: false, status: 403, json: async () => ({}) };
+        return { ok: true, json: async () => ({ ac: [] }) };
+      },
+    },
+  });
+  const fallbackAircraft = await liveEtaWithFallback.fetchAdsbAircraft(PSA_LAT, PSA_LON);
+  assert(fallbackRequests.length === 2, 'fetchAdsbAircraft should try the second endpoint when the first fails');
+  assert(fallbackAircraft.length === 0, 'an empty "ac" list should resolve to an empty aircraft array');
+}
 
 const easyJetArrivalScheduledTs = Math.floor(new Date(2026, 4, 12, 17, 35, 0).getTime() / 1000);
 const easyJetArrivalEstimatedTs = Math.floor(new Date(2026, 4, 12, 17, 32, 0).getTime() / 1000);
@@ -492,6 +907,30 @@ assert(
     diagnostics: [{ provider: 'aeroDataBox', label: 'AeroDataBox', status: 'failed', message: 'quota' }],
   }) === 'provider_failed',
   'tomorrow empty reason should detect failed providers',
+);
+
+// ─── Live ETA (ADS-B) diagnostic formatting ──────────────────────────────────
+const formattedLiveEtaSuccess = flightDiagnostics.formatProviderDiagnostic({
+  provider: 'liveEta',
+  label: 'Live ETA (ADS-B)',
+  status: 'success',
+  arrivals: 1,
+  durationMs: 1234,
+  message: '5 aerei nel raggio, 1 orari aggiornati',
+});
+assert(
+  formattedLiveEtaSuccess === 'Live ETA (ADS-B): 5 aerei nel raggio, 1 orari aggiornati · 1234ms',
+  `live ETA success diagnostic should surface the aircraft/match summary and timing, got "${formattedLiveEtaSuccess}"`,
+);
+const formattedLiveEtaFailure = flightDiagnostics.formatProviderDiagnostic({
+  provider: 'liveEta',
+  label: 'Live ETA (ADS-B)',
+  status: 'failed',
+  message: 'ADSB_HTTP_403',
+});
+assert(
+  formattedLiveEtaFailure === 'Live ETA (ADS-B): errore - ADSB_HTTP_403',
+  `live ETA failure diagnostic should surface the error message, got "${formattedLiveEtaFailure}"`,
 );
 
 const calendarStatsRange = loadTsModule('src/utils/calendarStatsRange.ts');
@@ -1317,7 +1756,8 @@ async function runProviderLayerTests() {
   assert(airLabsCalls.length === firstRoutesOnlyCallCount, 'AirLabs routes-only mode should cache routes after the first routes-only call');
 }
 
-runProviderLayerTests()
+runLiveEtaFetchTests()
+  .then(() => runProviderLayerTests())
   .then(() => {
     console.log('Flight helper tests passed.');
   })

@@ -1,10 +1,13 @@
 import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Calendar from 'expo-calendar';
 import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
-import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines } from '../utils/airportSettings';
+import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines, getAirportInfo } from '../utils/airportSettings';
 import { filterFlightsByAirlines, getFlightAirportLabel, getFlightBestTs } from '../utils/flightScheduleAdapter';
+import { staffMonitorProvider } from '../utils/flightProviders/staffMonitorProvider';
+import { applyLiveDepartureStatus, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { ShiftWidget } from './ShiftWidget';
 import { getStoredWidgetThemeProps } from './widgetTheme';
 
@@ -102,13 +105,79 @@ function resolveWidgetShift(shiftData: WidgetShiftData): ResolvedWidgetShift | '
   return null;
 }
 
+/*---------------------------------------------------------------------------*\
+| Lo snapshot turni (WIDGET_SHIFT_KEY) è scritto dall'app e copre solo oggi e |
+| domani: se l'app non viene aperta per più di un giorno, il widget restava   |
+| su "nessun turno" fino alla successiva apertura. Qui il task del widget     |
+| rilegge da solo i turni dal calendario di sistema (stessa logica delle      |
+| schermate) e riscrive lo snapshot. Solo verifica del permesso, mai prompt:  |
+| in un contesto headless non c'è UI. In caso di errore si torna al vecchio   |
+| comportamento basato sullo snapshot esistente.                              |
+\*---------------------------------------------------------------------------*/
+async function refreshShiftSnapshotFromCalendar(): Promise<WidgetShiftData | null> {
+  try {
+    const { status } = await Calendar.getCalendarPermissionsAsync();
+    if (status !== 'granted') return null;
+
+    const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
+    const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
+    if (!cal) return null;
+
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
+    const tomorrowStart = addDays(todayStart, 1);
+    const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
+
+    let shiftToday: { start: number; end: number } | null = null;
+    let shiftTomorrow: { start: number; end: number } | null = null;
+    let isRestDay = false;
+    const events = await Calendar.getEventsAsync([cal.id], todayStart, tomorrowEnd);
+    for (const e of events) {
+      if (e.title.includes('Riposo')) {
+        const evtDay = new Date(e.startDate);
+        if (evtDay >= todayStart && evtDay <= todayEnd) isRestDay = true;
+        continue;
+      }
+      if (!e.title.includes('Lavoro')) continue;
+      const start = new Date(e.startDate).getTime() / 1000;
+      const end = new Date(e.endDate).getTime() / 1000;
+      const evtDay = new Date(e.startDate);
+      if (evtDay >= todayStart && evtDay <= todayEnd) {
+        shiftToday = { start, end };
+        isRestDay = false;
+      } else if (evtDay >= tomorrowStart && evtDay <= tomorrowEnd) {
+        shiftTomorrow = { start, end };
+      }
+    }
+
+    const snapshot: WidgetShiftData = {
+      date: toLocalIso(todayStart),
+      shiftToday,
+      isRestDay,
+      nextShift: shiftTomorrow ? { date: toLocalIso(tomorrowStart), ...shiftTomorrow } : null,
+    };
+    await AsyncStorage.setItem(WIDGET_SHIFT_KEY, JSON.stringify(snapshot));
+    return snapshot;
+  } catch {
+    return null;
+  }
+}
+
+async function readShiftSnapshot(): Promise<WidgetShiftData | null> {
+  const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
+  let shiftData: WidgetShiftData | null = shiftRaw ? JSON.parse(shiftRaw) : null;
+  if (!shiftData || shiftData.date !== toLocalIso()) {
+    shiftData = (await refreshShiftSnapshotFromCalendar()) ?? shiftData;
+  }
+  return shiftData;
+}
+
 // ─── Read cached data written by the main app ──────────────────────────────────
 export async function getWidgetData(): Promise<WidgetData> {
   try {
-    const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
+    const shiftData = await readShiftSnapshot();
 
-    if (shiftRaw) {
-      const shiftData: WidgetShiftData = JSON.parse(shiftRaw);
+    if (shiftData) {
       const resolved = resolveWidgetShift(shiftData);
       if (resolved === 'rest') return { state: 'rest' };
       if (resolved) {
@@ -148,13 +217,12 @@ async function renderThemedWidget(props: WidgetTaskHandlerProps, data: WidgetDat
   );
 }
 
-// ─── Fetch fresh widget data from FR24 + cached shift key ─────────────────────
-async function fetchFreshWidgetData(): Promise<WidgetData> {
+// ─── Fetch fresh widget data from the live provider + cached shift key ────────
+export async function fetchFreshWidgetData(): Promise<WidgetData> {
   try {
-    const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
-    if (!shiftRaw) return getWidgetData();
+    const shiftData = await readShiftSnapshot();
+    if (!shiftData) return getWidgetData();
 
-    const shiftData: WidgetShiftData = JSON.parse(shiftRaw);
     const resolved = resolveWidgetShift(shiftData);
     if (resolved === 'rest') return { state: 'rest' };
     if (!resolved) return { state: 'no_shift' };
@@ -164,18 +232,51 @@ async function fetchFreshWidgetData(): Promise<WidgetData> {
     const allAirlines = await getStoredAirportAirlines(airportCode);
     const filterRaw = await AsyncStorage.getItem('aerostaff_flight_filter_v1');
     const allowedAirlines: string[] = filterRaw ? JSON.parse(filterRaw) : allAirlines;
-    const url = buildFr24ScheduleUrl(airportCode);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
+    // Source departures from the real provider (StaffMonitor) where supported,
+    // so the background widget refresh actually works. The previous FR24 public
+    // endpoint returns 403, so the periodic morning update never got fresh data.
+    // FR24 public stays as the fallback for airports StaffMonitor doesn't cover.
+    const airportInfo = getAirportInfo(airportCode);
     let allDepartures: any[] = [];
-    try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: controller.signal });
-      const json = await res.json();
-      allDepartures = json.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
-      await storeDetectedAirportAirlines(airportCode, allDepartures);
-    } finally {
-      clearTimeout(timer);
+    if (staffMonitorProvider.supports({ airportCode, airport: airportInfo, now: new Date() })) {
+      const result = await staffMonitorProvider.fetch({ airportCode, airport: airportInfo, now: new Date() });
+      allDepartures = result.allDepartures;
+    } else {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const res = await fetch(buildFr24ScheduleUrl(airportCode), { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: controller.signal });
+        const json = await res.json();
+        allDepartures = json.result?.response?.airport?.pluginData?.schedule?.departures?.data || [];
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    await storeDetectedAirportAirlines(airportCode, allDepartures);
+
+    // Live takeoff detection from open ADS-B (best-effort, one extra call).
+    // Marks departures whose aircraft is already airborne and outbound as
+    // departed, so the widget shows the real time instead of only the FIDS
+    // estimate. Skips the costly per-aircraft route lookups used on the full
+    // Voli screen — the background refresh stays one cheap request. If ADS-B
+    // doesn't answer in time the StaffMonitor times are kept as-is.
+    if (airportInfo.latitude != null && airportInfo.longitude != null) {
+      const adsbController = new AbortController();
+      const adsbTimer = setTimeout(() => adsbController.abort(), 6000);
+      try {
+        const aircraft = await fetchAdsbAircraft(
+          airportInfo.latitude,
+          airportInfo.longitude,
+          undefined,
+          adsbController.signal,
+        );
+        allDepartures = applyLiveDepartureStatus(allDepartures, aircraft, airportInfo.latitude, airportInfo.longitude);
+      } catch {
+        // best-effort: keep StaffMonitor times when ADS-B is unavailable
+      } finally {
+        clearTimeout(adsbTimer);
+      }
     }
 
     const fmtOff = (dep: number, off: number) => fmtTs(dep - off * 60);

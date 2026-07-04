@@ -37,6 +37,14 @@ function updateReadmeStableVersion(nextVersion) {
   write(readmePath, nextReadme);
 }
 
+function updateAppVersionFallback(nextVersion) {
+  const checkerPath = 'src/utils/updateChecker.ts';
+  const source = read(checkerPath);
+  const fallbackPattern = /FALLBACK_APP_VERSION = '\d+\.\d+\.\d+'/;
+  assert(fallbackPattern.test(source), 'src/utils/updateChecker.ts is missing the FALLBACK_APP_VERSION marker');
+  write(checkerPath, source.replace(fallbackPattern, `FALLBACK_APP_VERSION = '${nextVersion}'`));
+}
+
 function bumpSemver(version, mode) {
   const match = version.match(/^(\d+)\.(\d+)\.(\d+)$/);
   assert(match, `Invalid semver version: ${version}`);
@@ -88,5 +96,6 @@ write(
 );
 
 updateReadmeStableVersion(nextVersion);
+updateAppVersionFallback(nextVersion);
 
 console.log(`Bumped AeroStaff Pro to v${nextVersion} (versionCode ${nextVersionCode}).`);

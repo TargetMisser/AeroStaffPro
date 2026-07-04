@@ -187,4 +187,114 @@ assert(noisyOcrResult3.shifts[0].type === 'work', 'should identify work shift');
 assert(noisyOcrResult3.shifts[0].startTime === '12:30', 'should normalize start time');
 assert(noisyOcrResult3.shifts[0].endTime === '18:45', 'should normalize end time');
 
-console.log('App setup tests passed.');
+// ─── Update Checker Version Fallback Tests ───────────────────────────────────
+const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+const asyncStorageMock = {
+  getItem: async () => null,
+  setItem: async () => {},
+  removeItem: async () => {},
+};
+
+// Without a native build version (web, tests) APP_VERSION must fall back to
+// the tooling-maintained constant, which must match package.json.
+const updateCheckerNoNative = loadTsModule('src/utils/updateChecker.ts', {
+  'expo-application': { nativeApplicationVersion: null },
+  '@react-native-async-storage/async-storage': asyncStorageMock,
+});
+assert(
+  updateCheckerNoNative.FALLBACK_APP_VERSION === packageVersion,
+  `FALLBACK_APP_VERSION (${updateCheckerNoNative.FALLBACK_APP_VERSION}) should match package.json version (${packageVersion})`,
+);
+assert(
+  updateCheckerNoNative.APP_VERSION === packageVersion,
+  'APP_VERSION should fall back to the package.json version when the native version is unavailable',
+);
+
+// With a native build version available, it must win over the fallback.
+const updateCheckerNative = loadTsModule('src/utils/updateChecker.ts', {
+  'expo-application': { nativeApplicationVersion: '9.9.9' },
+  '@react-native-async-storage/async-storage': asyncStorageMock,
+});
+assert(
+  updateCheckerNative.APP_VERSION === '9.9.9',
+  'APP_VERSION should prefer the native application version when available',
+);
+
+// ─── Widget background refresh source guard ──────────────────────────────────
+// The widget's periodic (background) update must pull flights from the real
+// provider (StaffMonitor), not the FR24 public endpoint that returns 403 — a
+// regression there silently breaks the automatic morning refresh.
+const widgetHandlerSource = fs.readFileSync(path.join(root, 'src/widgets/widgetTaskHandler.tsx'), 'utf8');
+assert(
+  widgetHandlerSource.includes('staffMonitorProvider'),
+  'widget background refresh must source flights from the live provider (StaffMonitor)',
+);
+assert(
+  /staffMonitorProvider\.fetch/.test(widgetHandlerSource),
+  'widget background refresh must call staffMonitorProvider.fetch for supported airports',
+);
+
+// ─── Shift Calendar Night-Shift Replacement Tests ────────────────────────────
+// The Android implementation of expo-calendar getEventsAsync only returns
+// events FULLY CONTAINED in the query window (BEGIN >= start AND END <= end).
+// The mock reproduces that semantic so a regression to exact-day queries
+// makes night shifts (and UTC-stored all-day rests) invisible again.
+(async () => {
+  const storedEvents = [
+    { // night shift: starts June 10th 22:00, ends June 11th 06:00
+      id: 'night-10',
+      title: 'Lavoro',
+      startDate: new Date(2026, 5, 10, 22, 0).toISOString(),
+      endDate: new Date(2026, 5, 11, 6, 0).toISOString(),
+    },
+    { // previous-day night shift: starts June 9th 22:00, ends June 10th 06:00
+      id: 'night-09',
+      title: 'Lavoro',
+      startDate: new Date(2026, 5, 9, 22, 0).toISOString(),
+      endDate: new Date(2026, 5, 10, 6, 0).toISOString(),
+    },
+    { // unrelated personal event on the same day must never be touched
+      id: 'personal-10',
+      title: 'Dentista',
+      startDate: new Date(2026, 5, 10, 10, 0).toISOString(),
+      endDate: new Date(2026, 5, 10, 11, 0).toISOString(),
+    },
+  ];
+  const deletedIds = [];
+  const calendarMock = {
+    getEventsAsync: async (_calendarIds, start, end) => storedEvents.filter(event =>
+      new Date(event.startDate).getTime() >= new Date(start).getTime()
+      && new Date(event.endDate).getTime() <= new Date(end).getTime(),
+    ),
+    deleteEventAsync: async id => { deletedIds.push(id); },
+    createEventAsync: async () => 'created-id',
+  };
+  const shiftCalendar = loadTsModule('src/utils/shiftCalendar.ts', {
+    'expo-calendar': calendarMock,
+    'react-native': { Platform: { OS: 'android' } },
+  });
+
+  await shiftCalendar.replaceShiftForDate({
+    calendarId: '1',
+    date: '2026-06-10',
+    type: 'rest',
+  });
+
+  assert(
+    deletedIds.includes('night-10'),
+    'replacing a day must delete a night shift that starts on that day even though it ends past midnight',
+  );
+  assert(
+    !deletedIds.includes('night-09'),
+    'replacing a day must not delete the previous day\'s night shift that ends that morning',
+  );
+  assert(
+    !deletedIds.includes('personal-10'),
+    'replacing a day must never delete non-shift calendar events',
+  );
+
+  console.log('App setup tests passed.');
+})().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

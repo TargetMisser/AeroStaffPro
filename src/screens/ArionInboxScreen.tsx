@@ -3,6 +3,8 @@ import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } 
 import { MaterialIcons } from '@expo/vector-icons';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
+import { useLanguage } from '../context/LanguageContext';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const ARION_INBOX_URL = 'https://prd-arion-ap.firebaseapp.com/messages/inbox';
 
@@ -13,6 +15,7 @@ type WebLoadError = {
 
 export default function ArionInboxScreen() {
   const { colors, mode } = useAppTheme();
+  const { t } = useLanguage();
   const webViewRef = useRef<WebView>(null);
   const [progress, setProgress] = useState(0);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -47,6 +50,7 @@ export default function ArionInboxScreen() {
             disabled={!canGoBack}
             onPress={() => webViewRef.current?.goBack()}
             activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={t('a11yBack')}
           >
             <MaterialIcons name="arrow-back-ios-new" size={16} color={colors.primary} />
           </TouchableOpacity>
@@ -55,6 +59,7 @@ export default function ArionInboxScreen() {
             disabled={!canGoForward}
             onPress={() => webViewRef.current?.goForward()}
             activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={t('a11yForward')}
           >
             <MaterialIcons name="arrow-forward-ios" size={16} color={colors.primary} />
           </TouchableOpacity>
@@ -62,6 +67,7 @@ export default function ArionInboxScreen() {
             style={[styles.navButton, { backgroundColor: colors.cardSecondary }]}
             onPress={() => webViewRef.current?.reload()}
             activeOpacity={0.8}
+            accessibilityRole="button" accessibilityLabel={t('a11yRefresh')}
           >
             <MaterialIcons name="refresh" size={18} color={colors.primary} />
           </TouchableOpacity>
@@ -78,6 +84,7 @@ export default function ArionInboxScreen() {
           style={[styles.externalButton, { borderColor: colors.border, backgroundColor: colors.cardSecondary }]}
           onPress={openExternal}
           activeOpacity={0.85}
+          accessibilityRole="button" accessibilityLabel={t('a11yOpenInBrowser')}
         >
           <MaterialIcons name="open-in-new" size={18} color={colors.primary} />
         </TouchableOpacity>
@@ -109,7 +116,7 @@ export default function ArionInboxScreen() {
                 <Text style={styles.primaryBtnText}>Riprova</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.secondaryBtn, { borderColor: colors.border }]} onPress={openExternal} activeOpacity={0.85}>
-                <Text style={[styles.secondaryBtnText, { color: colors.primary }]}>Browser</Text>
+                <Text style={[styles.secondaryBtnText, { color: colors.primaryText }]}>Browser</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -167,7 +174,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 10,
     borderBottomWidth: 1,
   },
@@ -175,7 +182,7 @@ const styles = StyleSheet.create({
   navButton: {
     width: 34,
     height: 34,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -185,7 +192,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   secureDot: { width: 7, height: 7, borderRadius: 99 },
   urlText: { flex: 1, fontSize: 12, fontWeight: '800' },
@@ -212,7 +219,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
+    padding: SPACING.xxl,
   },
   errorIcon: {
     width: 64,
@@ -220,14 +227,14 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: SPACING.lg,
   },
   errorTitle: { fontSize: 21, fontWeight: '900', textAlign: 'center' },
-  errorCopy: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: 8 },
-  errorMeta: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: 12 },
+  errorCopy: { fontSize: 14, lineHeight: 20, textAlign: 'center', marginTop: SPACING.sm },
+  errorMeta: { fontSize: 11, lineHeight: 16, textAlign: 'center', marginTop: SPACING.md },
   errorActions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  primaryBtn: { borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12 },
+  primaryBtn: { borderRadius: 14, paddingHorizontal: 18, paddingVertical: SPACING.md },
   primaryBtnText: { color: '#FFFFFF', fontSize: 14, fontWeight: '900' },
-  secondaryBtn: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 18, paddingVertical: 12 },
+  secondaryBtn: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 18, paddingVertical: SPACING.md },
   secondaryBtnText: { fontSize: 14, fontWeight: '900' },
 });

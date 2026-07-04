@@ -3,6 +3,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import type { ThemeColors } from '../../context/ThemeContext';
 import type { TranslationKey } from '../../i18n/translations';
 import type { FlightScheduleProviderStatus } from '../../utils/fr24api';
+import { SPACING, RADIUS } from '../../theme/spacing';
 import {
   formatProviderDiagnostic,
   getTomorrowEmptyReason,
@@ -50,8 +51,8 @@ export function EmptyFlightState({
 
   return (
     <View style={{
-      marginTop: 32,
-      padding: 16,
+      marginTop: SPACING.xxxl,
+      padding: SPACING.lg,
       borderRadius: 18,
       backgroundColor: colors.card,
       borderWidth: 1,
@@ -59,7 +60,7 @@ export function EmptyFlightState({
     }}>
       <Text style={{ color: colors.text, fontSize: 16, fontWeight: '900' }}>{title}</Text>
       {body ? (
-        <Text style={{ color: colors.textSub, fontSize: 13, lineHeight: 19, marginTop: 8 }}>{body}</Text>
+        <Text style={{ color: colors.textSub, fontSize: 13, lineHeight: 19, marginTop: SPACING.sm }}>{body}</Text>
       ) : null}
       {activeDay === 'tomorrow' ? (
         <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 10 }}>
@@ -70,7 +71,7 @@ export function EmptyFlightState({
         </Text>
       ) : null}
       {providerLines.length > 0 ? (
-        <View style={{ marginTop: 12, gap: 6 }}>
+        <View style={{ marginTop: SPACING.md, gap: 6 }}>
           <Text style={{ color: colors.textSub, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>
             {t('flightProviderDebugTitle')}
           </Text>
@@ -93,13 +94,13 @@ export function FlightLoadingState({
   t: (key: TranslationKey) => string;
 }) {
   return (
-    <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 28 }}>
+    <View style={{ flex: 1, paddingHorizontal: SPACING.lg, paddingTop: 28 }}>
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 14,
-        padding: 16,
-        borderRadius: 20,
+        padding: SPACING.lg,
+        borderRadius: RADIUS.xl,
         backgroundColor: colors.card,
         borderWidth: 1,
         borderColor: colors.border,

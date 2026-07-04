@@ -143,6 +143,7 @@ export default function FlightNotificationSettingsModal({
                   onPress={() => onUpdateNotificationSettings({
                     arrivalLeadMinutes: clamp(notifSettings.arrivalLeadMinutes - 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
                   }).catch(() => {})}
+                  accessibilityRole="button" accessibilityLabel={t('a11yDecrease')}
                 >
                   <MaterialIcons name="remove" size={18} color={colors.primaryDark} />
                 </TouchableOpacity>
@@ -152,6 +153,7 @@ export default function FlightNotificationSettingsModal({
                   onPress={() => onUpdateNotificationSettings({
                     arrivalLeadMinutes: clamp(notifSettings.arrivalLeadMinutes + 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
                   }).catch(() => {})}
+                  accessibilityRole="button" accessibilityLabel={t('a11yIncrease')}
                 >
                   <MaterialIcons name="add" size={18} color={colors.primaryDark} />
                 </TouchableOpacity>
@@ -166,6 +168,7 @@ export default function FlightNotificationSettingsModal({
                   onPress={() => onUpdateNotificationSettings({
                     departureLeadMinutes: clamp(notifSettings.departureLeadMinutes - 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
                   }).catch(() => {})}
+                  accessibilityRole="button" accessibilityLabel={t('a11yDecrease')}
                 >
                   <MaterialIcons name="remove" size={18} color={colors.primaryDark} />
                 </TouchableOpacity>
@@ -175,6 +178,7 @@ export default function FlightNotificationSettingsModal({
                   onPress={() => onUpdateNotificationSettings({
                     departureLeadMinutes: clamp(notifSettings.departureLeadMinutes + 1, MIN_NOTIF_MINUTES, MAX_NOTIF_MINUTES),
                   }).catch(() => {})}
+                  accessibilityRole="button" accessibilityLabel={t('a11yIncrease')}
                 >
                   <MaterialIcons name="add" size={18} color={colors.primaryDark} />
                 </TouchableOpacity>

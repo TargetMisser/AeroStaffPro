@@ -48,7 +48,7 @@ function inferAirline(flightNumber: string): AirlineMeta {
   };
 }
 
-function parseStaffMonitorClock(value?: string, baseDate = new Date()): number | undefined {
+export function parseStaffMonitorClock(value?: string, baseDate = new Date()): number | undefined {
   const match = value?.match(/\b(\d{1,2})[:.](\d{2})\b/);
   if (!match) return undefined;
 
@@ -60,7 +60,21 @@ function parseStaffMonitorClock(value?: string, baseDate = new Date()): number |
 
   const date = new Date(baseDate);
   date.setHours(hours, minutes, 0, 0);
-  return Math.floor(date.getTime() / 1000);
+
+  /* The monitor only shows clock times for a rolling window of recent and
+     upcoming flights. Anchoring them blindly to "today" turns yesterday's
+     23:50 arrival, still on screen at 00:30, into a ghost flight tonight:
+     pick whichever of yesterday/today/tomorrow is closest to now instead
+     (ties favour the future, since the monitor is mostly forward-looking). */
+  const dayMs = 24 * 60 * 60 * 1000;
+  const nowMs = baseDate.getTime();
+  let bestMs = date.getTime();
+  for (const candidateMs of [bestMs - dayMs, bestMs + dayMs]) {
+    const better = Math.abs(candidateMs - nowMs) < Math.abs(bestMs - nowMs)
+      || (Math.abs(candidateMs - nowMs) === Math.abs(bestMs - nowMs) && candidateMs > bestMs);
+    if (better) bestMs = candidateMs;
+  }
+  return Math.floor(bestMs / 1000);
 }
 
 function alignEstimatedTime(scheduledTs: number | undefined, estimatedTs: number | undefined): number | undefined {
@@ -115,8 +129,17 @@ function staffMonitorFlightToScheduleItem(
   const routeName = item.route ?? 'N/A';
   const homeAirport = airportEndpoint(airportName, airportCode, airportIcao);
   const remoteAirport = airportEndpoint(routeName);
-  const realTs = hasRealEvent(item.status, direction) ? effectiveTs : undefined;
-  const statusText = item.status ?? (estimatedTs && estimatedTs !== scheduledTs ? 'Stimato' : 'Scheduled');
+
+  // A real touchdown time is the strongest "the aircraft is here" signal: in the
+  // live PSA feed `state` is often blank even after landing, so the status-text
+  // check below would otherwise never flag an arrival as landed.
+  const landedTs = direction === 'arrivals'
+    ? alignEstimatedTime(scheduledTs, parseStaffMonitorClock(item.landedTime, now))
+    : undefined;
+  const hasLanded = landedTs !== undefined;
+  const realTs = landedTs ?? (hasRealEvent(item.status, direction) ? effectiveTs : undefined);
+  const statusText = item.status
+    || (hasLanded ? 'Atterrato' : estimatedTs && estimatedTs !== scheduledTs ? 'Stimato' : 'Scheduled');
 
   return {
     flight: {
@@ -142,7 +165,7 @@ function staffMonitorFlightToScheduleItem(
       },
       status: {
         text: statusText,
-        generic: { status: { color: statusColor(item.status, scheduledTs, effectiveTs) } },
+        generic: { status: { color: hasLanded ? 'green' : statusColor(item.status, scheduledTs, effectiveTs) } },
       },
       _source: 'staffMonitor',
     },

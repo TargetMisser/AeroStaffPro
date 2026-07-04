@@ -104,7 +104,7 @@ run('npm', ['run', 'release:check']);
 run('npm', ['run', 'test']);
 run('npm', ['run', 'typecheck']);
 
-run('git', ['add', 'package.json', 'package-lock.json', 'app.json', 'android/app/build.gradle', 'README.md']);
+run('git', ['add', 'package.json', 'package-lock.json', 'app.json', 'android/app/build.gradle', 'README.md', 'src/utils/updateChecker.ts']);
 run('git', ['commit', '-m', `chore: release ${meta.packageVersion}`]);
 run('git', ['push', '-u', 'origin', branch]);
 
