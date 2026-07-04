@@ -295,9 +295,15 @@ async function fetchProviderWithTimeout(
     throw new Error('PROVIDER_PARENT_ABORTED');
   }
 
+  let rejectParentAbort: ((reason: Error) => void) | undefined;
+  const parentAbortPromise = new Promise<never>((_, reject) => {
+    rejectParentAbort = reject;
+  });
+
   if (context.signal) {
     parentAbortHandler = () => {
       controller.abort();
+      rejectParentAbort?.(new Error('PROVIDER_PARENT_ABORTED'));
     };
     context.signal.addEventListener('abort', parentAbortHandler, { once: true });
   }
@@ -306,6 +312,7 @@ async function fetchProviderWithTimeout(
     return await Promise.race([
       provider.fetch({ ...context, signal: controller.signal }),
       timeoutPromise,
+      parentAbortPromise,
     ]);
   } finally {
     if (timer) clearTimeout(timer);

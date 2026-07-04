@@ -1361,6 +1361,36 @@ async function runProviderLayerTests() {
   assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
   assert(timeoutStatus?.errorCode === 'provider_timeout', 'provider diagnostics should expose normalized timeout error codes');
 
+  const parentAbortController = new AbortController();
+  const parentAbortStartedAt = Date.now();
+  setTimeout(() => parentAbortController.abort(), 5);
+  let parentAbortMessage = '';
+  try {
+    await providerLayer.fetchFlightScheduleFromProviders({
+      airportCode: 'PSA',
+      airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+      providerTimeoutMs: 120,
+      signal: parentAbortController.signal,
+      now,
+    }, [{
+      id: 'staffMonitor',
+      label: 'Abort-ignorant provider',
+      supports: () => true,
+      fetch: async () => new Promise(() => {}),
+    }]);
+  } catch (error) {
+    parentAbortMessage = String(error);
+  }
+  const parentAbortElapsedMs = Date.now() - parentAbortStartedAt;
+  assert(
+    parentAbortElapsedMs < 80,
+    `parent abort should stop a provider that ignores AbortSignal immediately, took ${parentAbortElapsedMs}ms`,
+  );
+  assert(
+    parentAbortMessage.includes('PROVIDER_PARENT_ABORTED'),
+    'provider diagnostics should identify the global parent abort',
+  );
+
   const cooldownCalls = [];
   const cooldownLayer = loadTsModule('src/utils/flightProviders/index.ts', {
     './aeroDataBoxProvider': {
