@@ -331,8 +331,79 @@ function mergeProviderResults(
   }
 
   return {
-    allArrivals: mergeFlightLists(previous.allArrivals, next.allArrivals, 'arrival'),
-    allDepartures: mergeFlightLists(previous.allDepartures, next.allDepartures, 'departure'),
+    allArrivals: mergeFlightLists(previous.allArrivals, next.allArrivals, 'arrival', Date.now(), mergeProviderFlightItems),
+    allDepartures: mergeFlightLists(previous.allDepartures, next.allDepartures, 'departure', Date.now(), mergeProviderFlightItems),
+  };
+}
+
+function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: FlightDirection): any {
+  const previousFlight = previousItem?.flight ?? {};
+  const nextFlight = nextItem?.flight ?? {};
+  const previousTime = previousFlight.time ?? {};
+  const nextTime = nextFlight.time ?? {};
+  const timeField = direction === 'arrival' ? 'arrival' : 'departure';
+  const previousHasAuthoritativeEta = previousFlight._etaSource === 'fr24_api'
+    && typeof previousTime.estimated?.[timeField] === 'number';
+  const nextHasAuthoritativeEta = nextFlight._etaSource === 'fr24_api'
+    && typeof nextTime.estimated?.[timeField] === 'number';
+  const estimated = {
+    ...(previousTime.estimated ?? {}),
+    ...(nextTime.estimated ?? {}),
+  };
+
+  if (previousHasAuthoritativeEta && !nextHasAuthoritativeEta) {
+    estimated[timeField] = previousTime.estimated[timeField];
+  }
+
+  return {
+    ...previousItem,
+    ...nextItem,
+    flight: {
+      ...previousFlight,
+      ...nextFlight,
+      identification: {
+        ...(previousFlight.identification ?? {}),
+        ...(nextFlight.identification ?? {}),
+      },
+      airline: {
+        ...(previousFlight.airline ?? {}),
+        ...(nextFlight.airline ?? {}),
+        code: {
+          ...(previousFlight.airline?.code ?? {}),
+          ...(nextFlight.airline?.code ?? {}),
+        },
+      },
+      aircraft: {
+        ...(previousFlight.aircraft ?? {}),
+        ...(nextFlight.aircraft ?? {}),
+      },
+      airport: {
+        ...(previousFlight.airport ?? {}),
+        ...(nextFlight.airport ?? {}),
+      },
+      time: {
+        ...previousTime,
+        ...nextTime,
+        scheduled: {
+          ...(previousTime.scheduled ?? {}),
+          ...(nextTime.scheduled ?? {}),
+        },
+        estimated,
+        real: {
+          ...(previousTime.real ?? {}),
+          ...(nextTime.real ?? {}),
+        },
+      },
+      _operational: {
+        ...(previousFlight._operational ?? {}),
+        ...(nextFlight._operational ?? {}),
+      },
+      _etaSource: nextHasAuthoritativeEta
+        ? 'fr24_api'
+        : previousHasAuthoritativeEta
+          ? 'fr24_api'
+          : nextFlight._etaSource ?? previousFlight._etaSource,
+    },
   };
 }
 
@@ -495,9 +566,10 @@ export async function fetchFlightScheduleFromProviders(
     );
     for (const attempt of attempts) {
       attemptedCoreIds.add(attempt.provider.id);
-      if (applyProviderAttempt(attempt) && aggregate && source) {
-        return buildPayload(aggregate, source, sourceLabels, diagnostics);
-      }
+      applyProviderAttempt(attempt);
+    }
+    if (aggregate && source && hasTodayAndTomorrowCoverage(aggregate, now)) {
+      return buildPayload(aggregate, source, sourceLabels, diagnostics);
     }
   }
 

@@ -1153,6 +1153,69 @@ async function runProviderLayerTests() {
     'FR24 API and StaffMonitor should start as one parallel core wave',
   );
 
+  const authoritativeEta = todayTs + 5 * 60;
+  const weakerAirportEta = todayTs + 20 * 60;
+  const authorityPayload = await providerLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+    preference: 'auto',
+  }, [
+    {
+      id: 'fr24Api',
+      label: 'FlightRadar24 API',
+      supports: () => true,
+      fetch: async () => ({
+        allArrivals: [{
+          ...makeProviderArrival('FR7777', todayTs, 'FCO'),
+          flight: {
+            ...makeProviderArrival('FR7777', todayTs, 'FCO').flight,
+            time: {
+              scheduled: { arrival: todayTs },
+              estimated: { arrival: authoritativeEta },
+              real: {},
+            },
+            _source: 'fr24_api_merged',
+            _etaSource: 'fr24_api',
+          },
+        }, makeProviderArrival('FR7778', tomorrowTs, 'FCO')],
+        allDepartures: [makeProviderFlight('FR7779', tomorrowTs, 'FCO')],
+      }),
+    },
+    {
+      id: 'staffMonitor',
+      label: 'StaffMonitor PSA',
+      supports: () => true,
+      fetch: async () => ({
+        allArrivals: [{
+          ...makeProviderArrival('FR7777', todayTs, 'FCO'),
+          flight: {
+            ...makeProviderArrival('FR7777', todayTs, 'FCO').flight,
+            time: {
+              scheduled: { arrival: todayTs },
+              estimated: { arrival: weakerAirportEta },
+              real: {},
+            },
+            _operational: { gate: 'A3', belt: '2' },
+            _source: 'staffMonitor',
+          },
+        }],
+        allDepartures: [makeProviderFlight('FR7780', todayTs, 'FCO')],
+      }),
+    },
+  ]);
+  const authorityArrival = authorityPayload.allArrivals.find(
+    item => item.flight.identification.number.default === 'FR7777',
+  );
+  assert(
+    authorityArrival.flight.time.estimated.arrival === authoritativeEta,
+    'provider merge must preserve the authoritative FR24 ETA',
+  );
+  assert(
+    authorityArrival.flight._operational.gate === 'A3' && authorityArrival.flight._operational.belt === '2',
+    'provider merge must retain StaffMonitor operational fields beside the FR24 ETA',
+  );
+
   const payload = await providerLayer.fetchFlightScheduleFromProviders({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },

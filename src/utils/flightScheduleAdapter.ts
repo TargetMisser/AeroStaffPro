@@ -396,6 +396,7 @@ export function mergeFlightLists(
   fresh: any[],
   direction: FlightDirection,
   nowMs = Date.now(),
+  mergeItems?: (cachedItem: any, freshItem: any, direction: FlightDirection) => any,
 ): any[] {
   const map = new Map<string, any>();
   for (const item of cached) {
@@ -404,13 +405,17 @@ export function mergeFlightLists(
   for (const item of fresh) {
     const nextKey = getFlightMergeKey(item, direction);
     const existingKey = findMergeCandidateKey(map, item, direction);
+    const existingItem = existingKey ? map.get(existingKey) : undefined;
     if (existingKey && existingKey !== nextKey) {
       map.delete(existingKey);
     }
     /* Fresh items are stamped with the time a provider last confirmed them,
        so pruneUnseenFlights can evict cached flights no source reports
        anymore (cancellations, synthesized timetable guesses). */
-    map.set(nextKey, { ...item, _seenAtMs: nowMs });
+    const mergedItem = existingItem && mergeItems
+      ? mergeItems(existingItem, item, direction)
+      : item;
+    map.set(nextKey, { ...mergedItem, _seenAtMs: nowMs });
   }
   return Array.from(map.values());
 }
