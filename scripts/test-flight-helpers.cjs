@@ -854,6 +854,50 @@ const cache = flightCache.sanitizeFlightScreenCache({
 assert(cache && cache.arrivals.length === 1 && cache.departures.length === 1, 'flight screen cache should accept matching fresh airport cache');
 assert(cache.providerDiagnostics?.[0]?.tomorrowDepartures === 1, 'flight screen cache should preserve provider diagnostics');
 assert(flightCache.sanitizeFlightScreenCache({ airportCode: 'FCO', savedAt: 10_000 }, 'PSA', 20_000) === null, 'flight screen cache should reject another airport');
+const cacheNow = new Date(2026, 6, 4, 14, 0, 0).getTime();
+const todayFlightTs = Math.floor(new Date(2026, 6, 4, 10, 0, 0).getTime() / 1000);
+const yesterdayFlightTs = Math.floor(new Date(2026, 6, 3, 10, 0, 0).getTime() / 1000);
+const staleSameDayCache = {
+  airportCode: 'PSA',
+  arrivals: [],
+  departures: [{
+    flight: {
+      identification: { number: { default: 'FR1234' } },
+      time: { scheduled: { departure: todayFlightTs }, estimated: {}, real: {} },
+    },
+  }],
+  sourceLabel: 'StaffMonitor PSA',
+  fetchedAt: cacheNow - 8 * 60 * 60 * 1000,
+  savedAt: cacheNow - 8 * 60 * 60 * 1000,
+};
+assert(
+  flightCache.sanitizeFlightScreenCache(staleSameDayCache, 'PSA', cacheNow) === null,
+  'normal cache reads should still reject entries beyond the freshness TTL',
+);
+const staleToday = flightCache.sanitizeFlightScreenCache(
+  staleSameDayCache,
+  'PSA',
+  cacheNow,
+  flightCache.FLIGHT_SCREEN_CACHE_TTL_MS,
+  true,
+);
+assert(staleToday?.isStale === true, 'initial screen cache should accept a stale same-day snapshot');
+const staleYesterday = flightCache.sanitizeFlightScreenCache(
+  {
+    ...staleSameDayCache,
+    departures: [{
+      flight: {
+        identification: { number: { default: 'FR1234' } },
+        time: { scheduled: { departure: yesterdayFlightTs }, estimated: {}, real: {} },
+      },
+    }],
+  },
+  'PSA',
+  cacheNow,
+  flightCache.FLIGHT_SCREEN_CACHE_TTL_MS,
+  true,
+);
+assert(staleYesterday === null, 'same-day fallback must reject another day');
 
 const flightLoadingState = loadTsModule('src/utils/flightLoadingState.ts');
 assert(

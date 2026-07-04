@@ -587,12 +587,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   // Carica voli recenti per aeroporto così oggi/domani restano visibili anche prima del fetch.
   useEffect(() => {
     let active = true;
-    loadFlightScreenCache(airportCode).then(cache => {
+    loadFlightScreenCache(airportCode, true).then(cache => {
       if (!active || !cache) return;
       setAllArrivalsFull(cache.arrivals);
       setAllDeparturesFull(cache.departures);
       setFlightDataSource({
-        sourceLabel: cache.sourceLabel,
+        sourceLabel: cache.isStale ? `${cache.sourceLabel} · cache in aggiornamento` : cache.sourceLabel,
         fetchedAt: cache.fetchedAt,
         providerDiagnostics: cache.providerDiagnostics,
       });
@@ -969,10 +969,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       const providerUnavailable = message.includes('NO_FLIGHT_PROVIDER_AVAILABLE');
 
       if (providerUnavailable) {
-        setAllArrivalsFull([]);
-        setAllDeparturesFull([]);
-        setArrivals([]);
-        setDepartures([]);
         setFlightDataSource({
           sourceLabel: 'Nessuna fonte voli disponibile',
           fetchedAt: Date.now(),
