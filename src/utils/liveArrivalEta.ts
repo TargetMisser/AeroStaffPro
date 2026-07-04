@@ -241,6 +241,7 @@ export function applyLiveArrivalEtas(
 
   arrivals.forEach((item, index) => {
     if (item?.flight?.time?.real?.arrival) return;
+    if (typeof item?.flight?.time?.estimated?.arrival === 'number') return;
 
     const reg = readFlightRegistration(item);
     const aircraft = (reg && byRegistration.get(reg))

@@ -499,7 +499,20 @@ const arrivalByReg = {
   flight: {
     identification: { number: { default: 'FR9876' } },
     aircraft: { registration: 'EIDWA' },
-    time: { scheduled: { arrival: nowSec + 30 * 60 }, estimated: { arrival: nowSec + 30 * 60 }, real: {} },
+    time: { scheduled: { arrival: nowSec + 30 * 60 }, estimated: {}, real: {} },
+  },
+};
+const officialEta = nowSec + 19 * 60;
+const officialArrival = {
+  flight: {
+    identification: { number: { default: 'FR9876' } },
+    aircraft: { registration: 'EIDWA' },
+    time: {
+      scheduled: { arrival: nowSec + 30 * 60 },
+      estimated: { arrival: officialEta },
+      real: {},
+    },
+    _etaSource: 'fr24_api',
   },
 };
 const landedArrival = {
@@ -517,10 +530,23 @@ const overlaid = liveEta.applyLiveArrivalEtas(
 assert(overlaid[0].flight.time.estimated.arrival === nowSec + etaInbound,
   'arrivals matched by registration should get the live ETA');
 assert(overlaid[0].flight._etaSource === 'adsb', 'live ETAs should be tagged with their source');
-assert(arrivalByReg.flight.time.estimated.arrival === nowSec + 30 * 60,
+assert(arrivalByReg.flight.time.estimated.arrival === undefined,
   'the overlay must not mutate the input items');
 assert(overlaid[1].flight.time.estimated.arrival === undefined,
   'landed flights must keep their real times untouched');
+const preservedOfficialEta = liveEta.applyLiveArrivalEtas(
+  [officialArrival],
+  [inboundAircraft],
+  PSA_LAT, PSA_LON, nowSec,
+);
+assert(
+  preservedOfficialEta[0].flight.time.estimated.arrival === officialEta,
+  'public ADS-B must not overwrite an official FR24 ETA',
+);
+assert(
+  preservedOfficialEta[0].flight._etaSource === 'fr24_api',
+  'preserving an official ETA must also preserve its provenance',
+);
 
 const wrongRotation = {
   flight: {
@@ -1500,7 +1526,14 @@ async function runProviderLayerTests() {
                     operating_as: 'easyJet',
                     reg: 'OE-TEST',
                   }]
-                : [],
+                : [{
+                    flight: 'FR9876',
+                    timestamp: '2026-05-14T13:35:00Z',
+                    eta: '2026-05-14T14:05:00Z',
+                    orig_iata: 'FCO',
+                    operating_as: 'Ryanair',
+                    reg: 'EI-ETA',
+                  }],
             }),
           };
         }
@@ -1524,7 +1557,17 @@ async function runProviderLayerTests() {
                           },
                         }],
                       },
-                      arrivals: { data: [] },
+                      arrivals: {
+                        data: [{
+                          flight: {
+                            identification: { number: { default: 'FR9876' } },
+                            airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
+                            airport: { origin: { code: { iata: 'FCO' }, name: 'Rome Fiumicino' } },
+                            time: { scheduled: { arrival: 1778767500 }, estimated: {}, real: {} },
+                            status: { text: 'Scheduled', generic: { status: { color: 'gray' } } },
+                          },
+                        }],
+                      },
                     },
                   },
                 },
@@ -1548,6 +1591,18 @@ async function runProviderLayerTests() {
   assert(
     fr24MergedEasyJetVariants.allDepartures[0].flight.airline.name === 'easyJet',
     'FR24 merged easyJet variants should keep a canonical easyJet airline label',
+  );
+  const officialFr24Arrival = fr24MergedEasyJetVariants.allArrivals.find(
+    item => item.flight.identification.number.default === 'FR9876',
+  );
+  assert(officialFr24Arrival, 'FR24 provider should retain the official live arrival');
+  assert(
+    officialFr24Arrival.flight.time.estimated.arrival === Math.floor(Date.parse('2026-05-14T14:05:00Z') / 1000),
+    'FR24 provider should retain the official live ETA',
+  );
+  assert(
+    officialFr24Arrival.flight._etaSource === 'fr24_api',
+    'official FR24 ETA should be tagged as authoritative',
   );
 
   const aeroStorage = new Map();

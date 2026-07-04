@@ -195,6 +195,7 @@ function officialLiveFlightToScheduleItem(
         generic: { status: { color: direction === 'departures' ? 'green' : 'gray' } },
       },
       _source: 'fr24_api',
+      ...(etaTs ? { _etaSource: 'fr24_api' as const } : {}),
     },
   };
 }
@@ -280,6 +281,7 @@ function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 
       },
       status: liveFlight.status ?? scheduleFlight.status,
       _source: 'fr24_api_merged',
+      _etaSource: estimatedTs ? 'fr24_api' : scheduleFlight._etaSource,
     },
   };
 }
