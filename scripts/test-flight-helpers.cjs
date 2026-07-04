@@ -1106,6 +1106,53 @@ async function runProviderLayerTests() {
     },
   });
 
+  const coreStarts = new Map();
+  const parallelPayload = await providerLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+    preference: 'auto',
+  }, [
+    {
+      id: 'fr24Api',
+      label: 'FlightRadar24 API',
+      supports: () => true,
+      fetch: async () => {
+        coreStarts.set('fr24Api', Date.now());
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return {
+          allArrivals: [
+            makeProviderArrival('U21000', todayTs),
+            makeProviderArrival('U21001', tomorrowTs),
+          ],
+          allDepartures: [],
+        };
+      },
+    },
+    {
+      id: 'staffMonitor',
+      label: 'StaffMonitor PSA',
+      supports: () => true,
+      fetch: async () => {
+        coreStarts.set('staffMonitor', Date.now());
+        await new Promise(resolve => setTimeout(resolve, 30));
+        return {
+          allArrivals: [],
+          allDepartures: [
+            makeProviderFlight('HV1000', todayTs),
+            makeProviderFlight('HV1001', tomorrowTs),
+          ],
+        };
+      },
+    },
+  ]);
+  assert(parallelPayload.allArrivals.length === 2 && parallelPayload.allDepartures.length === 2,
+    'parallel core wave should merge both successful provider results');
+  assert(
+    Math.abs(coreStarts.get('fr24Api') - coreStarts.get('staffMonitor')) < 20,
+    'FR24 API and StaffMonitor should start as one parallel core wave',
+  );
+
   const payload = await providerLayer.fetchFlightScheduleFromProviders({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },

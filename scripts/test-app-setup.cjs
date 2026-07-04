@@ -134,6 +134,10 @@ assert(health.some(chip => chip.id === 'notifications' && chip.value === '4 atti
 
 const flightRefreshPolicy = loadTsModule('src/utils/flightRefreshPolicy.ts');
 assert(flightRefreshPolicy.FLIGHT_AUTO_REFRESH_INTERVAL_MS === 120_000, 'flight auto refresh should stay at two minutes');
+assert(
+  flightRefreshPolicy.FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS === 8_000,
+  'critical flight refresh should have an eight-second hard deadline',
+);
 assert(flightRefreshPolicy.shouldRefreshFlightsOnAppActive({
   isFocused: true,
   airportLoading: false,

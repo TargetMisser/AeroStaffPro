@@ -1,5 +1,6 @@
 export const FLIGHT_AUTO_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 export const FLIGHT_FOREGROUND_REFRESH_STALE_MS = 60 * 1000;
+export const FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS = 8_000;
 
 export function shouldRefreshFlightsOnAppActive({
   isFocused,

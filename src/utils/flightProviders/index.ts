@@ -355,43 +355,55 @@ export async function fetchFlightScheduleFromProviders(
   let source: FlightScheduleProviderId | null = null;
   const sourceLabels: string[] = [];
 
-  for (const provider of providers) {
+  type ProviderAttempt = {
+    provider: FlightScheduleProvider;
+    diagnostic: FlightScheduleProviderStatus;
+    result?: FlightScheduleProviderResult;
+  };
+
+  const runProviderAttempt = async (
+    provider: FlightScheduleProvider,
+    currentAggregate: FlightScheduleProviderResult | null,
+  ): Promise<ProviderAttempt> => {
     if (!provider.supports(context)) {
-      diagnostics.push({
-        provider: provider.id,
-        label: provider.label,
-        status: 'skipped',
-        mode: 'full',
-        contributed: false,
-        message: provider.unavailableMessage?.(context) ?? `Unsupported airport ${context.airportCode}`,
-      });
-      continue;
+      return {
+        provider,
+        diagnostic: {
+          provider: provider.id,
+          label: provider.label,
+          status: 'skipped',
+          mode: 'full',
+          contributed: false,
+          message: provider.unavailableMessage?.(context) ?? `Unsupported airport ${context.airportCode}`,
+        },
+      };
     }
 
     const cooldown = activeProviderCooldown(provider, context, nowMs);
     if (cooldown) {
-      diagnostics.push({
-        provider: provider.id,
-        label: provider.label,
-        status: 'skipped',
-        mode: 'full',
-        contributed: false,
-        errorCode: 'provider_cooldown',
-        cooldownUntil: cooldown.until,
-        message: `Cooldown attivo fino alle ${formatCooldownTime(cooldown.until)} dopo ${cooldown.errorCode}: ${cooldown.message}`,
-      });
-      continue;
+      return {
+        provider,
+        diagnostic: {
+          provider: provider.id,
+          label: provider.label,
+          status: 'skipped',
+          mode: 'full',
+          contributed: false,
+          errorCode: 'provider_cooldown',
+          cooldownUntil: cooldown.until,
+          message: `Cooldown attivo fino alle ${formatCooldownTime(cooldown.until)} dopo ${cooldown.errorCode}: ${cooldown.message}`,
+        },
+      };
     }
 
     const startedAt = Date.now();
     try {
-      const preference = context.preference ?? 'auto';
       const useAirLabsRoutesOnly = provider.id === 'airlabs'
-        && aggregate !== null
-        && hasScheduleBackedDayCoverage(aggregate, now);
+        && currentAggregate !== null
+        && hasScheduleBackedDayCoverage(currentAggregate, now);
       const useAeroDataBoxFutureOnly = provider.id === 'aeroDataBox'
-        && aggregate !== null
-        && hasScheduleBackedDayCoverage(aggregate, now);
+        && currentAggregate !== null
+        && hasScheduleBackedDayCoverage(currentAggregate, now);
       const mode = useAirLabsRoutesOnly ? 'routesOnly' : useAeroDataBoxFutureOnly ? 'futureOnly' : 'full';
       const messages: string[] = [];
       const providerContext: FlightScheduleProviderContext = {
@@ -410,50 +422,83 @@ export async function fetchFlightScheduleFromProviders(
       const durationMs = Date.now() - startedAt;
       const contributed = hasUsefulCoverage(result);
       clearProviderCooldown(provider, context);
-      diagnostics.push({
-        provider: provider.id,
-        label: provider.label,
-        status: 'success',
-        mode,
-        contributed,
-        message: messages.length > 0 ? messages.join(' | ') : undefined,
-        durationMs,
-        arrivals: result.allArrivals.length,
-        departures: result.allDepartures.length,
-        ...buildProviderCoverage(result, now),
-      });
-
-      if (!contributed) {
-        continue;
-      }
-
-      aggregate = mergeProviderResults(aggregate, result);
-      source ??= provider.id;
-      sourceLabels.push(provider.label);
-
-      if (hasTodayAndTomorrowCoverage(aggregate, now)) {
-        return buildPayload(aggregate, source, sourceLabels, diagnostics);
-      }
+      return {
+        provider,
+        result,
+        diagnostic: {
+          provider: provider.id,
+          label: provider.label,
+          status: 'success',
+          mode,
+          contributed,
+          message: messages.length > 0 ? messages.join(' | ') : undefined,
+          durationMs,
+          arrivals: result.allArrivals.length,
+          departures: result.allDepartures.length,
+          ...buildProviderCoverage(result, now),
+        },
+      };
     } catch (error) {
       const code = errorCode(error);
       const message = errorMessage(error);
       const cooldownUntil = setProviderCooldown(provider, context, code, message, nowMs);
-      diagnostics.push({
-        provider: provider.id,
-        label: provider.label,
-        status: 'failed',
-        mode: 'full',
-        contributed: false,
-        errorCode: code,
-        cooldownUntil,
-        durationMs: Date.now() - startedAt,
-        message: cooldownUntil
-          ? `${message} · cooldown fino alle ${formatCooldownTime(cooldownUntil)}`
-          : message,
-      });
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.log(`[flightProviders] ${provider.id} failed:`, error);
       }
+      return {
+        provider,
+        diagnostic: {
+          provider: provider.id,
+          label: provider.label,
+          status: 'failed',
+          mode: 'full',
+          contributed: false,
+          errorCode: code,
+          cooldownUntil,
+          durationMs: Date.now() - startedAt,
+          message: cooldownUntil
+            ? `${message} · cooldown fino alle ${formatCooldownTime(cooldownUntil)}`
+            : message,
+        },
+      };
+    }
+  };
+
+  const applyProviderAttempt = (attempt: ProviderAttempt): boolean => {
+    diagnostics.push(attempt.diagnostic);
+    if (!attempt.result || !attempt.diagnostic.contributed) return false;
+
+    aggregate = mergeProviderResults(aggregate, attempt.result);
+    source ??= attempt.provider.id;
+    sourceLabels.push(attempt.provider.label);
+    return hasTodayAndTomorrowCoverage(aggregate, now);
+  };
+
+  const preference = context.preference ?? 'auto';
+  const parallelCoreIds = new Set<FlightScheduleProviderId>(['fr24Api', 'staffMonitor']);
+  const coreProviders = preference === 'auto' || preference === 'fr24'
+    ? providers.filter(provider => parallelCoreIds.has(provider.id))
+    : [];
+  const useParallelCore = coreProviders.length === 2;
+  const attemptedCoreIds = new Set<FlightScheduleProviderId>();
+
+  if (useParallelCore) {
+    const attempts = await Promise.all(
+      coreProviders.map(provider => runProviderAttempt(provider, null)),
+    );
+    for (const attempt of attempts) {
+      attemptedCoreIds.add(attempt.provider.id);
+      if (applyProviderAttempt(attempt) && aggregate && source) {
+        return buildPayload(aggregate, source, sourceLabels, diagnostics);
+      }
+    }
+  }
+
+  for (const provider of providers) {
+    if (attemptedCoreIds.has(provider.id)) continue;
+    const attempt = await runProviderAttempt(provider, aggregate);
+    if (applyProviderAttempt(attempt) && aggregate && source) {
+      return buildPayload(aggregate, source, sourceLabels, diagnostics);
     }
   }
 

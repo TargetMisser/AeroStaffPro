@@ -15,9 +15,10 @@ import {
   type FlightScheduleProviderStatus,
 } from './flightProviders';
 import { getAeroDataBoxApiKey, getAeroDataBoxGateway, getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
+import { FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS } from './flightRefreshPolicy';
 import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, pruneExpiredFlights, type FlightDirection } from './flightScheduleAdapter';
 
-const FETCH_TIMEOUT = 90_000; // Provider-level timeouts prevent one slow source from poisoning the whole chain.
+const FETCH_TIMEOUT = FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS;
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
 const SCHEDULE_CACHE_TTL_MS = 30 * 60 * 1000;
 const SCHEDULE_DAY_CACHE_TTL_MS = 28 * 60 * 60 * 1000;
