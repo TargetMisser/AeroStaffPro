@@ -147,7 +147,10 @@ function officialLiveFlightToScheduleItem(
   airportCode: string,
   airport: AirportInfo,
 ): any | null {
-  const flightNumber = String(item.flight ?? item.callsign ?? '').trim().toUpperCase();
+  const publishedFlightNumber = String(item.flight ?? '').trim().toUpperCase();
+  const canonicalCallsign = getCanonicalFlightNumberIdentity(item.callsign);
+  const flightNumber = publishedFlightNumber
+    || (/^[A-Z0-9]{2}\d+$/.test(canonicalCallsign) ? canonicalCallsign : '');
   if (!flightNumber) return null;
 
   const etaTs = toUnixSeconds(item.eta);

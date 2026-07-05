@@ -54,7 +54,7 @@ export function isFlightAirlineMatch(item: any, airlineKey: string): boolean {
 
 export function filterFlightsByAirlines(items: any[], allowedList: string[]): any[] {
   if (allowedList.length === 0) {
-    return items;
+    return [];
   }
 
   return items.filter(item => allowedList.some(key => isFlightAirlineMatch(item, key)));
@@ -187,6 +187,27 @@ const FLIGHT_NUMBER_PREFIX_ALIASES: Record<string, string> = {
   EJU: 'U2',
   EZS: 'U2',
   EZY: 'U2',
+  RYR: 'FR',
+  RUK: 'RK',
+  WZZ: 'W6',
+  WMT: 'W4',
+  WUK: 'W9',
+  VOE: 'V7',
+  VLG: 'VY',
+  TRA: 'HV',
+  TVF: 'TO',
+  EIN: 'EI',
+  BAW: 'BA',
+  SAS: 'SK',
+  FDB: 'FZ',
+  MAC: '3O',
+  ABY: 'G9',
+  DLA: 'EN',
+  RYS: 'RR',
+  BCS: 'QY',
+  EWG: 'EW',
+  ITY: 'AZ',
+  DLH: 'LH',
 };
 
 export function getCanonicalFlightNumberIdentity(value: unknown): string {

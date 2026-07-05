@@ -180,6 +180,10 @@ assert(
   adapter.filterFlightsByAirlines([easyJetEuropeCodeOnly, easyJetFlightNumberOnly, delayed], ['easyjet']).length === 2,
   'airline filter should keep easyJet variants identified by code or flight number',
 );
+assert(
+  adapter.filterFlightsByAirlines([easyJetEuropeCodeOnly, delayed], []).length === 0,
+  'an empty airline selection should show no flights instead of every unmanaged airline',
+);
 
 const flightExternalLinks = loadTsModule('src/utils/flightExternalLinks.ts');
 assert(
@@ -825,6 +829,27 @@ const mergedEasyJetCodeVariants = adapter.mergeFlightLists([fr24ApiEasyJetDepart
 assert(
   mergedEasyJetCodeVariants.length === 1,
   'merge should collapse easyJet U2 and EC code variants for the same service',
+);
+
+const fr24RyanairCallsignDeparture = {
+  flight: {
+    identification: { number: { default: 'RYR08278' } },
+    airline: { name: 'Ryanair', code: { icao: 'RYR' } },
+    airport: { destination: { code: { iata: 'BDS' }, name: 'Brindisi' } },
+    time: { scheduled: { departure: easyJetVariantDepartureTs }, estimated: {}, real: {} },
+  },
+};
+const providerRyanairDeparture = {
+  flight: {
+    identification: { number: { default: 'FR8278' } },
+    airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
+    airport: { destination: { code: { iata: 'BDS' }, name: 'Brindisi' } },
+    time: { scheduled: { departure: easyJetVariantDepartureTs }, estimated: {}, real: {} },
+  },
+};
+assert(
+  adapter.mergeFlightLists([providerRyanairDeparture], [fr24RyanairCallsignDeparture], 'departure').length === 1,
+  'merge should collapse numeric ICAO callsigns with the matching IATA flight number',
 );
 
 const pruned = adapter.pruneExpiredFlights([scheduledOnly, delayed], 'departure', 5000, 3600);
@@ -1763,13 +1788,29 @@ async function runProviderLayerTests() {
             ok: true,
             text: async () => JSON.stringify({
               data: isDeparture
-                ? [{
-                    flight: 'U24924',
-                    timestamp: '2026-05-14T13:15:00Z',
-                    dest_iata: 'ORY',
-                    operating_as: 'easyJet',
-                    reg: 'OE-TEST',
-                  }]
+                ? [
+                    {
+                      flight: 'U24924',
+                      timestamp: '2026-05-14T13:15:00Z',
+                      dest_iata: 'ORY',
+                      operating_as: 'easyJet',
+                      reg: 'OE-TEST',
+                    },
+                    {
+                      callsign: 'RYR08278',
+                      timestamp: '2026-05-14T13:20:00Z',
+                      dest_iata: 'BDS',
+                      operating_as: 'Ryanair',
+                      reg: 'EI-RYR',
+                    },
+                    {
+                      callsign: 'RYR52GT',
+                      timestamp: '2026-05-14T13:25:00Z',
+                      dest_iata: 'BDS',
+                      operating_as: 'Ryanair',
+                      reg: 'EI-AMB',
+                    },
+                  ]
                 : [{
                     flight: 'FR9876',
                     timestamp: '2026-05-14T13:35:00Z',
@@ -1810,6 +1851,14 @@ async function runProviderLayerTests() {
                             time: { scheduled: { arrival: 1778767500 }, estimated: {}, real: {} },
                             status: { text: 'Scheduled', generic: { status: { color: 'gray' } } },
                           },
+                        }, {
+                          flight: {
+                            identification: { number: { default: 'FR8278' } },
+                            airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
+                            airport: { destination: { code: { iata: 'BDS' }, name: 'Brindisi' } },
+                            time: { scheduled: { departure: Math.floor(Date.parse('2026-05-14T13:20:00Z') / 1000) }, estimated: {}, real: {} },
+                            status: { text: 'Scheduled', generic: { status: { color: 'gray' } } },
+                          },
                         }],
                       },
                     },
@@ -1829,8 +1878,8 @@ async function runProviderLayerTests() {
     now,
   });
   assert(
-    fr24MergedEasyJetVariants.allDepartures.length === 1,
-    'FR24 provider should merge public EC easyJet schedule rows with U2 live API rows',
+    fr24MergedEasyJetVariants.allDepartures.length === 2,
+    'FR24 provider should merge public schedule rows with numeric live callsigns and discard ambiguous callsign-only rows',
   );
   assert(
     fr24MergedEasyJetVariants.allDepartures[0].flight.airline.name === 'easyJet',
