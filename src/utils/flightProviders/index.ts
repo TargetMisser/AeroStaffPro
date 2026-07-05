@@ -553,11 +553,15 @@ export async function fetchFlightScheduleFromProviders(
   };
 
   const preference = context.preference ?? 'auto';
-  const parallelCoreIds = new Set<FlightScheduleProviderId>(['fr24Api', 'staffMonitor']);
+  // AeroDataBox must start with the live/local providers when configured.
+  // Otherwise a stalled StaffMonitor can consume the whole parent refresh
+  // deadline and prevent the complete schedule source from ever starting,
+  // leaving only whichever aircraft FR24 happens to see live at that moment.
+  const parallelCoreIds = new Set<FlightScheduleProviderId>(['fr24Api', 'staffMonitor', 'aeroDataBox']);
   const coreProviders = preference === 'auto' || preference === 'fr24'
     ? providers.filter(provider => parallelCoreIds.has(provider.id))
     : [];
-  const useParallelCore = coreProviders.length === 2;
+  const useParallelCore = coreProviders.length >= 2;
   const attemptedCoreIds = new Set<FlightScheduleProviderId>();
 
   if (useParallelCore) {

@@ -1153,6 +1153,63 @@ async function runProviderLayerTests() {
     'FR24 API and StaffMonitor should start as one parallel core wave',
   );
 
+  const stalledStaffCalls = [];
+  const stalledStaffLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [
+          makeProviderArrival('FR8100', todayTs),
+          makeProviderArrival('FR8101', tomorrowTs),
+        ],
+        allDepartures: [
+          makeProviderFlight('FR8200', todayTs),
+          makeProviderFlight('FR8201', tomorrowTs),
+        ],
+      }, stalledStaffCalls),
+    },
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', { allArrivals: [], allDepartures: [] }, stalledStaffCalls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: {
+        id: 'staffMonitor',
+        label: 'StaffMonitor PSA',
+        supports: () => true,
+        fetch: async () => {
+          stalledStaffCalls.push('staffMonitor');
+          return new Promise(() => {});
+        },
+      },
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', {
+        allArrivals: [],
+        allDepartures: [makeFr24LiveProviderFlight('HV8400', todayTs, 'AMS')],
+      }, stalledStaffCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', { allArrivals: [], allDepartures: [] }, stalledStaffCalls),
+    },
+  });
+  const stalledStaffAbort = new AbortController();
+  setTimeout(() => stalledStaffAbort.abort(), 25);
+  const stalledStaffPayload = await stalledStaffLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    aeroDataBoxApiKey: 'adb-key',
+    fr24ApiKey: 'fr24-key',
+    providerTimeoutMs: 200,
+    signal: stalledStaffAbort.signal,
+    now,
+    preference: 'auto',
+  });
+  assert(
+    stalledStaffCalls.includes('aeroDataBox'),
+    'configured AeroDataBox should start before a stalled StaffMonitor consumes the global refresh deadline',
+  );
+  assert(
+    stalledStaffPayload.allDepartures.some(item => item.flight.identification.number.default === 'FR8200'),
+    'schedule coverage should survive the global deadline when FR24 only returned a thin live airline result',
+  );
+
   const authoritativeEta = todayTs + 5 * 60;
   const weakerAirportEta = todayTs + 20 * 60;
   const authorityPayload = await providerLayer.fetchFlightScheduleFromProviders({
@@ -1234,13 +1291,16 @@ async function runProviderLayerTests() {
   assert(payload.allDepartures.length === 2, 'provider auto mode should merge today and tomorrow departures from fallback providers');
   assert(payload.sourceLabel.includes('AeroDataBox') && payload.sourceLabel.includes('StaffMonitor'), 'provider source label should show merged providers');
   const aeroDataBoxContext = contexts.find(item => item.id === 'aeroDataBox')?.context;
-  assert(aeroDataBoxContext?.aeroDataBoxMode === 'futureOnly', 'provider auto mode should ask AeroDataBox only for future coverage once today is already covered');
+  assert(
+    aeroDataBoxContext?.aeroDataBoxMode !== 'futureOnly',
+    'provider auto mode should start full AeroDataBox coverage in parallel before live/local providers can consume the refresh deadline',
+  );
   const fr24Status = payload.diagnostics.find(item => item.provider === 'fr24Api');
   assert(fr24Status?.contributed === false, 'empty successful providers should be marked as not contributed');
   const staffStatus = payload.diagnostics.find(item => item.provider === 'staffMonitor');
   assert(staffStatus?.contributed === true, 'providers that add useful flights should be marked as contributed');
   const aeroDataBoxStatus = payload.diagnostics.find(item => item.provider === 'aeroDataBox');
-  assert(aeroDataBoxStatus?.mode === 'futureOnly', 'provider diagnostics should expose future-only mode');
+  assert(aeroDataBoxStatus?.mode === 'full', 'provider diagnostics should expose full parallel schedule coverage');
   assert(aeroDataBoxStatus?.contributed === true, 'future provider diagnostics should expose contribution state');
   assert(aeroDataBoxStatus?.tomorrowDepartures === 1, 'provider diagnostics should count AeroDataBox tomorrow departures');
   assert(aeroDataBoxStatus?.tomorrowArrivals === 1, 'provider diagnostics should count AeroDataBox tomorrow arrivals');
