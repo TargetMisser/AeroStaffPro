@@ -156,7 +156,7 @@ class FlightTileService : TileService() {
                     )
                     .addContent(
                         Text.Builder()
-                            .setText(fmtTime(flight.scheduledTime))
+                            .setText(fmtTime(displayTime(flight)))
                             .setFontStyle(
                                 FontStyle.Builder()
                                     .setSize(sp(28f))
@@ -195,21 +195,30 @@ class FlightTileService : TileService() {
             else "ETA ${mins}m" to AMBER
         }
 
-        val ops = flight.ops ?: return fmtTime(flight.scheduledTime) to TEXT_SECONDARY
+        val ops = flight.ops ?: return fmtTime(displayTime(flight)) to TEXT_SECONDARY
         val dep = flight.scheduledTime
+        val displayDeparture = flight.realDeparture ?: flight.estimatedTime ?: dep
         val gateOpenTime = dep - ops.gateOpen * 60
         val milestones = listOf(
             "CI Open" to (dep - ops.checkInOpen * 60),
             "CI Close" to (dep - ops.checkInClose * 60),
             "Gate" to gateOpenTime,
             "Gate Close" to (dep - ops.gateClose * 60),
-            "DEP" to dep
+            "DEP" to displayDeparture
         )
         val next = milestones.firstOrNull { it.second > now }
             ?: return "Partito" to GREEN
         val mins = ((next.second - now) / 60).coerceAtLeast(0)
         val timeStr = if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
         return "${next.first} tra $timeStr" to AMBER
+    }
+
+    private fun displayTime(flight: FlightData): Long {
+        return if (flight.tab == "arrivals") {
+            flight.realArrival ?: flight.estimatedTime ?: flight.scheduledTime
+        } else {
+            flight.realDeparture ?: flight.estimatedTime ?: flight.scheduledTime
+        }
     }
 
     private fun buildEmptyLayout(): LayoutElement {

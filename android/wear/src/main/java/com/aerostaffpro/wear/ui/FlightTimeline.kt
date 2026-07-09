@@ -26,6 +26,7 @@ private fun fmtTime(epochSec: Long): String = timeFmt.format(Date(epochSec * 100
 fun buildDepartureEvents(flight: FlightData): List<TimelineEvent> {
     val now = System.currentTimeMillis() / 1000
     val dep = flight.scheduledTime
+    val displayDep = flight.realDeparture ?: flight.estimatedTime ?: dep
     val ops = flight.ops ?: return emptyList()
     val gateOpenTime = dep - ops.gateOpen * 60
 
@@ -35,7 +36,7 @@ fun buildDepartureEvents(flight: FlightData): List<TimelineEvent> {
         RawEvent("CI Close", dep - ops.checkInClose * 60, WearColors.accent),
         RawEvent("Gate", gateOpenTime, WearColors.accent),
         RawEvent("Gate Close", dep - ops.gateClose * 60, WearColors.accent),
-        RawEvent("DEP", dep, WearColors.accent)
+        RawEvent("DEP", displayDep, WearColors.accent)
     )
 
     return raw.mapIndexed { i, ev ->
@@ -111,6 +112,7 @@ fun FlightTimelineScreen(flight: FlightData) {
         currentOrNext?.let { ev ->
             val idx = events.indexOf(ev)
             val dep = flight.scheduledTime
+            val displayDep = flight.realDeparture ?: flight.estimatedTime ?: dep
             val ops = flight.ops
             if (ops != null) {
                 val gateOpenTime = dep - ops.gateOpen * 60
@@ -119,9 +121,9 @@ fun FlightTimelineScreen(flight: FlightData) {
                     dep - ops.checkInClose * 60,
                     gateOpenTime,
                     dep - ops.gateClose * 60,
-                    dep
+                    displayDep
                 )
-                val ts = timestamps.getOrNull(idx) ?: dep
+                val ts = timestamps.getOrNull(idx) ?: displayDep
                 val mins = ((ts - now) / 60).coerceAtLeast(0)
                 val timeStr = if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
                 "${ev.label} tra $timeStr"

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   View, Text, StyleSheet, ActivityIndicator, Modal,
   FlatList, TouchableOpacity, RefreshControl,
-  Animated, NativeModules, Platform, Linking, AppState,
+  Animated, Platform, Linking, AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Calendar from 'expo-calendar';
@@ -82,10 +82,13 @@ import {
   schedulePinnedNotifications,
   scheduleShiftNotifications,
 } from '../utils/flightNotificationScheduler';
+import {
+  clearPinnedFlightOnWatch,
+  sendPinnedFlightToWatch,
+} from '../modules/WearDataSender';
+import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
 import { TYPE, WEIGHT } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
-
-const WearDataSender = Platform.OS === 'android' ? NativeModules.WearDataSender : null;
 
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const FLIGHT_FILTER_KEY = 'aerostaff_flight_filter_v1';
@@ -778,32 +781,42 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       setArrivals(fetchedArrivals);
       setDepartures(fetchedDepartures);
 
-      // Auto-clear expired pinned flight or stale data from another airport
+      // Refresh the pinned snapshot from the latest schedule before deciding it
+      // has expired. A delayed flight must remain pinned past its original STD.
       const notificationsEnabledNow = (await AsyncStorage.getItem(NOTIF_ENABLED_KEY)) === 'true';
       const pinnedRaw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
       if (pinnedRaw) {
         try {
           const pinned = JSON.parse(pinnedRaw);
           const pinTab = pinned._pinTab || 'departures';
-          const pinTs = pinTab === 'arrivals'
-            ? getBestArrivalTs(pinned)
-            : getBestDepartureTs(pinned);
-          const pinId = pinned.flight?.identification?.number?.default;
-          const pool = pinTab === 'arrivals' ? fetchedArrivals : fetchedDepartures;
-          const stillPresent = !!pinId && pool.some(item => item.flight?.identification?.number?.default === pinId);
-          if ((pinTs && pinTs < Date.now() / 1000) || !stillPresent) {
+          // Keep the pin alive through a temporary provider gap and include the
+          // live ADS-B overlay when it is available.
+          const pool = pinTab === 'arrivals' ? mergedArrs : mergedDeps;
+          const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);
+
+          if (reconciliation.kind === 'clear') {
             await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
             await cancelPinnedNotifications('pinned flight expired or missing', false);
             await dismissPinnedFlightNotification();
+            try { await clearPinnedFlightOnWatch(); } catch {}
             setPinnedFlightId(null);
-          } else if (stillPresent && pinId && notificationsEnabledNow) {
-            const updated = pool.find(item => item.flight?.identification?.number?.default === pinId);
-            if (updated) {
-              await showOrUpdatePinnedFlightNotification(updated, pinTab, notifSettingsRef.current.sticky);
+          } else {
+            const { item: refreshedPinned, tab, flightId } = reconciliation;
+            await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(refreshedPinned));
+            setPinnedFlightId(flightId);
+            try { await sendPinnedFlightToWatch(refreshedPinned); } catch {}
+
+            if (notificationsEnabledNow) {
+              try {
+                await schedulePinnedNotifications(refreshedPinned, tab, locale, notifSettingsRef.current);
+              } catch (e) {
+                if (__DEV__) console.warn('[pinnedNotifRefresh]', e);
+              }
+              await showOrUpdatePinnedFlightNotification(refreshedPinned, tab, notifSettingsRef.current.sticky);
+            } else {
+              await cancelPinnedNotifications('flight refresh notifications disabled', false);
+              await dismissPinnedFlightNotification();
             }
-          } else if (!notificationsEnabledNow) {
-            await cancelPinnedNotifications('flight refresh notifications disabled', false);
-            await dismissPinnedFlightNotification();
           }
         } catch {}
       }
@@ -1204,38 +1217,16 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       const id = item.flight?.identification?.number?.default;
       if (!id) return;
       const tab = activeTab;
-      await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify({ ...item, _pinTab: tab, _pinnedAt: Date.now() }));
+      const pinnedItem = { ...item, _pinTab: tab, _pinnedAt: Date.now() };
+      await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(pinnedItem));
       setPinnedFlightId(id);
       if (notifsEnabled) {
-        try { await schedulePinnedNotifications(item, tab, locale, notifSettingsRef.current); } catch (e) { if (__DEV__) console.warn('[pinnedNotif]', e); }
-        await showOrUpdatePinnedFlightNotification(item, tab, notifSettingsRef.current.sticky);
+        try { await schedulePinnedNotifications(pinnedItem, tab, locale, notifSettingsRef.current); } catch (e) { if (__DEV__) console.warn('[pinnedNotif]', e); }
+        await showOrUpdatePinnedFlightNotification(pinnedItem, tab, notifSettingsRef.current.sticky);
       } else {
         await dismissPinnedFlightNotification();
       }
-      // Send to watch
-      if (WearDataSender) {
-        const airlineIdentity = [
-          item.flight?.airline?.name,
-          item.flight?.airline?.code?.iata,
-          item.flight?.airline?.code?.icao,
-        ].filter(Boolean).join(' ');
-        const payload = JSON.stringify({
-          flightNumber: item.flight?.identification?.number?.default || '',
-          airline: item.flight?.airline?.name || '',
-          airlineColor: getAirlineColor(airlineIdentity),
-          iataCode: item.flight?.airline?.code?.iata || '',
-          tab,
-          destination: getFlightAirportLabel(item.flight?.airport?.destination, ''),
-          origin: getFlightAirportLabel(item.flight?.airport?.origin, ''),
-          scheduledTime: tab === 'departures' ? item.flight?.time?.scheduled?.departure : item.flight?.time?.scheduled?.arrival,
-          estimatedTime: tab === 'departures' ? item.flight?.time?.estimated?.departure : item.flight?.time?.estimated?.arrival,
-          realDeparture: item.flight?.time?.real?.departure || null,
-          realArrival: item.flight?.time?.real?.arrival || null,
-          ops: tab === 'departures' ? getAirlineOps(airlineIdentity) : null,
-          pinnedAt: Math.floor(Date.now() / 1000),
-        });
-        WearDataSender.sendPinnedFlight(payload);
-      }
+      try { await sendPinnedFlightToWatch(pinnedItem); } catch {}
     } catch {}
   }, [activeTab, locale, notifsEnabled]);
 
@@ -1245,7 +1236,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       try { await cancelPinnedNotifications(); } catch (e) { if (__DEV__) console.warn('[cancelPinNotif]', e); }
       await dismissPinnedFlightNotification();
       setPinnedFlightId(null);
-      if (WearDataSender) WearDataSender.clearPinnedFlight();
+      try { await clearPinnedFlightOnWatch(); } catch {}
     } catch (e) { if (__DEV__) console.error('[unpin]', e); }
   }, []);
 

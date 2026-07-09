@@ -34,6 +34,7 @@ type Flight = {
   flightNumber: string;
   airlineName: string;
   destination: string;
+  scheduledDepartureTs: number;
   departureTs: number;
   status: string;
   statusColor: string;
@@ -43,15 +44,17 @@ type Flight = {
 function parseFlight(item: any): Flight | null {
   const f = item.flight;
   if (!f) return null;
-  const ts = f.time?.scheduled?.departure;
-  if (!ts) return null;
+  const scheduledDepartureTs = f.time?.scheduled?.departure;
+  if (!scheduledDepartureTs) return null;
+  const departureTs = f.time?.real?.departure ?? f.time?.estimated?.departure ?? scheduledDepartureTs;
   const airlineName = f.airline?.name || '—';
   return {
-    id: f.identification?.id || `${ts}`,
+    id: f.identification?.id || `${scheduledDepartureTs}`,
     flightNumber: f.identification?.number?.default || 'N/A',
     airlineName,
     destination: getFlightAirportLabel(f.airport?.destination, 'N/A'),
-    departureTs: ts,
+    scheduledDepartureTs,
+    departureTs,
     status: f.status?.text || 'Scheduled',
     statusColor: f.status?.generic?.status?.color || 'gray',
     ops: getAirlineOps(airlineName),
@@ -86,10 +89,10 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
       const filtered = filterFlightsByAirlines(departures, selectedAirlines)
         .map(parseFlight)
         .filter((f): f is Flight => {
-          if (!f || f.departureTs < startSec || f.departureTs > endSec) return false;
+          if (!f || f.scheduledDepartureTs < startSec || f.scheduledDepartureTs > endSec) return false;
           return true;
         })
-        .sort((a, b) => a.departureTs - b.departureTs);
+        .sort((a, b) => a.scheduledDepartureTs - b.scheduledDepartureTs);
       setFlights(filtered);
     } catch {
       setError(true);
@@ -214,10 +217,10 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
 
           {/* Righe voli — Gantt chart */}
           {flights.map(flight => {
-            const ciOpenTs = flight.departureTs - flight.ops.checkInOpen * 60;
-            const ciCloseTs = flight.departureTs - flight.ops.checkInClose * 60;
-            const gateOpenTs = flight.departureTs - flight.ops.gateOpen * 60;
-            const gateCloseTs = flight.departureTs - flight.ops.gateClose * 60;
+            const ciOpenTs = flight.scheduledDepartureTs - flight.ops.checkInOpen * 60;
+            const ciCloseTs = flight.scheduledDepartureTs - flight.ops.checkInClose * 60;
+            const gateOpenTs = flight.scheduledDepartureTs - flight.ops.gateOpen * 60;
+            const gateCloseTs = flight.scheduledDepartureTs - flight.ops.gateClose * 60;
 
             const ciLeft = xPercent(ciOpenTs);
             const ciWidth = xPercent(ciCloseTs) - ciLeft;

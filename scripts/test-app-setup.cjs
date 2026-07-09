@@ -247,6 +247,50 @@ assert(
   !flightScreenSource.includes('inboundArrivals'),
   'flight gate windows must not move with inbound-aircraft delays',
 );
+assert(
+  flightScreenSource.includes('const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);'),
+  'FlightScreen must reconcile the fresh pin before evaluating expiry',
+);
+assert(
+  flightScreenSource.includes('AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(refreshedPinned))')
+    && flightScreenSource.includes('schedulePinnedNotifications(refreshedPinned, tab, locale, notifSettingsRef.current)')
+    && flightScreenSource.includes('sendPinnedFlightToWatch(refreshedPinned)'),
+  'FlightScreen must persist, reschedule, and sync the refreshed pinned flight',
+);
+
+const pinnedFlightLifecycle = loadTsModule('src/utils/pinnedFlightLifecycle.ts');
+const pinnedStd = 1_000_000;
+const pinnedEtd = pinnedStd + 90 * 60;
+const stalePinnedFlight = {
+  _pinTab: 'departures',
+  _pinnedAt: 123,
+  flight: {
+    identification: { number: { default: 'FR1234' } },
+    time: { scheduled: { departure: pinnedStd }, estimated: {}, real: {} },
+  },
+};
+const refreshedFlight = {
+  flight: {
+    identification: { number: { default: 'FR1234' } },
+    time: { scheduled: { departure: pinnedStd }, estimated: { departure: pinnedEtd }, real: {} },
+  },
+};
+const refreshedPinnedFlight = pinnedFlightLifecycle.reconcilePinnedFlight(
+  stalePinnedFlight,
+  [refreshedFlight],
+  pinnedStd + 10 * 60,
+);
+assert(refreshedPinnedFlight.kind === 'keep', 'a delayed pinned flight must not expire at its original STD');
+assert(
+  refreshedPinnedFlight.item.flight.time.estimated.departure === pinnedEtd
+    && refreshedPinnedFlight.item._pinTab === 'departures'
+    && refreshedPinnedFlight.item._pinnedAt === 123,
+  'pinned refresh must retain the live ETD and pin metadata',
+);
+assert(
+  pinnedFlightLifecycle.reconcilePinnedFlight(stalePinnedFlight, [refreshedFlight], pinnedEtd + 1).kind === 'clear',
+  'a pinned flight must expire after its live departure time',
+);
 
 const opsSource = fs.readFileSync(path.join(root, 'src/utils/airlineOps.ts'), 'utf8');
 assert(
@@ -270,6 +314,62 @@ const autoNotificationsSource = fs.readFileSync(path.join(root, 'src/utils/autoN
 const pinnedNotificationsSource = fs.readFileSync(path.join(root, 'src/utils/flightNotificationScheduler.ts'), 'utf8');
 assert(!autoNotificationsSource.includes("getScheduledFlightTs(item, 'departure') ?? etdTs"), 'automatic check-in/gate notifications must not fall back to delayed departure time');
 assert(!pinnedNotificationsSource.includes("getScheduledFlightTs(item, 'departure') ?? etdTs"), 'pinned check-in/gate notifications must not fall back to delayed departure time');
+
+const homeScreenSource = fs.readFileSync(path.join(root, 'src/screens/HomeScreen.tsx'), 'utf8');
+assert(
+  homeScreenSource.includes("const displayTs = tab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);"),
+  'the pinned Home flight must show the live departure/arrival time while operations stay scheduled',
+);
+assert(
+  homeScreenSource.includes("? getBestArrivalTs(pinned)") && homeScreenSource.includes(": getBestDepartureTs(pinned);"),
+  'a delayed pinned flight must remain visible past its scheduled time until its live time passes',
+);
+const wearTileSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/tile/FlightTileService.kt'), 'utf8');
+assert(
+  wearTileSource.includes('flight.realDeparture ?: flight.estimatedTime ?: flight.scheduledTime'),
+  'the Wear tile must show a delayed departure time without moving operational milestones',
+);
+assert(
+  wearTileSource.includes('"Gate Close" to (dep - ops.gateClose * 60)')
+    && wearTileSource.includes('"DEP" to displayDeparture'),
+  'the Wear tile must keep Gate on STD and use the live departure only for DEP',
+);
+
+const shiftTimelineSource = fs.readFileSync(path.join(root, 'src/components/ShiftTimeline.tsx'), 'utf8');
+assert(
+  /const departureTs = f\.time\?\.real\?\.departure \?\? f\.time\?\.estimated\?\.departure \?\? scheduledDepartureTs;/.test(shiftTimelineSource),
+  'ShiftTimeline must show real or estimated departure before STD',
+);
+assert(
+  /const ciOpenTs = flight\.scheduledDepartureTs - flight\.ops\.checkInOpen \* 60;[\s\S]*const gateCloseTs = flight\.scheduledDepartureTs - flight\.ops\.gateClose \* 60;/.test(shiftTimelineSource),
+  'ShiftTimeline check-in and gate windows must stay anchored to STD',
+);
+assert(
+  shiftTimelineSource.includes('const depLeft = xPercent(flight.departureTs);'),
+  'ShiftTimeline departure marker must use the live departure',
+);
+
+const wearTimelineSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/ui/FlightTimeline.kt'), 'utf8');
+assert(
+  /val displayDep = flight\.realDeparture \?: flight\.estimatedTime \?: dep/.test(wearTimelineSource),
+  'Wear FlightTimeline must derive a live departure time',
+);
+assert(
+  /RawEvent\("CI Open", dep - ops\.checkInOpen \* 60,[\s\S]*RawEvent\("Gate Close", dep - ops\.gateClose \* 60,[\s\S]*RawEvent\("DEP", displayDep,/.test(wearTimelineSource),
+  'Wear FlightTimeline must keep CI and Gate on STD while DEP stays live',
+);
+assert(
+  /dep - ops\.gateClose \* 60,\s*displayDep\s*\)/.test(wearTimelineSource),
+  'Wear FlightTimeline countdown must use the live DEP time',
+);
+
+const wearComplicationSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/complication/FlightComplicationService.kt'), 'utf8');
+const watchNotificationSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/notification/WatchNotificationService.kt'), 'utf8');
+assert(
+  wearComplicationSource.includes('Ev("DEP", displayDeparture)')
+    && watchNotificationSource.includes('Milestone("DEP", displayDeparture)'),
+  'Wear complication and ongoing notification must count down to the live departure',
+);
 
 // ─── Shift Calendar Night-Shift Replacement Tests ────────────────────────────
 // The Android implementation of expo-calendar getEventsAsync only returns

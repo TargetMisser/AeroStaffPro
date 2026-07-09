@@ -19,6 +19,7 @@ import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { statusToToken } from '../utils/statusColors';
 import { getAirportInfo } from '../utils/airportSettings';
 import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
+import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
 import { getCachedFlightProviderDiagnostics, type FlightProviderDiagnosticsSnapshot } from '../utils/fr24api';
 import { getNotificationDebugSnapshot, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
 import { loadFlightScreenCache } from '../utils/flightScreenCache';
@@ -112,7 +113,8 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
   const ts = tab === 'arrivals'
     ? item.flight?.time?.scheduled?.arrival
     : item.flight?.time?.scheduled?.departure;
-  const depTime = ts ? new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
+  const displayTs = tab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
+  const depTime = displayTs ? new Date(displayTs * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : 'N/A';
 
   const ops = getAirlineOps(airlineIdentity);
   const fmt = (offsetMin: number) =>
@@ -460,8 +462,8 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
         const pinned = JSON.parse(raw);
         const tab = pinned._pinTab || 'departures';
         const ts = tab === 'arrivals'
-          ? pinned.flight?.time?.scheduled?.arrival
-          : pinned.flight?.time?.scheduled?.departure;
+          ? getBestArrivalTs(pinned)
+          : getBestDepartureTs(pinned);
         if (ts && ts < Date.now() / 1000) {
           await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
           setPinnedFlight(null);

@@ -158,8 +158,9 @@ class WatchNotificationService : WearableListenerService() {
             return if (mins > 60) "ETA ${mins / 60}h ${mins % 60}m" else "ETA ${mins}m"
         }
 
-        val ops = flight.ops ?: return "DEP ${formatTime(flight.scheduledTime)}"
         val dep = flight.scheduledTime
+        val displayDeparture = flight.realDeparture ?: flight.estimatedTime ?: dep
+        val ops = flight.ops ?: return "DEP ${formatTime(displayDeparture)}"
         val gateOpenTime = dep - ops.gateOpen * 60
 
         data class Milestone(val label: String, val ts: Long)
@@ -168,7 +169,7 @@ class WatchNotificationService : WearableListenerService() {
             Milestone("CI Close", dep - ops.checkInClose * 60),
             Milestone("Gate", gateOpenTime),
             Milestone("Gate Close", dep - ops.gateClose * 60),
-            Milestone("DEP", dep)
+            Milestone("DEP", displayDeparture)
         )
 
         val next = milestones.firstOrNull { it.ts > now }
