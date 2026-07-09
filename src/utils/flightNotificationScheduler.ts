@@ -229,9 +229,9 @@ export async function schedulePinnedNotifications(
         ids.push(id);
       }
     } else {
-      const etdTs = getBestDepartureTs(item);
-      if (!etdTs) return;
-      const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
+      const stdTs = getScheduledFlightTs(item, 'departure');
+      if (!stdTs) return;
+      const etdTs = getBestDepartureTs(item) ?? stdTs;
       const dest = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
       const depTime = new Date(etdTs * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
       const ops = getAirlineOps(airline);

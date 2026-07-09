@@ -12,7 +12,6 @@ export type AirlineOps = {
 export type DepartureGateWindow = {
   openTs: number;
   closeTs: number;
-  source: 'default' | 'inbound';
 };
 
 export const DEFAULT_OPS: AirlineOps = { checkInOpen: 120, checkInClose: 40, gateOpen: 30, gateClose: 20 };
@@ -41,19 +40,10 @@ export function getAirlineOps(name: string): AirlineOps {
 export function getDepartureGateWindow(
   departureTs: number,
   ops: AirlineOps,
-  inboundArrivalTs?: number,
 ): DepartureGateWindow {
-  const defaultOpenTs = departureTs - ops.gateOpen * 60;
-  const closeTs = departureTs - ops.gateClose * 60;
-  const inboundCanOpenGate = typeof inboundArrivalTs === 'number'
-    && Number.isFinite(inboundArrivalTs)
-    && inboundArrivalTs > defaultOpenTs
-    && inboundArrivalTs < closeTs;
-
   return {
-    openTs: inboundCanOpenGate ? inboundArrivalTs : defaultOpenTs,
-    closeTs,
-    source: inboundCanOpenGate ? 'inbound' : 'default',
+    openTs: departureTs - ops.gateOpen * 60,
+    closeTs: departureTs - ops.gateClose * 60,
   };
 }
 

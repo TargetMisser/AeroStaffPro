@@ -27,7 +27,7 @@ fun buildDepartureEvents(flight: FlightData): List<TimelineEvent> {
     val now = System.currentTimeMillis() / 1000
     val dep = flight.scheduledTime
     val ops = flight.ops ?: return emptyList()
-    val gateOpenTime = flight.inboundArrival ?: (dep - ops.gateOpen * 60)
+    val gateOpenTime = dep - ops.gateOpen * 60
 
     data class RawEvent(val label: String, val ts: Long, val color: Color)
     val raw = listOf(
@@ -113,7 +113,7 @@ fun FlightTimelineScreen(flight: FlightData) {
             val dep = flight.scheduledTime
             val ops = flight.ops
             if (ops != null) {
-                val gateOpenTime = flight.inboundArrival ?: (dep - ops.gateOpen * 60)
+                val gateOpenTime = dep - ops.gateOpen * 60
                 val timestamps = listOf(
                     dep - ops.checkInOpen * 60,
                     dep - ops.checkInClose * 60,

@@ -127,7 +127,6 @@ interface FlightRowProps {
   pinnedFlightId: string | null;
   onPin: (item: any) => void;
   onUnpin: () => void;
-  inboundArrivals: Record<string, number>;
   colors: ThemeColors;
   isOperations: boolean;
   s: ReturnType<typeof makeStyles>;
@@ -136,7 +135,7 @@ interface FlightRowProps {
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId, onPin, onUnpin, inboundArrivals, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
@@ -186,10 +185,8 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
       second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
     });
 
-  const reg = item.flight?.aircraft?.registration;
-  const inboundTs = reg ? inboundArrivals[reg] : undefined;
   const gateWindow = activeTab === 'departures' && ts && ops
-    ? getDepartureGateWindow(ts, ops, inboundTs)
+    ? getDepartureGateWindow(ts, ops)
     : null;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [nowTs, setNowTs] = useState(() => Date.now() / 1000);
@@ -542,7 +539,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [scheduledCount, setScheduledCount] = useState(0);
   const [pinnedFlightId, setPinnedFlightId] = useState<string | null>(null);
-  const [inboundArrivals, setInboundArrivals] = useState<Record<string, number>>({});
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
   const [sourceDebugVisible, setSourceDebugVisible] = useState(false);
   const [notifSettingsVisible, setNotifSettingsVisible] = useState(false);
@@ -721,7 +717,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             // Estimate the inbound's origin-departure time from its route + how far
             // it has flown, but only for arrivals no schedule provider gave a
             // departure time for (a key-backed exact time always wins).
-            mergedArrs = await applyLiveOriginDepartures(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            mergedArrs = await applyLiveOriginDepartures(
+              mergedArrs,
+              aircraft,
+              airportInfo.latitude,
+              airportInfo.longitude,
+              undefined,
+              adsbController.signal,
+            );
             // Mark outbound flights whose aircraft is already airborne and
             // climbing away from the field as departed, ahead of the FIDS.
             mergedDeps = applyLiveDepartureStatus(mergedDeps, aircraft, airportInfo.latitude, airportInfo.longitude);
@@ -771,18 +774,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         fetchedAt: sourceState.fetchedAt,
         providerDiagnostics: sourceState.providerDiagnostics,
       }).catch(() => {});
-
-      // Build inbound arrival map: registration → best known arrival timestamp
-      const inboundMap: Record<string, number> = {};
-      for (const a of allArrivals) {
-        const reg = a.flight?.aircraft?.registration;
-        if (!reg) continue;
-        const t = a.flight?.time?.real?.arrival
-               || a.flight?.time?.estimated?.arrival
-               || a.flight?.time?.scheduled?.arrival;
-        if (t) inboundMap[reg] = t;
-      }
-      setInboundArrivals(inboundMap);
 
       setArrivals(fetchedArrivals);
       setDepartures(fetchedDepartures);
@@ -897,7 +888,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             })
             .map(item => {
               const etdTs = getBestDepartureTs(item)!;
-              const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
+              const stdTs = getScheduledFlightTs(item, 'departure')!;
               const airline = item.flight?.airline?.name || 'Sconosciuta';
               const airlineIdentity = [
                 airline,
@@ -1241,13 +1232,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           realDeparture: item.flight?.time?.real?.departure || null,
           realArrival: item.flight?.time?.real?.arrival || null,
           ops: tab === 'departures' ? getAirlineOps(airlineIdentity) : null,
-          inboundArrival: tab === 'departures' && item.flight?.aircraft?.registration ? inboundArrivals[item.flight.aircraft.registration] || null : null,
           pinnedAt: Math.floor(Date.now() / 1000),
         });
         WearDataSender.sendPinnedFlight(payload);
       }
     } catch {}
-  }, [activeTab, inboundArrivals, locale, notifsEnabled]);
+  }, [activeTab, locale, notifsEnabled]);
 
   const unpinFlight = useCallback(async () => {
     try {
@@ -1305,7 +1295,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       pinnedFlightId={pinnedFlightId}
       onPin={pinFlight}
       onUnpin={unpinFlight}
-      inboundArrivals={inboundArrivals}
       colors={colors}
       isOperations={isOperations}
       s={s}
@@ -1313,7 +1302,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       locale={locale}
       t={t}
     />
-  ), [activeTab, userShift, s, pinnedFlightId, pinFlight, unpinFlight, inboundArrivals, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
+  ), [activeTab, userShift, s, pinnedFlightId, pinFlight, unpinFlight, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');

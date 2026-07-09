@@ -238,6 +238,39 @@ assert(
   'widget background refresh must call staffMonitorProvider.fetch for supported airports',
 );
 
+const flightScreenSource = fs.readFileSync(path.join(root, 'src/screens/FlightScreen.tsx'), 'utf8');
+assert(
+  /applyLiveOriginDepartures\(\s*mergedArrs,\s*aircraft,\s*airportInfo\.latitude,\s*airportInfo\.longitude,\s*undefined,\s*adsbController\.signal,\s*\)/.test(flightScreenSource),
+  'FlightScreen must pass its ADS-B deadline signal to origin-route lookups',
+);
+assert(
+  !flightScreenSource.includes('inboundArrivals'),
+  'flight gate windows must not move with inbound-aircraft delays',
+);
+
+const opsSource = fs.readFileSync(path.join(root, 'src/utils/airlineOps.ts'), 'utf8');
+assert(
+  !opsSource.includes('inboundArrivalTs'),
+  'gate-window helper must remain anchored to the scheduled departure',
+);
+
+for (const relativePath of [
+  'src/modules/WearDataSender.ts',
+  'android/wear/src/main/java/com/aerostaffpro/wear/data/FlightData.kt',
+  'android/wear/src/main/java/com/aerostaffpro/wear/ui/FlightTimeline.kt',
+  'android/wear/src/main/java/com/aerostaffpro/wear/notification/WatchNotificationService.kt',
+  'android/wear/src/main/java/com/aerostaffpro/wear/complication/FlightComplicationService.kt',
+  'android/wear/src/main/java/com/aerostaffpro/wear/tile/FlightTileService.kt',
+]) {
+  const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
+  assert(!source.includes('inboundArrival'), `${relativePath} must keep gate timing fixed to the scheduled departure`);
+}
+
+const autoNotificationsSource = fs.readFileSync(path.join(root, 'src/utils/autoNotifications.ts'), 'utf8');
+const pinnedNotificationsSource = fs.readFileSync(path.join(root, 'src/utils/flightNotificationScheduler.ts'), 'utf8');
+assert(!autoNotificationsSource.includes("getScheduledFlightTs(item, 'departure') ?? etdTs"), 'automatic check-in/gate notifications must not fall back to delayed departure time');
+assert(!pinnedNotificationsSource.includes("getScheduledFlightTs(item, 'departure') ?? etdTs"), 'pinned check-in/gate notifications must not fall back to delayed departure time');
+
 // ─── Shift Calendar Night-Shift Replacement Tests ────────────────────────────
 // The Android implementation of expo-calendar getEventsAsync only returns
 // events FULLY CONTAINED in the query window (BEGIN >= start AND END <= end).

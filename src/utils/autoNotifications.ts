@@ -238,7 +238,7 @@ export async function autoScheduleNotifications(): Promise<number> {
     for (const item of shiftDepartures) {
       try {
         const etdTs = getBestDepartureTs(item);
-        const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
+        const stdTs = getScheduledFlightTs(item, 'departure');
         if (!stdTs || isNaN(stdTs)) continue;
 
         const airline = item.flight?.airline?.name || 'Sconosciuta';

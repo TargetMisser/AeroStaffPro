@@ -46,10 +46,6 @@ function flightItemToWearJson(item: any): string {
   if (item.flight?.time?.real?.arrival)
     payload.realArrival = item.flight.time.real.arrival;
 
-  // For departures: if inbound aircraft arrival is known, send it for dynamic gate open
-  if (tab === 'departures' && item._inboundArrival)
-    payload.inboundArrival = item._inboundArrival;
-
   if (ops) {
     payload.ops = {
       checkInOpen: ops.checkInOpen,

@@ -491,6 +491,7 @@ export async function applyLiveOriginDepartures(
   airportLat: number,
   airportLon: number,
   nowSeconds = Math.floor(Date.now() / 1000),
+  signal?: AbortSignal,
   routeLookup: (callsign: string | undefined, signal?: AbortSignal) => Promise<AircraftRoute | null> = fetchAircraftRoute,
 ): Promise<any[]> {
   const byRegistration = new Map<string, AdsbAircraft>();
@@ -535,7 +536,7 @@ export async function applyLiveOriginDepartures(
   if (tasks.length === 0) return arrivals;
 
   const resolved = await Promise.all(tasks.map(async ({ index, aircraft }) => {
-    const route = await routeLookup(aircraft.callsign);
+    const route = await routeLookup(aircraft.callsign, signal);
     if (!route) return null;
     const elapsed = estimateElapsedSeconds(aircraft, route.originLat, route.originLon, airportLat, airportLon);
     if (elapsed == null) return null;

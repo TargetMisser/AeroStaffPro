@@ -22,7 +22,6 @@ data class FlightData(
     val realDeparture: Long?,
     val realArrival: Long?,
     val ops: FlightOps?,
-    val inboundArrival: Long?,
     val pinnedAt: Long
 ) {
     companion object {
@@ -50,7 +49,6 @@ data class FlightData(
                             gateClose = it.getInt("gateClose")
                         )
                     },
-                    inboundArrival = o.optLong("inboundArrival").takeIf { o.has("inboundArrival") && !o.isNull("inboundArrival") },
                     pinnedAt = o.optLong("pinnedAt", System.currentTimeMillis() / 1000)
                 )
             } catch (e: Exception) {

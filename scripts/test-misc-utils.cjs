@@ -823,10 +823,63 @@ async function testWidgetCacheFirstPaint() {
   assert(renders.length === 2, 'widget update should repaint after fresh data replaces the cached state');
 }
 
+async function testWidgetOperationalWindowsStayScheduled() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const shiftStart = Math.floor(today.getTime() / 1000);
+  const shiftEnd = shiftStart + (23 * 60 + 59) * 60;
+  const toIso = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const fmt = ts => new Date(ts * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const scheduledTs = shiftStart + 12 * 60 * 60;
+  const estimatedTs = scheduledTs + 90 * 60;
+  const storage = makeAsyncStorageMock({
+    widget_shift_v1: JSON.stringify({
+      date: toIso(today),
+      shiftToday: { start: shiftStart, end: shiftEnd },
+      isRestDay: false,
+      nextShift: null,
+    }),
+    aerostaff_flight_filter_v1: JSON.stringify(['ryanair']),
+  });
+  const delayedDeparture = {
+    flight: {
+      identification: { number: { default: 'FR1234' } },
+      airline: { name: 'Ryanair' },
+      airport: { destination: { code: { iata: 'STN' }, name: 'London Stansted' } },
+      time: { scheduled: { departure: scheduledTs }, estimated: { departure: estimatedTs }, real: {} },
+    },
+  };
+  const handler = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+    '@react-native-async-storage/async-storage': storage,
+    'expo-calendar': { EntityTypes: { EVENT: 'event' }, getCalendarPermissionsAsync: async () => ({ status: 'granted' }), getCalendarsAsync: async () => [], getEventsAsync: async () => [] },
+    '../utils/airportSettings': {
+      buildFr24ScheduleUrl: code => `https://example.test/${code}`,
+      getAirportInfo: code => ({ code, name: 'Pisa', city: 'Pisa', icao: 'LIRP', isCustom: false }),
+      getStoredAirportAirlines: async () => ['ryanair'],
+      getStoredAirportCode: async () => 'PSA',
+      storeDetectedAirportAirlines: async () => {},
+    },
+    '../utils/liveArrivalEta': { applyLiveDepartureStatus: departures => departures, fetchAdsbAircraft: async () => [] },
+    '../utils/flightProviders/staffMonitorProvider': { staffMonitorProvider: { supports: () => true, fetch: async () => ({ allDepartures: [delayedDeparture] }) } },
+    './ShiftWidget': { ShiftWidget: () => null },
+    './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light', themeSnapshot: undefined }) },
+    'react-native-android-widget': {},
+    react: require('react'),
+  });
+  const result = await handler.fetchFreshWidgetData();
+  assert(result.state === 'work' && result.flights.length === 1, 'a delayed tracked departure should be shown by the widget');
+  const flight = result.flights[0];
+  assert(flight.departureTime === fmt(estimatedTs), 'widget should still show the delayed departure time');
+  assert(flight.ciOpen === fmt(scheduledTs - 150 * 60) && flight.ciClose === fmt(scheduledTs - 40 * 60), 'widget check-in window must stay on the scheduled departure');
+  assert(flight.gateOpen === fmt(scheduledTs - 30 * 60) && flight.gateClose === fmt(scheduledTs - 20 * 60), 'widget gate window must stay on the scheduled departure');
+  assert(flight.ciOpen !== fmt(estimatedTs - 150 * 60) && flight.gateOpen !== fmt(estimatedTs - 30 * 60), 'widget operations windows must not move with the delay');
+}
+
 async function main() {
   await testDateFormat();
   await testWidgetShiftSelfHeal();
   await testWidgetCacheFirstPaint();
+  await testWidgetOperationalWindowsStayScheduled();
   await testThemeMode();
   await testSecureWipe();
   await testFlightProviderSettings();

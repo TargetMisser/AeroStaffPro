@@ -75,7 +75,7 @@ class FlightComplicationService : SuspendingComplicationDataSourceService() {
         // Departures
         val dep = flight.scheduledTime
         val ops = flight.ops ?: return fmtMins(dep - now)
-        val gateOpenTime = flight.inboundArrival ?: (dep - ops.gateOpen * 60)
+        val gateOpenTime = dep - ops.gateOpen * 60
 
         data class Ev(val label: String, val ts: Long)
         val events = listOf(

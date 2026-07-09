@@ -137,27 +137,15 @@ assert(
   defaultGateWindow.openTs === gateWindowDepartureTs - 30 * 60 && defaultGateWindow.closeTs === gateWindowDepartureTs - 20 * 60,
   'gate window should use airline defaults without inbound data',
 );
-const inboundInsideGateWindow = airlineOps.getDepartureGateWindow(
+const delayedInboundGateWindow = airlineOps.getDepartureGateWindow(
   gateWindowDepartureTs,
   airlineOps.getAirlineOps('Ryanair'),
   gateWindowDepartureTs - 25 * 60,
 );
 assert(
-  inboundInsideGateWindow.openTs === gateWindowDepartureTs - 25 * 60,
-  'gate window should use inbound arrival when it falls before gate close',
-);
-const inboundAfterGateCloseWindow = airlineOps.getDepartureGateWindow(
-  gateWindowDepartureTs,
-  airlineOps.getAirlineOps('Ryanair'),
-  gateWindowDepartureTs + 78 * 60,
-);
-assert(
-  inboundAfterGateCloseWindow.openTs < inboundAfterGateCloseWindow.closeTs,
-  'gate window should never display an inverted interval when inbound data is after gate close',
-);
-assert(
-  inboundAfterGateCloseWindow.openTs === defaultGateWindow.openTs,
-  'gate window should ignore impossible inbound arrivals after gate close',
+  delayedInboundGateWindow.openTs === defaultGateWindow.openTs
+    && delayedInboundGateWindow.closeTs === defaultGateWindow.closeTs,
+  'gate window must remain anchored to the scheduled departure even when the inbound aircraft is delayed',
 );
 
 assert(typeof adapter.isFlightAirlineMatch === 'function', 'flight adapter should expose airline matching helper');
@@ -693,7 +681,7 @@ assert(liveEta.estimateElapsedSeconds(inboundAircraft, PSA_LAT + 0.05, PSA_LON, 
     },
   };
   const aircraftW6 = { ...inboundAircraft, registration: 'HALWA', callsign: 'WZZ1467' };
-  const out = await liveEta.applyLiveOriginDepartures([inboundArr], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  const out = await liveEta.applyLiveOriginDepartures([inboundArr], [aircraftW6], PSA_LAT, PSA_LON, nowSec, undefined, routeLookup);
   assert(typeof out[0].flight.time.estimated.departure === 'number',
     'a matched airborne arrival gets an estimated origin-departure time');
   assert(out[0].flight.time.estimated.departure < nowSec,
@@ -713,7 +701,7 @@ assert(liveEta.estimateElapsedSeconds(inboundAircraft, PSA_LAT + 0.05, PSA_LON, 
       time: { scheduled: { arrival: nowSec + 20 * 60, departure: nowSec - 30 * 60 }, estimated: {}, real: {} },
     },
   };
-  const keep = await liveEta.applyLiveOriginDepartures([withProviderDep], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  const keep = await liveEta.applyLiveOriginDepartures([withProviderDep], [aircraftW6], PSA_LAT, PSA_LON, nowSec, undefined, routeLookup);
   assert(keep[0].flight.time.estimated.departure === undefined && keep[0].flight._departureSource === undefined,
     'a provider-supplied departure time must win over the ADS-B estimate');
 
@@ -735,11 +723,33 @@ assert(liveEta.estimateElapsedSeconds(inboundAircraft, PSA_LAT + 0.05, PSA_LON, 
       time: { scheduled: { arrival: nowSec + etaInbound + 2.5 * 60 * 60 }, estimated: {}, real: {} },
     },
   };
-  const legs = await liveEta.applyLiveOriginDepartures([legLater, legNow], [aircraftW6], PSA_LAT, PSA_LON, nowSec, routeLookup);
+  const legs = await liveEta.applyLiveOriginDepartures([legLater, legNow], [aircraftW6], PSA_LAT, PSA_LON, nowSec, undefined, routeLookup);
   assert(typeof legs[1].flight.time.estimated.departure === 'number',
     'the current leg (closest to ETA) gets the estimated departure');
   assert(legs[0].flight.time.estimated.departure === undefined,
     'a later rotation of the same airframe must not inherit the estimated departure');
+
+  const routeAbortController = new AbortController();
+  let receivedRouteSignal;
+  const abortAwareRouteLookup = (_callsign, signal) => new Promise(resolve => {
+    receivedRouteSignal = signal;
+    signal?.addEventListener('abort', () => resolve(null), { once: true });
+  });
+  const abortedLookup = liveEta.applyLiveOriginDepartures(
+    [inboundArr],
+    [aircraftW6],
+    PSA_LAT,
+    PSA_LON,
+    nowSec,
+    routeAbortController.signal,
+    abortAwareRouteLookup,
+  );
+  routeAbortController.abort();
+  const aborted = await abortedLookup;
+  assert(receivedRouteSignal === routeAbortController.signal,
+    'origin-route lookups must receive the ADS-B refresh abort signal');
+  assert(aborted[0].flight._departureSource === undefined,
+    'an aborted route lookup must leave the arrival unchanged');
 
   console.log('Origin-departure estimate tests passed.');
 })().catch(err => { console.error(err); process.exit(1); });

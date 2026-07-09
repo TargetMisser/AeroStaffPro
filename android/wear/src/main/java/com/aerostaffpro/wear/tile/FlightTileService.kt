@@ -197,7 +197,7 @@ class FlightTileService : TileService() {
 
         val ops = flight.ops ?: return fmtTime(flight.scheduledTime) to TEXT_SECONDARY
         val dep = flight.scheduledTime
-        val gateOpenTime = flight.inboundArrival ?: (dep - ops.gateOpen * 60)
+        val gateOpenTime = dep - ops.gateOpen * 60
         val milestones = listOf(
             "CI Open" to (dep - ops.checkInOpen * 60),
             "CI Close" to (dep - ops.checkInClose * 60),

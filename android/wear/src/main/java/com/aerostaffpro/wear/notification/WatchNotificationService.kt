@@ -160,7 +160,7 @@ class WatchNotificationService : WearableListenerService() {
 
         val ops = flight.ops ?: return "DEP ${formatTime(flight.scheduledTime)}"
         val dep = flight.scheduledTime
-        val gateOpenTime = flight.inboundArrival ?: (dep - ops.gateOpen * 60)
+        val gateOpenTime = dep - ops.gateOpen * 60
 
         data class Milestone(val label: String, val ts: Long)
         val milestones = listOf(

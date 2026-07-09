@@ -5,7 +5,7 @@ import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines, getAirportInfo } from '../utils/airportSettings';
-import { filterFlightsByAirlines, getFlightAirportLabel, getFlightBestTs } from '../utils/flightScheduleAdapter';
+import { filterFlightsByAirlines, getFlightAirportLabel, getFlightBestTs, getFlightScheduledTs } from '../utils/flightScheduleAdapter';
 import { staffMonitorProvider } from '../utils/flightProviders/staffMonitorProvider';
 import { applyLiveDepartureStatus, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { ShiftWidget } from './ShiftWidget';
@@ -301,26 +301,27 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
 
     const wFlights: WidgetFlight[] = filteredDeps
       .filter(item => {
-        const ts = getFlightBestTs(item, 'departure');
-        if (ts == null) return false;
+        const scheduledTs = getFlightScheduledTs(item, 'departure');
+        if (scheduledTs == null) return false;
         const airline = item.flight?.airline?.name || '';
         const ops = getAirlineOps(airline);
-        const ciO = ts - ops.checkInOpen * 60, ciC = ts - ops.checkInClose * 60;
-        const gO = ts - ops.gateOpen * 60, gC = ts - ops.gateClose * 60;
+        const ciO = scheduledTs - ops.checkInOpen * 60, ciC = scheduledTs - ops.checkInClose * 60;
+        const gO = scheduledTs - ops.gateOpen * 60, gC = scheduledTs - ops.gateClose * 60;
         return (ciO <= activeShift.end && ciC >= activeShift.start) || (gO <= activeShift.end && gC >= activeShift.start);
       })
       .map(item => {
-        const ts = getFlightBestTs(item, 'departure')!;
+        const departureTs = getFlightBestTs(item, 'departure')!;
+        const scheduledTs = getFlightScheduledTs(item, 'departure')!;
         const airline = item.flight?.airline?.name || 'Sconosciuta';
         const ops = getAirlineOps(airline);
         const fn = item.flight?.identification?.number?.default || 'N/A';
         return {
           flightNumber: fn,
           destinationIata: getFlightAirportLabel(item.flight?.airport?.destination, 'N/A'),
-          departureTs: ts,
-          departureTime: fmtTs(ts),
-          ciOpen: fmtOff(ts, ops.checkInOpen), ciClose: fmtOff(ts, ops.checkInClose),
-          gateOpen: fmtOff(ts, ops.gateOpen), gateClose: fmtOff(ts, ops.gateClose),
+          departureTs,
+          departureTime: fmtTs(departureTs),
+          ciOpen: fmtOff(scheduledTs, ops.checkInOpen), ciClose: fmtOff(scheduledTs, ops.checkInClose),
+          gateOpen: fmtOff(scheduledTs, ops.gateOpen), gateClose: fmtOff(scheduledTs, ops.gateClose),
           airlineColor: getAirlineColor(airline),
         };
       })
