@@ -240,6 +240,22 @@ assert(
 
 const flightScreenSource = fs.readFileSync(path.join(root, 'src/screens/FlightScreen.tsx'), 'utf8');
 assert(
+  flightScreenSource.includes('filterFlightsByAirlines(mergedDeps, wAllowedAirlines)'),
+  'the foreground widget writer must treat an empty airline selection as no flights',
+);
+assert(
+  flightScreenSource.includes('airportCodeRef.current === requestAirportCode')
+    && flightScreenSource.includes('setAllArrivalsFull([])')
+    && flightScreenSource.includes('setAllDeparturesFull([])'),
+  'FlightScreen must clear cross-airport snapshots and reject late responses from the previous airport',
+);
+assert(
+  flightScreenSource.includes('isFlightServiceMatch(pinnedFlight, item, flightDirection)')
+    && flightScreenSource.includes("isFlightServiceMatch(pinnedDeparture, item, 'departure')")
+    && widgetHandlerSource.includes("isFlightServiceMatch(pinnedDeparture, item, 'departure')"),
+  'app and widget pin highlighting must use the full provider-tolerant service identity',
+);
+assert(
   /applyLiveOriginDepartures\(\s*mergedArrs,\s*aircraft,\s*airportInfo\.latitude,\s*airportInfo\.longitude,\s*undefined,\s*adsbController\.signal,\s*\)/.test(flightScreenSource),
   'FlightScreen must pass its ADS-B deadline signal to origin-route lookups',
 );
@@ -252,10 +268,19 @@ assert(
   'FlightScreen must reconcile the fresh pin before evaluating expiry',
 );
 assert(
-  flightScreenSource.includes('AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(refreshedPinned))')
-    && flightScreenSource.includes('schedulePinnedNotifications(refreshedPinned, tab, locale, notifSettingsRef.current)')
+  flightScreenSource.includes('updateStorageForCurrentRequest('),
+  'FlightScreen must persist the refreshed pinned flight through a token-aware storage transaction',
+);
+assert(
+  flightScreenSource.includes('schedulePinnedNotifications(')
+    && flightScreenSource.includes('isCurrentRequest,')
     && flightScreenSource.includes('sendPinnedFlightToWatch(refreshedPinned)'),
-  'FlightScreen must persist, reschedule, and sync the refreshed pinned flight',
+  'FlightScreen must reschedule and sync the refreshed pin with the originating request token',
+);
+assert(
+  flightScreenSource.includes('runEffectsForCurrentRequest(isCurrentRequest')
+    && flightScreenSource.includes('restoreStorageValueIfUnchanged('),
+  'global pin effects must stop between awaits and roll back their storage write when an airport request becomes stale',
 );
 
 const pinnedFlightLifecycle = loadTsModule('src/utils/pinnedFlightLifecycle.ts');
@@ -292,6 +317,87 @@ assert(
   'a pinned flight must expire after its live departure time',
 );
 
+const pinnedServiceTs = Math.floor(new Date(2026, 6, 10, 10, 0, 0).getTime() / 1000);
+const nextDayServiceTs = Math.floor(new Date(2026, 6, 11, 10, 0, 0).getTime() / 1000);
+const aliasedPinnedFlight = {
+  _pinTab: 'departures',
+  flight: {
+    identification: { number: { default: 'FR 4321' } },
+    airport: { destination: { code: { iata: 'STN' } } },
+    time: { scheduled: { departure: pinnedServiceTs }, estimated: {}, real: {} },
+  },
+};
+const wrongNextDayRotation = {
+  marker: 'tomorrow',
+  flight: {
+    identification: { number: { default: 'RYR4321' } },
+    airport: { destination: { name: 'London Stansted' } },
+    time: { scheduled: { departure: nextDayServiceTs }, estimated: {}, real: {} },
+  },
+};
+const matchingAliasedRotation = {
+  marker: 'today',
+  flight: {
+    identification: { number: { default: 'RYR4321' } },
+    airport: { destination: { name: 'London Stansted' } },
+    time: { scheduled: { departure: pinnedServiceTs }, estimated: { departure: pinnedServiceTs + 600 }, real: {} },
+  },
+};
+const aliasedReconciliation = pinnedFlightLifecycle.reconcilePinnedFlight(
+  aliasedPinnedFlight,
+  [wrongNextDayRotation, matchingAliasedRotation],
+  pinnedServiceTs - 60,
+);
+assert(
+  aliasedReconciliation.kind === 'keep'
+    && aliasedReconciliation.item.marker === 'today'
+    && aliasedReconciliation.flightId === 'RYR4321',
+  'pin reconciliation must canonicalize provider aliases and select the exact service date instead of the first same-number rotation',
+);
+assert(
+  pinnedFlightLifecycle.reconcilePinnedFlight(
+    aliasedPinnedFlight,
+    [wrongNextDayRotation],
+    pinnedServiceTs - 60,
+  ).reason === 'missing',
+  'a different-day rotation with the same canonical flight number must not replace the pinned service',
+);
+
+const unknownAirportNamePin = {
+  _pinTab: 'departures',
+  flight: {
+    identification: { number: { default: 'FR6001' } },
+    airport: { destination: { name: 'Malaga Costa del Sol Airport' } },
+    time: { scheduled: { departure: pinnedServiceTs }, estimated: {}, real: {} },
+  },
+};
+const sameServiceByIata = {
+  marker: 'same-service',
+  flight: {
+    identification: { number: { default: 'RYR6001' } },
+    airport: { destination: { code: { iata: 'AGP' } } },
+    time: { scheduled: { departure: pinnedServiceTs + 15 * 60 }, estimated: { departure: pinnedServiceTs + 4 * 60 * 60 }, real: {} },
+  },
+};
+const wrongSameDayRotation = {
+  marker: 'wrong-rotation',
+  flight: {
+    identification: { number: { default: 'RYR6001' } },
+    airport: { destination: { code: { iata: 'AGP' } } },
+    time: { scheduled: { departure: pinnedServiceTs + 5 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const unknownAirportReconciliation = pinnedFlightLifecycle.reconcilePinnedFlight(
+  unknownAirportNamePin,
+  [wrongSameDayRotation, sameServiceByIata],
+  pinnedServiceTs - 60,
+);
+assert(
+  unknownAirportReconciliation.kind === 'keep'
+    && unknownAirportReconciliation.item.marker === 'same-service',
+  'pin reconciliation must bridge a non-aliased airport name to IATA using canonical number/date and the scheduled-time guard',
+);
+
 const opsSource = fs.readFileSync(path.join(root, 'src/utils/airlineOps.ts'), 'utf8');
 assert(
   !opsSource.includes('inboundArrivalTs'),
@@ -321,8 +427,16 @@ assert(
   'the pinned Home flight must show the live departure/arrival time while operations stay scheduled',
 );
 assert(
-  homeScreenSource.includes("? getBestArrivalTs(pinned)") && homeScreenSource.includes(": getBestDepartureTs(pinned);"),
-  'a delayed pinned flight must remain visible past its scheduled time until its live time passes',
+  homeScreenSource.includes('const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);')
+    && homeScreenSource.includes("reconciliation.reason === 'missing'")
+    && homeScreenSource.includes("reconciliation.item?.flight?.time?.real?.departure"),
+  'Home must preserve pins through provider gaps and past cached estimates until a real completion is confirmed',
+);
+assert(
+  homeScreenSource.includes("cancelPinnedNotifications('home confirmed pinned flight expiry'")
+    && homeScreenSource.includes('dismissPinnedFlightNotification()')
+    && homeScreenSource.includes('clearPinnedFlightOnWatch()'),
+  'a pin that Home confirms as expired must clean scheduled, ongoing, and Watch surfaces',
 );
 const wearTileSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/tile/FlightTileService.kt'), 'utf8');
 assert(
@@ -377,6 +491,84 @@ assert(
 // The mock reproduces that semantic so a regression to exact-day queries
 // makes night shifts (and UTC-stored all-day rests) invisible again.
 (async () => {
+  const currentRequestEffects = loadTsModule('src/utils/currentRequestEffects.ts');
+  let currentRequest = true;
+  const guardedStore = new Map([['pin', 'old-pin']]);
+  const guardedStorage = {
+    getItem: async key => guardedStore.get(key) ?? null,
+    setItem: async (key, value) => {
+      guardedStore.set(key, value);
+      currentRequest = false;
+    },
+    removeItem: async key => { guardedStore.delete(key); },
+  };
+  const committed = await currentRequestEffects.updateStorageForCurrentRequest(
+    guardedStorage,
+    'pin',
+    'old-airport-refresh',
+    'old-pin',
+    () => currentRequest,
+  );
+  assert(!committed && guardedStore.get('pin') === 'old-pin',
+    'a pin write that completes after its airport token becomes stale must roll back without owning global storage');
+
+  currentRequest = true;
+  guardedStore.set('pin', 'new-user-pin');
+  const supersededWrite = await currentRequestEffects.updateStorageForCurrentRequest(
+    guardedStorage,
+    'pin',
+    'old-airport-refresh',
+    'old-pin',
+    () => currentRequest,
+  );
+  assert(!supersededWrite && guardedStore.get('pin') === 'new-user-pin',
+    'a fetch must not overwrite a newer pin that replaced the snapshot it originally read');
+
+  currentRequest = true;
+  const completedEffects = [];
+  const allEffectsApplied = await currentRequestEffects.runEffectsForCurrentRequest(
+    () => currentRequest,
+    [
+      async () => { completedEffects.push('first'); currentRequest = false; },
+      async () => { completedEffects.push('stale-second'); },
+    ],
+  );
+  assert(!allEffectsApplied && completedEffects.join(',') === 'first',
+    'global pin effects must stop between awaits when an airport request token becomes stale');
+
+  const updateWrites = new Map();
+  const updateCheckerWithWearFirst = loadTsModule('src/utils/updateChecker.ts', {
+    'expo-application': { nativeApplicationVersion: '1.0.0' },
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => updateWrites.get(key) ?? null,
+      setItem: async (key, value) => { updateWrites.set(key, value); },
+      removeItem: async key => { updateWrites.delete(key); },
+    },
+    __globals: {
+      AbortController,
+      setTimeout,
+      clearTimeout,
+      fetch: async () => ({
+        ok: true,
+        json: async () => ({
+          tag_name: 'v9.9.9',
+          html_url: 'https://example.test/release',
+          body: 'test release',
+          assets: [
+            { name: 'AeroStaffPro-Wear-v9.9.9.apk', browser_download_url: 'https://example.test/wear.apk' },
+            { name: 'AeroStaffPro-v9.9.9.apk', browser_download_url: 'https://example.test/phone.apk' },
+          ],
+        }),
+      }),
+    },
+  });
+  const wearFirstUpdate = await updateCheckerWithWearFirst.checkForUpdate(true);
+  assert(
+    wearFirstUpdate?.assetName === 'AeroStaffPro-v9.9.9.apk'
+      && wearFirstUpdate?.downloadUrl === 'https://example.test/phone.apk',
+    'update checker must select the phone APK even when a Wear APK is listed first',
+  );
+
   const storedEvents = [
     { // night shift: starts June 10th 22:00, ends June 11th 06:00
       id: 'night-10',

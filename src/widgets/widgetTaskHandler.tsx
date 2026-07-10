@@ -5,7 +5,13 @@ import type { WidgetTaskHandlerProps } from 'react-native-android-widget';
 import type { HexColor } from '../utils/airlineOps';
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { getStoredAirportCode, buildFr24ScheduleUrl, getStoredAirportAirlines, storeDetectedAirportAirlines, getAirportInfo } from '../utils/airportSettings';
-import { filterFlightsByAirlines, getFlightAirportLabel, getFlightBestTs, getFlightScheduledTs } from '../utils/flightScheduleAdapter';
+import {
+  filterFlightsByAirlines,
+  getFlightAirportLabel,
+  getFlightBestTs,
+  getFlightScheduledTs,
+  isFlightServiceMatch,
+} from '../utils/flightScheduleAdapter';
 import { staffMonitorProvider } from '../utils/flightProviders/staffMonitorProvider';
 import { applyLiveDepartureStatus, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { ShiftWidget } from './ShiftWidget';
@@ -16,6 +22,8 @@ export const WIDGET_CACHE_KEY = 'widget_data_cache_v1';
 
 /** Key used to store today's shift data so the widget can self-update */
 export const WIDGET_SHIFT_KEY = 'widget_shift_v1';
+
+const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 
 export const WIDGET_REFRESH_TIMEOUT_MS = 6_000;
 
@@ -246,6 +254,14 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
     const allAirlines = await getStoredAirportAirlines(airportCode);
     const filterRaw = await AsyncStorage.getItem('aerostaff_flight_filter_v1');
     const allowedAirlines: string[] = filterRaw ? JSON.parse(filterRaw) : allAirlines;
+    const pinnedRaw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
+    let pinnedDeparture: any | null = null;
+    if (pinnedRaw) {
+      try {
+        const storedPin = JSON.parse(pinnedRaw);
+        if (storedPin?._pinTab !== 'arrivals') pinnedDeparture = storedPin;
+      } catch {}
+    }
 
     // Source departures from the real provider (StaffMonitor) where supported,
     // so the background widget refresh actually works. The previous FR24 public
@@ -323,6 +339,8 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
           ciOpen: fmtOff(scheduledTs, ops.checkInOpen), ciClose: fmtOff(scheduledTs, ops.checkInClose),
           gateOpen: fmtOff(scheduledTs, ops.gateOpen), gateClose: fmtOff(scheduledTs, ops.gateClose),
           airlineColor: getAirlineColor(airline),
+          isPinned: pinnedDeparture != null
+            && isFlightServiceMatch(pinnedDeparture, item, 'departure'),
         };
       })
       .sort((a, b) => a.departureTs - b.departureTs);

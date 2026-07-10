@@ -156,6 +156,10 @@ function officialLiveFlightToScheduleItem(
   const etaTs = toUnixSeconds(item.eta);
   const positionTs = toUnixSeconds(item.timestamp);
   const timeField = direction === 'arrivals' ? 'arrival' : 'departure';
+  // FR24's live-position `eta` is always the aircraft's arrival at its
+  // destination. It is therefore authoritative only for inbound rows; on an
+  // outbound row it must never be presented as an estimated departure.
+  const authoritativeArrivalEtaTs = direction === 'arrivals' ? etaTs : undefined;
   const scheduledTs = direction === 'arrivals'
     ? etaTs ?? positionTs
     : positionTs;
@@ -190,7 +194,7 @@ function officialLiveFlightToScheduleItem(
         : { origin: localAirport, destination: remoteAirport },
       time: {
         scheduled: { [timeField]: scheduledTs },
-        estimated: etaTs ? { [timeField]: etaTs } : {},
+        estimated: authoritativeArrivalEtaTs ? { arrival: authoritativeArrivalEtaTs } : {},
         real: {},
       },
       status: {
@@ -198,7 +202,7 @@ function officialLiveFlightToScheduleItem(
         generic: { status: { color: direction === 'departures' ? 'green' : 'gray' } },
       },
       _source: 'fr24_api',
-      ...(etaTs ? { _etaSource: 'fr24_api' as const } : {}),
+      ...(authoritativeArrivalEtaTs ? { _etaSource: 'fr24_api' as const } : {}),
     },
   };
 }
@@ -245,7 +249,7 @@ function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 
   const liveFlight = liveItem.flight ?? {};
   const scheduleTime = scheduleFlight.time ?? {};
   const liveTime = liveFlight.time ?? {};
-  const estimatedTs = liveTime.estimated?.[timeField];
+  const estimatedTs = timeField === 'arrival' ? liveTime.estimated?.arrival : undefined;
   const realTs = liveTime.real?.[timeField];
 
   return {

@@ -342,9 +342,11 @@ function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: F
   const previousTime = previousFlight.time ?? {};
   const nextTime = nextFlight.time ?? {};
   const timeField = direction === 'arrival' ? 'arrival' : 'departure';
-  const previousHasAuthoritativeEta = previousFlight._etaSource === 'fr24_api'
+  const previousHasAuthoritativeEta = direction === 'arrival'
+    && previousFlight._etaSource === 'fr24_api'
     && typeof previousTime.estimated?.[timeField] === 'number';
-  const nextHasAuthoritativeEta = nextFlight._etaSource === 'fr24_api'
+  const nextHasAuthoritativeEta = direction === 'arrival'
+    && nextFlight._etaSource === 'fr24_api'
     && typeof nextTime.estimated?.[timeField] === 'number';
   const estimated = {
     ...(previousTime.estimated ?? {}),
@@ -398,11 +400,13 @@ function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: F
         ...(previousFlight._operational ?? {}),
         ...(nextFlight._operational ?? {}),
       },
-      _etaSource: nextHasAuthoritativeEta
-        ? 'fr24_api'
-        : previousHasAuthoritativeEta
+      _etaSource: direction === 'arrival'
+        ? nextHasAuthoritativeEta
           ? 'fr24_api'
-          : nextFlight._etaSource ?? previousFlight._etaSource,
+          : previousHasAuthoritativeEta
+            ? 'fr24_api'
+            : nextFlight._etaSource ?? previousFlight._etaSource
+        : undefined,
     },
   };
 }
@@ -553,14 +557,18 @@ export async function fetchFlightScheduleFromProviders(
   };
 
   const preference = context.preference ?? 'auto';
-  // AeroDataBox must start with the live/local providers when configured.
-  // Otherwise a stalled StaffMonitor can consume the whole parent refresh
-  // deadline and prevent the complete schedule source from ever starting,
-  // leaving only whichever aircraft FR24 happens to see live at that moment.
-  const parallelCoreIds = new Set<FlightScheduleProviderId>(['fr24Api', 'staffMonitor', 'aeroDataBox']);
-  const coreProviders = preference === 'auto' || preference === 'fr24'
-    ? providers.filter(provider => parallelCoreIds.has(provider.id))
-    : [];
+  // Auto starts AeroDataBox with the live/local providers so a stalled source
+  // cannot consume the parent refresh deadline before schedule coverage starts.
+  // The explicit FR24 preference has its own wave: API and public fallback must
+  // both start immediately, while Promise.all preserves their provider order
+  // when the results are applied below.
+  const autoCoreIds = new Set<FlightScheduleProviderId>(['fr24Api', 'staffMonitor', 'aeroDataBox']);
+  const preferredFr24Ids = new Set<FlightScheduleProviderId>(['fr24Api', 'fr24Public']);
+  const coreProviders = preference === 'auto'
+    ? providers.filter(provider => autoCoreIds.has(provider.id))
+    : preference === 'fr24'
+      ? providers.filter(provider => preferredFr24Ids.has(provider.id))
+      : [];
   const useParallelCore = coreProviders.length >= 2;
   const attemptedCoreIds = new Set<FlightScheduleProviderId>();
 

@@ -22,9 +22,12 @@ import { getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
 import { getCachedFlightProviderDiagnostics, type FlightProviderDiagnosticsSnapshot } from '../utils/fr24api';
 import { getNotificationDebugSnapshot, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
+import { cancelPinnedNotifications } from '../utils/flightNotificationScheduler';
 import { loadFlightScreenCache } from '../utils/flightScreenCache';
 import { checkEasyJetOverlap } from '../utils/easyjetOverlapMode';
-import { showOrUpdateEasyJetOverlapNotification } from '../utils/pinnedFlightOngoingNotification';
+import { dismissPinnedFlightNotification, showOrUpdateEasyJetOverlapNotification } from '../utils/pinnedFlightOngoingNotification';
+import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
+import { clearPinnedFlightOnWatch } from '../modules/WearDataSender';
 import {
   buildHomeHealthChips,
   buildHomeOperationalSummary,
@@ -455,28 +458,107 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   }, [easyJetOverlap.isActive]);
 
   useEffect(() => {
-    const loadPinned = async () => {
-      const raw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
-      if (!raw) { setPinnedFlight(null); return; }
-      try {
-        const pinned = JSON.parse(raw);
-        const tab = pinned._pinTab || 'departures';
-        const ts = tab === 'arrivals'
-          ? getBestArrivalTs(pinned)
-          : getBestDepartureTs(pinned);
-        if (ts && ts < Date.now() / 1000) {
-          await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
-          setPinnedFlight(null);
-        } else {
-          setPinnedFlight(pinned);
-        }
-      } catch { setPinnedFlight(null); }
-    };
-    loadPinned();
+    let active = true;
+    let checking = false;
 
-    const interval = setInterval(loadPinned, 30_000);
-    return () => clearInterval(interval);
-  }, []);
+    const clearExpiredPinned = async (expectedRaw: string) => {
+      // Do not erase a pin that FlightScreen refreshed while Home was reading
+      // its older snapshot.
+      if (await AsyncStorage.getItem(PINNED_FLIGHT_KEY) !== expectedRaw) return;
+
+      await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
+      await cancelPinnedNotifications('home confirmed pinned flight expiry', false).catch(() => {});
+      await dismissPinnedFlightNotification().catch(() => {});
+      await clearPinnedFlightOnWatch().catch(() => {});
+      if (active) setPinnedFlight(null);
+    };
+
+    const loadPinned = async () => {
+      if (checking) return;
+      checking = true;
+
+      try {
+        let raw: string | null;
+        try {
+          raw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
+        } catch {
+          // Keep the last valid card/surfaces on transient storage failures.
+          return;
+        }
+        if (!raw) {
+          if (active) setPinnedFlight(null);
+          return;
+        }
+
+        let pinned: any;
+        try {
+          pinned = JSON.parse(raw);
+        } catch {
+          await clearExpiredPinned(raw);
+          return;
+        }
+        const flightId = pinned?.flight?.identification?.number?.default;
+        if (typeof flightId !== 'string' || !flightId) {
+          await clearExpiredPinned(raw);
+          return;
+        }
+        const tab = pinned._pinTab || 'departures';
+        const cache = await loadFlightScreenCache(airportCode, true).catch(() => null);
+        if (!active) return;
+
+        // Home must not expire a stored snapshot on its own: it may still hold
+        // the old STD while the provider/cache already has a delayed ETD. Only
+        // clear after matching the exact service in the airport snapshot.
+        if (!cache) {
+          setPinnedFlight(pinned);
+          return;
+        }
+
+        const pool = tab === 'arrivals' ? cache.arrivals : cache.departures;
+        const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);
+        if (reconciliation.kind === 'keep') {
+          await AsyncStorage.getItem(PINNED_FLIGHT_KEY).then(currentRaw => (
+            currentRaw === raw
+              ? AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(reconciliation.item))
+              : undefined
+          )).catch(() => {});
+          if (active) setPinnedFlight(reconciliation.item);
+          return;
+        }
+
+        if (reconciliation.reason === 'missing') {
+          // A provider/cache gap is not proof that the service has expired.
+          setPinnedFlight(pinned);
+          return;
+        }
+
+        if (reconciliation.reason === 'expired') {
+          const realCompletionTs = reconciliation.tab === 'arrivals'
+            ? reconciliation.item?.flight?.time?.real?.arrival
+            : reconciliation.item?.flight?.time?.real?.departure;
+          if (typeof realCompletionTs !== 'number' || realCompletionTs >= Date.now() / 1000) {
+            // A cached STD/ETA/ETD in the past can still be superseded by a
+            // delay. Only a real completion timestamp is conclusive on Home;
+            // fresh provider reconciliation remains FlightScreen's job.
+            setPinnedFlight(reconciliation.item);
+            return;
+          }
+        }
+
+        await clearExpiredPinned(raw);
+      } finally {
+        checking = false;
+      }
+    };
+
+    loadPinned().catch(() => {});
+
+    const interval = setInterval(() => { loadPinned().catch(() => {}); }, 30_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [airportCode]);
 
   const openModifyModal = () => {
     if (shiftEvent) {

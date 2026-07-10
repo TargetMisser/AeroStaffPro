@@ -42,7 +42,7 @@ import {
   getFlightAirportDisplay,
   getFlightAirportLabel,
   getFlightMergeKey,
-  isFlightAirlineMatch,
+  isFlightServiceMatch,
   mergeFlightLists,
   pruneExpiredFlights,
   pruneUnseenFlights,
@@ -87,6 +87,11 @@ import {
   sendPinnedFlightToWatch,
 } from '../modules/WearDataSender';
 import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
+import {
+  restoreStorageValueIfUnchanged,
+  runEffectsForCurrentRequest,
+  updateStorageForCurrentRequest,
+} from '../utils/currentRequestEffects';
 import { TYPE, WEIGHT } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
 
@@ -94,6 +99,7 @@ const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const FLIGHT_FILTER_KEY = 'aerostaff_flight_filter_v1';
 type FlightAlertTone = 'success' | 'warning' | 'info';
 type FlightDataSourceState = {
+  airportCode: string;
   sourceLabel: string;
   fetchedAt: number;
   providerDiagnostics?: FlightScheduleProviderStatus[];
@@ -127,7 +133,7 @@ interface FlightRowProps {
   index: number;
   activeTab: 'arrivals' | 'departures';
   userShift: { start: number; end: number } | null;
-  pinnedFlightId: string | null;
+  pinnedFlight: any | null;
   onPin: (item: any) => void;
   onUnpin: () => void;
   colors: ThemeColors;
@@ -138,7 +144,7 @@ interface FlightRowProps {
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
@@ -194,8 +200,11 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [nowTs, setNowTs] = useState(() => Date.now() / 1000);
 
-  const flightId = item.flight?.identification?.number?.default || null;
-  const isPinned = flightId !== null && flightId === pinnedFlightId;
+  const flightDirection: FlightDirection = activeTab === 'arrivals' ? 'arrival' : 'departure';
+  const pinnedDirection: FlightDirection = pinnedFlight?._pinTab === 'arrivals' ? 'arrival' : 'departure';
+  const isPinned = pinnedFlight != null
+    && pinnedDirection === flightDirection
+    && isFlightServiceMatch(pinnedFlight, item, flightDirection);
 
   const normFn = normalizeFlightNumber(flightNumber);
   const normalizeForMatching = (s: string) => s.replace(/[\s\-_]/g, '').toUpperCase();
@@ -541,13 +550,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const [shifts, setShifts] = useState<{ today: { start: number; end: number } | null; tomorrow: { start: number; end: number } | null }>({ today: null, tomorrow: null });
   const [notifsEnabled, setNotifsEnabled] = useState(false);
   const [scheduledCount, setScheduledCount] = useState(0);
-  const [pinnedFlightId, setPinnedFlightId] = useState<string | null>(null);
+  const [pinnedFlight, setPinnedFlight] = useState<any | null>(null);
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
   const [sourceDebugVisible, setSourceDebugVisible] = useState(false);
   const [notifSettingsVisible, setNotifSettingsVisible] = useState(false);
   const [notifDialog, setNotifDialog] = useState<{ title: string; message: string; tone: FlightAlertTone } | null>(null);
   const [allArrivalsFull, setAllArrivalsFull] = useState<any[]>([]);
   const [allDeparturesFull, setAllDeparturesFull] = useState<any[]>([]);
+  const [flightSnapshotAirportCode, setFlightSnapshotAirportCode] = useState<string | null>(null);
   const [airportAirlines, setAirportAirlines] = useState<string[]>([]);
   const [selectedAirlines, setSelectedAirlines] = useState<string[]>([]);
   const [staffMonitorDeps, setStaffMonitorDeps] = useState<StaffMonitorFlight[]>([]);
@@ -561,8 +571,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const selectedAirlinesRef = useRef<string[]>([]);
   const notifSettingsRef = useRef<FlightNotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
-  const fetchInFlightRef = useRef(false);
+  const airportCodeRef = useRef(airportCode);
+  const fetchInFlightRef = useRef<{ airportCode: string; requestId: number } | null>(null);
+  const flightRequestIdRef = useRef(0);
+  const freshSnapshotAirportRef = useRef<string | null>(null);
   const lastFlightRefreshAttemptAtRef = useRef(0);
+  airportCodeRef.current = airportCode;
 
   useEffect(() => {
     selectedAirlinesRef.current = selectedAirlines;
@@ -586,11 +600,25 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   // Carica voli recenti per aeroporto così oggi/domani restano visibili anche prima del fetch.
   useEffect(() => {
     let active = true;
+
+    // A snapshot is only valid for the airport that produced it. Clear the
+    // previous profile synchronously, then hydrate only a cache whose embedded
+    // airportCode matches the newly selected airport.
+    setAllArrivalsFull([]);
+    setAllDeparturesFull([]);
+    setArrivals([]);
+    setDepartures([]);
+    setFlightSnapshotAirportCode(null);
+    setFlightDataSource(null);
+    freshSnapshotAirportRef.current = null;
+
     loadFlightScreenCache(airportCode, true).then(cache => {
-      if (!active || !cache) return;
+      if (!active || !cache || freshSnapshotAirportRef.current === airportCode) return;
       setAllArrivalsFull(cache.arrivals);
       setAllDeparturesFull(cache.departures);
+      setFlightSnapshotAirportCode(airportCode);
       setFlightDataSource({
+        airportCode,
         sourceLabel: cache.isStale ? `${cache.sourceLabel} · cache in aggiornamento` : cache.sourceLabel,
         fetchedAt: cache.fetchedAt,
         providerDiagnostics: cache.providerDiagnostics,
@@ -643,13 +671,21 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   }, [activeProfile, activeProfileId, airportCode]);
 
   const fetchAll = useCallback(async (options: FetchAllOptions = {}) => {
-    if (airportLoading || !isFocused || fetchInFlightRef.current) {
+    if (airportLoading || !isFocused) {
       if (options.markLoading) setLoading(false);
       if (options.markRefreshing) setRefreshing(false);
       return;
     }
+    if (fetchInFlightRef.current?.airportCode === airportCode) return;
 
-    fetchInFlightRef.current = true;
+    const requestAirportCode = airportCode;
+    const requestId = ++flightRequestIdRef.current;
+    const isCurrentRequest = () => (
+      airportCodeRef.current === requestAirportCode
+      && flightRequestIdRef.current === requestId
+    );
+
+    fetchInFlightRef.current = { airportCode: requestAirportCode, requestId };
     lastFlightRefreshAttemptAtRef.current = Date.now();
     if (options.markLoading) setLoading(true);
     if (options.markRefreshing) setRefreshing(true);
@@ -663,15 +699,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         sourceLabel,
         fetchedAt,
         providerDiagnostics,
-      } = await fetchAirportScheduleRaw(airportCode);
-      const nextAirportAirlines = getAirportAirlines(airportCode);
+      } = await fetchAirportScheduleRaw(requestAirportCode);
+      if (!isCurrentRequest()) return;
+
+      const nextAirportAirlines = getAirportAirlines(requestAirportCode);
       setAirportAirlines(nextAirportAirlines);
 
       // Le compagnie appena rilevate nello schedule NON vengono mai selezionate
       // in automatico: restano deselezionate nel filtro finché l'utente non le
       // spunta, così in bacheca non compaiono voli che non gestisce.
       const reconciledSelection = reconcileSelectedAirlines({
-        savedProfileAirlines: activeProfile?.airportCode === airportCode ? activeProfile.airlines : [],
+        savedProfileAirlines: activeProfile?.airportCode === requestAirportCode ? activeProfile.airlines : [],
         previousSelectedAirlines: selectedAirlinesRef.current,
         nextAirportAirlines,
       });
@@ -685,7 +723,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       // e i voli fantasma sopravvivono fino al loro orario previsto.
       let cachedArrs: any[] = [], cachedDeps: any[] = [];
       try {
-        const cache = await loadFlightScreenCache(airportCode);
+        const cache = await loadFlightScreenCache(requestAirportCode);
+        if (!isCurrentRequest()) return;
         const stampLegacy = (item: any) =>
           (typeof item?._seenAtMs === 'number' ? item : { ...item, _seenAtMs: cache?.savedAt ?? Date.now() });
         cachedArrs = (cache?.arrivals ?? []).map(stampLegacy);
@@ -704,7 +743,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       // l'ADS-B non risponde restano gli orari del FIDS.
       const liveEtaDiagnostics: FlightScheduleProviderStatus[] = [];
       try {
-        const airportInfo = getAirportInfo(airportCode);
+        const airportInfo = getAirportInfo(requestAirportCode);
         if (airportInfo.latitude != null && airportInfo.longitude != null) {
           const adsbController = new AbortController();
           const adsbTimer = setTimeout(() => adsbController.abort(), 8_000);
@@ -756,13 +795,18 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           message: String((e as any)?.message ?? e).slice(0, 120),
         });
       }
+      if (!isCurrentRequest()) return;
+
       const sourceState: FlightDataSourceState = {
+        airportCode: requestAirportCode,
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
         providerDiagnostics: [...(providerDiagnostics ?? []), ...liveEtaDiagnostics],
       };
+      freshSnapshotAirportRef.current = requestAirportCode;
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);
+      setFlightSnapshotAirportCode(requestAirportCode);
       setFlightDataSource(sourceState);
       // I voli sintetizzati dalla tabella rotte AirLabs sono stime di orario,
       // non voli osservati: mostrali pure come fallback, ma non persisterli
@@ -770,7 +814,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       // come fantasmi per ore.
       const isPersistable = (item: any) => item?.flight?._source !== 'airlabs_routes';
       saveFlightScreenCache({
-        airportCode,
+        airportCode: requestAirportCode,
         arrivals: mergedArrs.filter(isPersistable),
         departures: mergedDeps.filter(isPersistable),
         sourceLabel: sourceState.sourceLabel,
@@ -784,7 +828,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       // Refresh the pinned snapshot from the latest schedule before deciding it
       // has expired. A delayed flight must remain pinned past its original STD.
       const notificationsEnabledNow = (await AsyncStorage.getItem(NOTIF_ENABLED_KEY)) === 'true';
+      if (!isCurrentRequest()) return;
       const pinnedRaw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
+      if (!isCurrentRequest()) return;
       if (pinnedRaw) {
         try {
           const pinned = JSON.parse(pinnedRaw);
@@ -795,28 +841,82 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);
 
           if (reconciliation.kind === 'clear') {
-            await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
-            await cancelPinnedNotifications('pinned flight expired or missing', false);
-            await dismissPinnedFlightNotification();
-            try { await clearPinnedFlightOnWatch(); } catch {}
-            setPinnedFlightId(null);
-          } else {
-            const { item: refreshedPinned, tab, flightId } = reconciliation;
-            await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(refreshedPinned));
-            setPinnedFlightId(flightId);
-            try { await sendPinnedFlightToWatch(refreshedPinned); } catch {}
+            const pinCleared = await updateStorageForCurrentRequest(
+              AsyncStorage,
+              PINNED_FLIGHT_KEY,
+              null,
+              pinnedRaw,
+              isCurrentRequest,
+            );
+            if (!pinCleared) return;
 
-            if (notificationsEnabledNow) {
-              try {
-                await schedulePinnedNotifications(refreshedPinned, tab, locale, notifSettingsRef.current);
-              } catch (e) {
-                if (__DEV__) console.warn('[pinnedNotifRefresh]', e);
-              }
-              await showOrUpdatePinnedFlightNotification(refreshedPinned, tab, notifSettingsRef.current.sticky);
-            } else {
-              await cancelPinnedNotifications('flight refresh notifications disabled', false);
-              await dismissPinnedFlightNotification();
+            const effectsApplied = await runEffectsForCurrentRequest(isCurrentRequest, [
+              () => cancelPinnedNotifications('pinned flight expired or missing', false, isCurrentRequest),
+              () => dismissPinnedFlightNotification(isCurrentRequest),
+              async () => {
+                try { await clearPinnedFlightOnWatch(); } catch {}
+              },
+            ]);
+            if (!effectsApplied) {
+              await restoreStorageValueIfUnchanged(AsyncStorage, PINNED_FLIGHT_KEY, null, pinnedRaw);
+              return;
             }
+            setPinnedFlight(null);
+          } else {
+            const { item: refreshedPinned, tab } = reconciliation;
+            const refreshedPinnedRaw = JSON.stringify(refreshedPinned);
+            const pinRefreshed = await updateStorageForCurrentRequest(
+              AsyncStorage,
+              PINNED_FLIGHT_KEY,
+              refreshedPinnedRaw,
+              pinnedRaw,
+              isCurrentRequest,
+            );
+            if (!pinRefreshed) return;
+
+            const pinEffects: Array<() => Promise<unknown>> = [async () => {
+              try { await sendPinnedFlightToWatch(refreshedPinned); } catch {}
+            }];
+            if (notificationsEnabledNow) {
+              pinEffects.push(
+                async () => {
+                  try {
+                    await schedulePinnedNotifications(
+                      refreshedPinned,
+                      tab,
+                      locale,
+                      notifSettingsRef.current,
+                      isCurrentRequest,
+                    );
+                  } catch (e) {
+                    if (__DEV__) console.warn('[pinnedNotifRefresh]', e);
+                  }
+                },
+                () => showOrUpdatePinnedFlightNotification(
+                  refreshedPinned,
+                  tab,
+                  notifSettingsRef.current.sticky,
+                  isCurrentRequest,
+                ),
+              );
+            } else {
+              pinEffects.push(
+                () => cancelPinnedNotifications('flight refresh notifications disabled', false, isCurrentRequest),
+                () => dismissPinnedFlightNotification(isCurrentRequest),
+              );
+            }
+
+            const effectsApplied = await runEffectsForCurrentRequest(isCurrentRequest, pinEffects);
+            if (!effectsApplied) {
+              await restoreStorageValueIfUnchanged(
+                AsyncStorage,
+                PINNED_FLIGHT_KEY,
+                refreshedPinnedRaw,
+                pinnedRaw,
+              );
+              return;
+            }
+            setPinnedFlight(refreshedPinned);
           }
         } catch {}
       }
@@ -852,6 +952,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           }
         }
       }
+      if (!isCurrentRequest()) return;
+
       setShifts({ today: shiftToday, tomorrow: shiftTomorrow });
       const todayIso = `${todayStart.getFullYear()}-${String(todayStart.getMonth() + 1).padStart(2, '0')}-${String(todayStart.getDate()).padStart(2, '0')}`;
       const tomorrowIso = `${tomorrowStart.getFullYear()}-${String(tomorrowStart.getMonth() + 1).padStart(2, '0')}-${String(tomorrowStart.getDate()).padStart(2, '0')}`;
@@ -882,18 +984,22 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         if (activeWidgetShift) {
           const shiftLabel = `${activeWidgetShift.isNext ? 'Domani ' : ''}${fmtT(activeWidgetShift.start)} – ${fmtT(activeWidgetShift.end)}`;
           const pinnedRawW = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
-          let pinnedFn: string | null = null;
+          if (!isCurrentRequest()) return;
+          let pinnedDeparture: any | null = null;
           if (pinnedRawW) {
-            try { pinnedFn = JSON.parse(pinnedRawW).flight?.identification?.number?.default || null; } catch {}
+            try {
+              const storedPin = JSON.parse(pinnedRawW);
+              if (storedPin?._pinTab !== 'arrivals') pinnedDeparture = storedPin;
+            } catch {}
           }
           const wFilterRaw = await AsyncStorage.getItem(FLIGHT_FILTER_KEY);
+          if (!isCurrentRequest()) return;
           const wAllowedAirlines: string[] = wFilterRaw ? JSON.parse(wFilterRaw) : [];
-          const wFlights: WidgetFlight[] = mergedDeps
+          const wFlights: WidgetFlight[] = filterFlightsByAirlines(mergedDeps, wAllowedAirlines)
             .filter(item => {
               const stdTs = getScheduledFlightTs(item, 'departure');
               if (stdTs == null) return false;
               const airline = item.flight?.airline?.name || '';
-              if (wAllowedAirlines.length > 0 && !wAllowedAirlines.some(k => isFlightAirlineMatch(item, k))) return false;
               const ops = getAirlineOps(airline);
               const ciO = stdTs - ops.checkInOpen * 60, ciC = stdTs - ops.checkInClose * 60;
               const gO = stdTs - ops.gateOpen * 60, gC = stdTs - ops.gateClose * 60;
@@ -923,7 +1029,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
                 ciOpen: fmtOff(stdTs, ops.checkInOpen), ciClose: fmtOff(stdTs, ops.checkInClose),
                 gateOpen: fmtOff(stdTs, ops.gateOpen), gateClose: fmtOff(stdTs, ops.gateClose),
                 airlineColor: getAirlineColor(airlineIdentity),
-                isPinned: fn === pinnedFn,
+                isPinned: pinnedDeparture != null
+                  && isFlightServiceMatch(pinnedDeparture, item, 'departure'),
                 stand: sm?.stand,
                 checkin: sm?.checkin,
                 gate: sm?.gate,
@@ -939,11 +1046,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         } else {
           widgetData = { state: 'no_shift' };
         }
+        if (!isCurrentRequest()) return;
         await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));
         if (Platform.OS === 'android') {
           requestShiftWidgetUpdate(widgetData).catch(() => {});
         }
       } catch {}
+
+      if (!isCurrentRequest()) return;
 
       // Schedula notifiche se attive (solo turno di oggi)
       if (notificationsEnabledNow && shiftToday) {
@@ -962,18 +1072,24 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           locale,
           notifSettingsRef.current,
           selectedAirlinesRef.current,
+          isCurrentRequest,
         );
+        if (!isCurrentRequest()) return;
         setScheduledCount(count);
       } else {
-        await cancelPreviousNotifications('flight refresh inactive', false);
+        await cancelPreviousNotifications('flight refresh inactive', false, isCurrentRequest);
+        if (!isCurrentRequest()) return;
         setScheduledCount(0);
       }
     } catch (e) {
+      if (!isCurrentRequest()) return;
+
       const message = e instanceof Error ? e.message : String(e);
       const providerUnavailable = message.includes('NO_FLIGHT_PROVIDER_AVAILABLE');
 
       if (providerUnavailable) {
         setFlightDataSource({
+          airportCode: requestAirportCode,
           sourceLabel: 'Nessuna fonte voli disponibile',
           fetchedAt: Date.now(),
           providerDiagnostics: [{
@@ -990,6 +1106,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         // crew saw silently stale times/gates with no indication anything
         // had gone wrong.
         setFlightDataSource({
+          airportCode: requestAirportCode,
           sourceLabel: 'Aggiornamento non riuscito · dati non aggiornati',
           fetchedAt: Date.now(),
           providerDiagnostics: [{
@@ -1006,9 +1123,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         else console.error('[fetchAll]', e);
       }
     } finally {
-      fetchInFlightRef.current = false;
-      setLoading(false);
-      setRefreshing(false);
+      if (fetchInFlightRef.current?.requestId === requestId) {
+        fetchInFlightRef.current = null;
+      }
+      if (isCurrentRequest()) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [activeProfile, airportCode, airportLoading, applySelectedAirlines, isFocused]);
 
@@ -1046,8 +1167,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       if (!raw) return;
       try {
         const pinned = JSON.parse(raw);
-        const id = pinned.flight?.identification?.number?.default;
-        if (id) setPinnedFlightId(id);
+        if (pinned.flight?.identification?.number?.default) {
+          setPinnedFlight(pinned);
+        }
       } catch {}
     });
   }, []);
@@ -1187,7 +1309,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     const next = sanitizeNotificationSettings({ ...notifSettingsRef.current, ...patch });
     await persistNotificationSettings(next);
 
-    if (notifsEnabled && pinnedFlightId) {
+    if (notifsEnabled && pinnedFlight) {
       const pinnedRaw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
       if (pinnedRaw) {
         try {
@@ -1202,7 +1324,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     if (notifsEnabled) {
       await scheduleNotificationsForCurrentShift(next);
     }
-  }, [locale, notifsEnabled, persistNotificationSettings, pinnedFlightId, scheduleNotificationsForCurrentShift]);
+  }, [locale, notifsEnabled, persistNotificationSettings, pinnedFlight, scheduleNotificationsForCurrentShift]);
 
   useEffect(() => {
     const signature = selectedAirlines.join('|');
@@ -1219,7 +1341,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       const tab = activeTab;
       const pinnedItem = { ...item, _pinTab: tab, _pinnedAt: Date.now() };
       await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(pinnedItem));
-      setPinnedFlightId(id);
+      setPinnedFlight(pinnedItem);
       if (notifsEnabled) {
         try { await schedulePinnedNotifications(pinnedItem, tab, locale, notifSettingsRef.current); } catch (e) { if (__DEV__) console.warn('[pinnedNotif]', e); }
         await showOrUpdatePinnedFlightNotification(pinnedItem, tab, notifSettingsRef.current.sticky);
@@ -1235,7 +1357,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
       try { await cancelPinnedNotifications(); } catch (e) { if (__DEV__) console.warn('[cancelPinNotif]', e); }
       await dismissPinnedFlightNotification();
-      setPinnedFlightId(null);
+      setPinnedFlight(null);
       try { await clearPinnedFlightOnWatch(); } catch {}
     } catch (e) { if (__DEV__) console.error('[unpin]', e); }
   }, []);
@@ -1246,9 +1368,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 
   const allSelected = airportAirlines.length > 0 && airportAirlines.every(k => selectedAirlines.includes(k));
+  const snapshotMatchesAirport = flightSnapshotAirportCode === airportCode;
+  const visibleFlightDataSource = flightDataSource?.airportCode === airportCode ? flightDataSource : null;
 
   const currentDayRawData = (() => {
-    const source = activeTab === 'arrivals' ? allArrivalsFull : allDeparturesFull;
+    const source = snapshotMatchesAirport
+      ? (activeTab === 'arrivals' ? allArrivalsFull : allDeparturesFull)
+      : [];
     const timeField = activeTab === 'arrivals' ? 'arrival' : 'departure';
     const seen = new Set<string>();
     return source.filter(item => {
@@ -1266,7 +1392,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     return filterFlightsByAirlines(currentDayRawData, selectedAirlines)
       .sort(compareFlightsChronologically(timeField));
   })();
-  const hasFlightSnapshot = allArrivalsFull.length > 0 || allDeparturesFull.length > 0;
+  const hasFlightSnapshot = snapshotMatchesAirport
+    && (allArrivalsFull.length > 0 || allDeparturesFull.length > 0);
   const showBlockingLoader = shouldShowBlockingFlightLoader({
     isLoading: loading,
     hasVisibleFlights: hasFlightSnapshot,
@@ -1283,7 +1410,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       index={index}
       activeTab={activeTab}
       userShift={userShift}
-      pinnedFlightId={pinnedFlightId}
+      pinnedFlight={pinnedFlight}
       onPin={pinFlight}
       onUnpin={unpinFlight}
       colors={colors}
@@ -1293,7 +1420,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       locale={locale}
       t={t}
     />
-  ), [activeTab, userShift, s, pinnedFlightId, pinFlight, unpinFlight, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
+  ), [activeTab, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');
@@ -1356,9 +1483,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         </View>
       </View>
 
-      {(flightDataSource || showRefreshIndicator) && (
+      {(visibleFlightDataSource || showRefreshIndicator) && (
         <View style={s.sourceRow}>
-          {flightDataSource && (
+          {visibleFlightDataSource && (
             <TouchableOpacity
               style={s.sourceBadge}
               activeOpacity={0.85}
@@ -1368,7 +1495,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             >
               <MaterialIcons name="hub" size={14} color={colors.primary} />
               <Text style={s.sourceBadgeText}>
-                {t('flightDataSource')}: {formatFlightSourceLabel(flightDataSource.sourceLabel)}
+                {t('flightDataSource')}: {formatFlightSourceLabel(visibleFlightDataSource.sourceLabel)}
               </Text>
             </TouchableOpacity>
           )}
@@ -1399,8 +1526,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
               activeDay={activeDay}
               activeTab={activeTab}
               rawDayCount={currentDayRawData.length}
-              sourceLabel={flightDataSource?.sourceLabel}
-              diagnostics={flightDataSource?.providerDiagnostics}
+              sourceLabel={visibleFlightDataSource?.sourceLabel}
+              diagnostics={visibleFlightDataSource?.providerDiagnostics}
               colors={colors}
               t={t}
             />
@@ -1425,9 +1552,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         visible={sourceDebugVisible}
         activeDay={activeDay}
         activeTab={activeTab}
-        sourceLabel={flightDataSource?.sourceLabel}
-        fetchedAt={flightDataSource?.fetchedAt}
-        diagnostics={flightDataSource?.providerDiagnostics}
+        sourceLabel={visibleFlightDataSource?.sourceLabel}
+        fetchedAt={visibleFlightDataSource?.fetchedAt}
+        diagnostics={visibleFlightDataSource?.providerDiagnostics}
         visibleCount={currentData.length}
         rawDayCount={currentDayRawData.length}
         selectedAirlinesCount={selectedAirlines.length}

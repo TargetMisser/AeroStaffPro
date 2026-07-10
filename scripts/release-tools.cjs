@@ -122,6 +122,14 @@ function tagToVersion(tag) {
   return tag.replace(/^v/, '');
 }
 
+function phoneReleaseAssetName(tag) {
+  return `AeroStaffPro-${normalizeTag(tag)}.apk`;
+}
+
+function wearReleaseAssetName(tag) {
+  return `AeroStaffPro-Wear-${normalizeTag(tag)}.apk`;
+}
+
 function getDownloadsDir() {
   return path.join(os.homedir(), 'Downloads');
 }
@@ -190,15 +198,16 @@ function parseCertSha256(apksignerOutput) {
 function downloadReleaseApk(tag, repo = defaultRepo) {
   const safeTag = tag.replace(/[^\w.-]/g, '-');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `aerostaff-${safeTag}-`));
+  const assetName = phoneReleaseAssetName(tag);
 
-  run('gh', ['release', 'download', tag, '--repo', repo, '--pattern', '*.apk', '--dir', dir, '--clobber']);
+  run('gh', ['release', 'download', tag, '--repo', repo, '--pattern', assetName, '--dir', dir, '--clobber']);
 
-  const apkFiles = fs.readdirSync(dir).filter((file) => file.toLowerCase().endsWith('.apk'));
-  if (apkFiles.length !== 1) {
-    fail(`Expected exactly one APK in ${dir}, found ${apkFiles.length}.`);
+  const apkPath = path.join(dir, assetName);
+  if (!fs.existsSync(apkPath)) {
+    fail(`Expected phone APK ${assetName} in ${dir}.`);
   }
 
-  return path.join(dir, apkFiles[0]);
+  return apkPath;
 }
 
 function getCurrentBranch() {
@@ -252,9 +261,11 @@ module.exports = {
   parseBadging,
   parseCertSha256,
   parseRepoArg,
+  phoneReleaseAssetName,
   readProjectMeta,
   root,
   run,
   sleep,
   tagToVersion,
+  wearReleaseAssetName,
 };

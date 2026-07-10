@@ -4,7 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -17,14 +17,18 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.Text
 import com.aerostaffpro.wear.data.FlightData
 import com.aerostaffpro.wear.theme.WearColors
+import com.aerostaffpro.wear.util.formatCountdownDuration
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
 private val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
 private fun fmtTime(epochSec: Long): String = timeFmt.format(Date(epochSec * 1000))
 
-fun buildDepartureEvents(flight: FlightData): List<TimelineEvent> {
-    val now = System.currentTimeMillis() / 1000
+fun buildDepartureEvents(
+    flight: FlightData,
+    now: Long = System.currentTimeMillis() / 1000
+): List<TimelineEvent> {
     val dep = flight.scheduledTime
     val displayDep = flight.realDeparture ?: flight.estimatedTime ?: dep
     val ops = flight.ops ?: return emptyList()
@@ -50,8 +54,10 @@ fun buildDepartureEvents(flight: FlightData): List<TimelineEvent> {
     }
 }
 
-fun buildArrivalEvents(flight: FlightData): List<TimelineEvent> {
-    val now = System.currentTimeMillis() / 1000
+fun buildArrivalEvents(
+    flight: FlightData,
+    now: Long = System.currentTimeMillis() / 1000
+): List<TimelineEvent> {
     val bestArrival = flight.realArrival ?: flight.estimatedTime ?: flight.scheduledTime
     val landed = flight.realArrival != null
     val departed = flight.realDeparture != null
@@ -93,43 +99,46 @@ fun buildArrivalEvents(flight: FlightData): List<TimelineEvent> {
     return events
 }
 
+fun buildDepartureCountdownText(flight: FlightData, now: Long): String {
+    val dep = flight.scheduledTime
+    val displayDep = flight.realDeparture ?: flight.estimatedTime ?: dep
+    val ops = flight.ops ?: return ""
+    val labels = listOf("CI Open", "CI Close", "Gate", "Gate Close", "DEP")
+    val gateOpenTime = dep - ops.gateOpen * 60
+    val timestamps = listOf(
+        dep - ops.checkInOpen * 60,
+        dep - ops.checkInClose * 60,
+        gateOpenTime,
+        dep - ops.gateClose * 60,
+        displayDep
+    )
+    val nextIndex = timestamps.indexOfFirst { it > now }
+    if (nextIndex < 0) return ""
+
+    return "${labels[nextIndex]} tra ${formatCountdownDuration(timestamps[nextIndex] - now)}"
+}
+
 @Composable
 fun FlightTimelineScreen(flight: FlightData) {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis() / 1000) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            now = System.currentTimeMillis() / 1000
+        }
+    }
+
     val headerColor = try { Color(android.graphics.Color.parseColor(flight.airlineColor)) } catch (_: Exception) { WearColors.accent }
-    val events = if (flight.tab == "departures") buildDepartureEvents(flight) else buildArrivalEvents(flight)
-    val now = System.currentTimeMillis() / 1000
+    val events = if (flight.tab == "departures") buildDepartureEvents(flight, now) else buildArrivalEvents(flight, now)
 
     // Countdown text
-    val currentOrNext = events.firstOrNull { it.status == EventStatus.CURRENT }
-        ?: events.firstOrNull { it.status == EventStatus.FUTURE }
     val countdownText = if (flight.tab == "arrivals") {
         val best = flight.realArrival ?: flight.estimatedTime ?: flight.scheduledTime
         val delay = ((best - flight.scheduledTime) / 60).toInt()
         if (flight.realArrival != null) "Atterrato"
         else if (delay > 0) "+$delay min ritardo"
         else "In orario"
-    } else {
-        currentOrNext?.let { ev ->
-            val idx = events.indexOf(ev)
-            val dep = flight.scheduledTime
-            val displayDep = flight.realDeparture ?: flight.estimatedTime ?: dep
-            val ops = flight.ops
-            if (ops != null) {
-                val gateOpenTime = dep - ops.gateOpen * 60
-                val timestamps = listOf(
-                    dep - ops.checkInOpen * 60,
-                    dep - ops.checkInClose * 60,
-                    gateOpenTime,
-                    dep - ops.gateClose * 60,
-                    displayDep
-                )
-                val ts = timestamps.getOrNull(idx) ?: displayDep
-                val mins = ((ts - now) / 60).coerceAtLeast(0)
-                val timeStr = if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
-                "${ev.label} tra $timeStr"
-            } else ""
-        } ?: ""
-    }
+    } else buildDepartureCountdownText(flight, now)
 
     // Header label
     val headerLabel = if (flight.tab == "departures") {

@@ -43,7 +43,7 @@ When the user says to release, use the automated flow:
 npm run release:quick
 ```
 
-This bumps patch version, runs release checks, runs the full test suite, runs TypeScript, commits, pushes, triggers the GitHub APK release workflow, waits for it, downloads/verifies the APK, and copies it to Downloads.
+This bumps patch version, runs release checks, runs the full test suite, runs TypeScript, commits, pushes, triggers the GitHub APK release workflow, waits for it, publishes matching phone and Wear APKs, then downloads/verifies the phone APK and copies it to Downloads.
 
 Before release work, run:
 
@@ -112,7 +112,7 @@ When fixing emulator-discovered UI issues, capture the failing evidence first, a
 
 ## APK Signing And Install Failures
 
-- Release APKs must come from GitHub Actions because the valid release signing key is stored in GitHub secrets.
+- Release APKs must come from GitHub Actions because the valid release signing key is stored in GitHub secrets. Phone and Wear assets must share the same application ID, version metadata, and signing certificate for Data Layer sync.
 - Do not trust locally named release/debug keystores for publishing unless the user explicitly verifies them.
 - If Android refuses to update even with install permissions enabled, compare APK signing certificates first.
 - If the in-app updater cached a bad APK for a version, publish a new patch version so the app downloads a fresh asset.

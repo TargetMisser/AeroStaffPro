@@ -23,6 +23,26 @@ export type UpdateInfo = {
   checkedAt: number;
 };
 
+type GithubReleaseAsset = {
+  name?: string;
+  browser_download_url?: string;
+};
+
+function selectPhoneApkAsset(assets: unknown[], tag: string): GithubReleaseAsset | undefined {
+  const apkAssets = assets.filter((asset): asset is GithubReleaseAsset => {
+    if (!asset || typeof asset !== 'object') return false;
+    const name = 'name' in asset ? asset.name : undefined;
+    return typeof name === 'string' && name.toLowerCase().endsWith('.apk');
+  });
+  const expectedName = tag ? `aerostaffpro-${tag}.apk`.toLowerCase() : '';
+
+  return apkAssets.find(asset => asset.name?.toLowerCase() === expectedName)
+    ?? apkAssets.find(asset => {
+      const name = asset.name?.toLowerCase() ?? '';
+      return !/(?:^|[-_.])(wear|watch)(?:[-_.]|$)/.test(name);
+    });
+}
+
 function normalizeUpdateInfo(info: UpdateInfo): UpdateInfo {
   return {
     ...info,
@@ -74,14 +94,7 @@ export async function checkForUpdate(force = false): Promise<UpdateInfo | null> 
 
     const tag = typeof json.tag_name === 'string' ? json.tag_name : '';
     const assets = Array.isArray(json.assets) ? json.assets : [];
-    const apkAsset = assets.find((asset): asset is { name?: string; browser_download_url?: string } => {
-      if (!asset || typeof asset !== 'object') {
-        return false;
-      }
-
-      const name = 'name' in asset ? asset.name : undefined;
-      return typeof name === 'string' && name.toLowerCase().endsWith('.apk');
-    });
+    const apkAsset = selectPhoneApkAsset(assets, tag);
     const releaseUrl = typeof json.html_url === 'string' ? json.html_url : '';
 
     const info = normalizeUpdateInfo({

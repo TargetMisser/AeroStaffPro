@@ -1,4 +1,5 @@
 import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
+import { isFlightServiceMatch, type FlightDirection } from './flightScheduleAdapter';
 
 export type PinnedFlightTab = 'arrivals' | 'departures';
 
@@ -11,6 +12,13 @@ export type PinnedFlightReconciliation =
   }
   | {
     kind: 'clear';
+    reason: 'invalid' | 'missing';
+  }
+  | {
+    kind: 'clear';
+    reason: 'expired';
+    item: any;
+    tab: PinnedFlightTab;
   };
 
 /**
@@ -26,10 +34,11 @@ export function reconcilePinnedFlight(
 ): PinnedFlightReconciliation {
   const tab: PinnedFlightTab = pinned?._pinTab === 'arrivals' ? 'arrivals' : 'departures';
   const flightId = pinned?.flight?.identification?.number?.default;
-  if (typeof flightId !== 'string' || !flightId) return { kind: 'clear' };
+  if (typeof flightId !== 'string' || !flightId) return { kind: 'clear', reason: 'invalid' };
 
-  const updated = pool.find(item => item?.flight?.identification?.number?.default === flightId);
-  if (!updated) return { kind: 'clear' };
+  const direction: FlightDirection = tab === 'arrivals' ? 'arrival' : 'departure';
+  const updated = pool.find(item => isFlightServiceMatch(pinned, item, direction));
+  if (!updated) return { kind: 'clear', reason: 'missing' };
 
   const item = {
     ...pinned,
@@ -38,7 +47,13 @@ export function reconcilePinnedFlight(
     _pinnedAt: pinned._pinnedAt ?? nowSec * 1000,
   };
   const bestTs = tab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
-  if (bestTs != null && bestTs < nowSec) return { kind: 'clear' };
+  if (bestTs != null && bestTs < nowSec) return { kind: 'clear', reason: 'expired', item, tab };
 
-  return { kind: 'keep', item, tab, flightId };
+  const refreshedFlightId = updated?.flight?.identification?.number?.default;
+  return {
+    kind: 'keep',
+    item,
+    tab,
+    flightId: typeof refreshedFlightId === 'string' && refreshedFlightId ? refreshedFlightId : flightId,
+  };
 }

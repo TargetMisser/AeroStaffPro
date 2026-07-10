@@ -131,7 +131,7 @@ jobs:
       - name: Build release APK
         run: |
           cd android
-          ./gradlew :app:assembleRelease \
+          ./gradlew :app:assembleRelease :wear:assembleRelease \
             --no-daemon \
             -Pandroid.overridePathCheck=true
         env:
@@ -140,32 +140,63 @@ jobs:
 
       - name: Validate APK release metadata
         run: |
-          APK=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
-          BADGING=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$APK")
-          APK_VERSION_NAME=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
-          APK_VERSION_CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
-          EXPECTED_TAG="v${APK_VERSION_NAME}"
+          PHONE_APK=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          WEAR_APK=$(find android/wear/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [[ -z "$PHONE_APK" || -z "$WEAR_APK" ]]; then
+            echo "Missing phone or Wear release APK"
+            exit 1
+          fi
 
-          echo "APK versionName=$APK_VERSION_NAME"
-          echo "APK versionCode=$APK_VERSION_CODE"
+          PHONE_BADGING=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$PHONE_APK")
+          WEAR_BADGING=$("$ANDROID_HOME/build-tools/37.0.0/aapt" dump badging "$WEAR_APK")
+          PHONE_PACKAGE=$(echo "$PHONE_BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          PHONE_VERSION_NAME=$(echo "$PHONE_BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          PHONE_VERSION_CODE=$(echo "$PHONE_BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+          WEAR_PACKAGE=$(echo "$WEAR_BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          WEAR_VERSION_NAME=$(echo "$WEAR_BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+          WEAR_VERSION_CODE=$(echo "$WEAR_BADGING" | sed -n "s/.*versionCode='\([^']*\)'.*/\1/p")
+          EXPECTED_PACKAGE=$(node -p "require('./app.json').expo.android.package")
+          EXPECTED_TAG="v${PHONE_VERSION_NAME}"
+
+          echo "Phone APK: $PHONE_PACKAGE v$PHONE_VERSION_NAME ($PHONE_VERSION_CODE)"
+          echo "Wear APK: $WEAR_PACKAGE v$WEAR_VERSION_NAME ($WEAR_VERSION_CODE)"
           echo "Release tag=${{ steps.meta.outputs.tag }}"
 
-          if [[ "${{ steps.meta.outputs.version }}" != "$APK_VERSION_NAME" ]]; then
-            echo "app.json version (${{ steps.meta.outputs.version }}) does not match APK versionName ($APK_VERSION_NAME)"
+          if [[ "$PHONE_PACKAGE" != "$EXPECTED_PACKAGE" || "$WEAR_PACKAGE" != "$EXPECTED_PACKAGE" ]]; then
+            echo "Phone and Wear package names must both match $EXPECTED_PACKAGE for Data Layer"
+            exit 1
+          fi
+          if [[ "${{ steps.meta.outputs.version }}" != "$PHONE_VERSION_NAME" || "$PHONE_VERSION_NAME" != "$WEAR_VERSION_NAME" ]]; then
+            echo "app.json, phone, and Wear versionName values do not match"
+            exit 1
+          fi
+          if [[ "$PHONE_VERSION_CODE" != "$WEAR_VERSION_CODE" ]]; then
+            echo "Phone and Wear versionCode values do not match"
             exit 1
           fi
 
           if [[ "${{ steps.meta.outputs.tag }}" != "$EXPECTED_TAG" ]]; then
-            echo "Release tag (${{ steps.meta.outputs.tag }}) does not match APK versionName ($APK_VERSION_NAME)"
+            echo "Release tag (${{ steps.meta.outputs.tag }}) does not match APK versionName ($PHONE_VERSION_NAME)"
+            exit 1
+          fi
+
+          PHONE_CERT=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$PHONE_APK" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          WEAR_CERT=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$WEAR_APK" | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
+          if [[ -z "$PHONE_CERT" || "$PHONE_CERT" != "$WEAR_CERT" ]]; then
+            echo "Phone and Wear signing certificate SHA-256 digest values do not match"
             exit 1
           fi
 
       - name: Rename APK
         run: |
-          APK=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
-          DEST="AeroStaffPro-${{ steps.meta.outputs.tag }}.apk"
-          cp "$APK" "$DEST"
-          echo "apk=$DEST" >> "$GITHUB_ENV"
+          PHONE_APK=$(find android/app/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          WEAR_APK=$(find android/wear/build/outputs/apk/release -name "*.apk" -type f | head -1)
+          PHONE_DEST="AeroStaffPro-${{ steps.meta.outputs.tag }}.apk"
+          WEAR_DEST="AeroStaffPro-Wear-${{ steps.meta.outputs.tag }}.apk"
+          cp "$PHONE_APK" "$PHONE_DEST"
+          cp "$WEAR_APK" "$WEAR_DEST"
+          echo "apk=$PHONE_DEST" >> "$GITHUB_ENV"
+          echo "wear_apk=$WEAR_DEST" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -174,6 +205,8 @@ jobs:
           name: "AeroStaff Pro ${{ steps.meta.outputs.tag }}"
           target_commitish: ${{ steps.source.outputs.sha }}
           generate_release_notes: true
-          files: ${{ env.apk }}
+          files: |
+            ${{ env.apk }}
+            ${{ env.wear_apk }}
           draft: false
           prerelease: false

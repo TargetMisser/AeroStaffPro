@@ -144,50 +144,85 @@ jobs:
         shell: pwsh
         run: |
           cd android
-          & .\gradlew.bat ':app:assembleRelease' '-Pandroid.overridePathCheck=true'
+          & .\gradlew.bat ':app:assembleRelease' ':wear:assembleRelease' '-Pandroid.overridePathCheck=true'
         env:
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m"
 
       - name: Validate APK release metadata
         shell: pwsh
         run: |
-          $apk = Get-ChildItem -Path 'android/app/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
-          if (-not $apk) {
-            throw 'No release APK found'
+          $phoneApk = Get-ChildItem -Path 'android/app/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
+          $wearApk = Get-ChildItem -Path 'android/wear/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
+          if (-not $phoneApk -or -not $wearApk) {
+            throw 'Missing phone or Wear release APK'
           }
 
           $aapt = Join-Path $env:ANDROID_HOME 'build-tools\37.0.0\aapt.exe'
-          $badging = & $aapt dump badging $apk.FullName
-          $packageLine = ($badging | Select-String -Pattern "^package:").Line
-          if ($packageLine -notmatch "versionCode='([^']+)'\s+versionName='([^']+)'") {
-            throw 'Could not parse APK badging output'
+          $apksigner = Join-Path $env:ANDROID_HOME 'build-tools\37.0.0\apksigner.bat'
+
+          function Get-ApkMeta($apk) {
+            $badging = & $aapt dump badging $apk.FullName
+            $packageLine = ($badging | Select-String -Pattern "^package:").Line
+            if ($packageLine -notmatch "name='([^']+)'\s+versionCode='([^']+)'\s+versionName='([^']+)'") {
+              throw "Could not parse APK badging output for $($apk.FullName)"
+            }
+            return [PSCustomObject]@{
+              PackageName = $Matches[1]
+              VersionCode = $Matches[2]
+              VersionName = $Matches[3]
+            }
           }
 
-          $apkVersionCode = $Matches[1]
-          $apkVersionName = $Matches[2]
-          $expectedTag = "v$apkVersionName"
+          function Get-CertSha256($apk) {
+            $certLine = (& $apksigner verify --print-certs $apk.FullName | Select-String -Pattern 'certificate SHA-256 digest:' | Select-Object -First 1).Line
+            if ($certLine -notmatch 'certificate SHA-256 digest:\s*(\S+)') {
+              throw "Could not parse signing certificate for $($apk.FullName)"
+            }
+            return $Matches[1].ToLowerInvariant()
+          }
 
-          Write-Host "APK versionName=$apkVersionName"
-          Write-Host "APK versionCode=$apkVersionCode"
+          $phoneMeta = Get-ApkMeta $phoneApk
+          $wearMeta = Get-ApkMeta $wearApk
+          $expectedPackage = node -p "require('./app.json').expo.android.package"
+          $expectedTag = "v$($phoneMeta.VersionName)"
+
+          Write-Host "Phone APK: $($phoneMeta.PackageName) v$($phoneMeta.VersionName) ($($phoneMeta.VersionCode))"
+          Write-Host "Wear APK: $($wearMeta.PackageName) v$($wearMeta.VersionName) ($($wearMeta.VersionCode))"
           Write-Host "Release tag=${{ steps.meta.outputs.tag }}"
 
-          if ('${{ steps.meta.outputs.version }}' -ne $apkVersionName) {
-            throw "app.json version (${{ steps.meta.outputs.version }}) does not match APK versionName ($apkVersionName)"
+          if ($phoneMeta.PackageName -ne $expectedPackage -or $wearMeta.PackageName -ne $expectedPackage) {
+            throw "Phone and Wear package names must both match $expectedPackage for Data Layer"
+          }
+          if ('${{ steps.meta.outputs.version }}' -ne $phoneMeta.VersionName -or $phoneMeta.VersionName -ne $wearMeta.VersionName) {
+            throw 'app.json, phone, and Wear versionName values do not match'
+          }
+          if ($phoneMeta.VersionCode -ne $wearMeta.VersionCode) {
+            throw 'Phone and Wear versionCode values do not match'
           }
           if ('${{ steps.meta.outputs.tag }}' -ne $expectedTag) {
-            throw "Release tag (${{ steps.meta.outputs.tag }}) does not match APK versionName ($apkVersionName)"
+            throw "Release tag (${{ steps.meta.outputs.tag }}) does not match APK versionName ($($phoneMeta.VersionName))"
+          }
+
+          $phoneCert = Get-CertSha256 $phoneApk
+          $wearCert = Get-CertSha256 $wearApk
+          if ($phoneCert -ne $wearCert) {
+            throw 'Phone and Wear signing certificate SHA-256 digest values do not match'
           }
 
       - name: Rename APK
         shell: pwsh
         run: |
-          $apk = Get-ChildItem -Path 'android/app/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
-          if (-not $apk) {
-            throw 'No release APK found'
+          $phoneApk = Get-ChildItem -Path 'android/app/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
+          $wearApk = Get-ChildItem -Path 'android/wear/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
+          if (-not $phoneApk -or -not $wearApk) {
+            throw 'Missing phone or Wear release APK'
           }
-          $dest = 'AeroStaffPro-${{ steps.meta.outputs.tag }}.apk'
-          Copy-Item -LiteralPath $apk.FullName -Destination $dest -Force
-          "apk=$dest" >> $env:GITHUB_ENV
+          $phoneDest = 'AeroStaffPro-${{ steps.meta.outputs.tag }}.apk'
+          $wearDest = 'AeroStaffPro-Wear-${{ steps.meta.outputs.tag }}.apk'
+          Copy-Item -LiteralPath $phoneApk.FullName -Destination $phoneDest -Force
+          Copy-Item -LiteralPath $wearApk.FullName -Destination $wearDest -Force
+          "apk=$phoneDest" >> $env:GITHUB_ENV
+          "wear_apk=$wearDest" >> $env:GITHUB_ENV
 
       - name: Create GitHub Release
         if: ${{ github.event.inputs.publish_release != 'false' }}
@@ -197,6 +232,8 @@ jobs:
           name: "AeroStaff Pro ${{ steps.meta.outputs.tag }}"
           target_commitish: ${{ steps.source.outputs.sha }}
           generate_release_notes: true
-          files: ${{ env.apk }}
+          files: |
+            ${{ env.apk }}
+            ${{ env.wear_apk }}
           draft: false
           prerelease: false

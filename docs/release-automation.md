@@ -16,7 +16,7 @@ Prints the current branch, dirty files, app version metadata, GitHub auth state,
 npm run release:verify -- v2.6.63
 ```
 
-Downloads the APK from GitHub Releases, checks package metadata with `aapt`, verifies the signing certificate with `apksigner`, and copies the APK to `Downloads`.
+Downloads the phone APK from GitHub Releases, checks package metadata with `aapt`, verifies the signing certificate with `apksigner`, and copies the APK to `Downloads`. The verifier selects the exact `AeroStaffPro-vX.Y.Z.apk` asset, so the companion Wear APK cannot be installed on the phone by mistake.
 
 To also install the verified APK on a connected device or emulator:
 
@@ -30,7 +30,16 @@ npm run release:verify -- v2.6.63 --install
 npm run release:quick
 ```
 
-By default this bumps the patch version. It updates the README stable version, requires a clean worktree, runs release checks, runs the full test suite, runs TypeScript, commits the version bump, pushes the branch, triggers the GitHub APK release workflow, waits for it, then verifies the published APK.
+By default this bumps the patch version. It updates the README stable version, requires a clean worktree, runs release checks, runs the full test suite, runs TypeScript, commits the version bump, pushes the branch, triggers the GitHub APK release workflow, waits for it, then verifies the published phone APK.
+
+Each release publishes two signed assets with matching package, version, and certificate metadata:
+
+```text
+AeroStaffPro-vX.Y.Z.apk       # phone
+AeroStaffPro-Wear-vX.Y.Z.apk  # Wear OS companion
+```
+
+The phone and Wear builds intentionally share the application ID and signing certificate so the Wearable Data Layer can synchronize pinned flights. Install the Wear asset only on a paired Wear OS device.
 
 Other version bumps:
 

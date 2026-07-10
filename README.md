@@ -92,7 +92,8 @@ To install the Android app:
 1. Open the Releases page.
 2. Download `AeroStaffPro-vX.X.X.apk`.
 3. Install it on the Android device. You may need to allow installs from unknown sources.
-4. If using Wear OS, keep the phone and watch paired so the companion module can be installed.
+4. For Wear OS, also download `AeroStaffPro-Wear-vX.X.X.apk` and install that asset on the paired watch only.
+5. Keep phone and watch paired so pinned-flight data can synchronize through the Wearable Data Layer.
 
 ## Local Android Release Build
 
@@ -112,10 +113,11 @@ cd android
 .\gradlew.bat assembleRelease
 ```
 
-The APK is generated at:
+The phone and Wear APKs are generated at:
 
 ```text
 android/app/build/outputs/apk/release/app-release.apk
+android/wear/build/outputs/apk/release/wear-release.apk
 ```
 
 The GitHub Actions release workflow expects these repository secrets:

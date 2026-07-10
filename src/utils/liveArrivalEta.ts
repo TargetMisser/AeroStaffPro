@@ -236,12 +236,16 @@ export function applyLiveArrivalEtas(
      match multiple scheduled arrivals (FR1492 at 19:25 and FR8269 at 23:30 on
      the same 9H-QAG). The live ETA belongs to ONE flight only: the candidate
      whose schedule is closest to the computed arrival. */
-  type Candidate = { index: number; estimatedArrival: number; deviation: number };
+  type Candidate = {
+    index: number;
+    estimatedArrival: number;
+    deviation: number;
+    preserveAuthoritativeEta: boolean;
+  };
   const bestByAircraft = new Map<AdsbAircraft, Candidate>();
 
   arrivals.forEach((item, index) => {
     if (item?.flight?.time?.real?.arrival) return;
-    if (typeof item?.flight?.time?.estimated?.arrival === 'number') return;
 
     const reg = readFlightRegistration(item);
     const aircraft = (reg && byRegistration.get(reg))
@@ -252,27 +256,43 @@ export function applyLiveArrivalEtas(
     if (etaSeconds == null) return;
 
     const estimatedArrival = nowSeconds + etaSeconds;
+    const preserveAuthoritativeEta = item?.flight?._etaSource === 'fr24_api'
+      && typeof item?.flight?.time?.estimated?.arrival === 'number';
     const scheduled = item?.flight?.time?.scheduled?.arrival;
-    // A missing scheduled time means we can't verify the rotation, so it must
+    const officialEta = preserveAuthoritativeEta
+      ? item.flight.time.estimated.arrival
+      : undefined;
+    const rotationReference = typeof officialEta === 'number' ? officialEta : scheduled;
+    // A missing rotation reference means we can't verify the rotation, so it must
     // NOT count as a perfect (deviation 0) match: fabricating 0 both skipped the
     // 3-hour rotation guard and made it always win the per-aircraft contest,
     // attaching the live ETA to the wrong flight row. Use +Infinity so any
-    // candidate with a real (finite) deviation wins, and only apply the rotation
-    // reject when there is a scheduled time to compare against.
-    const deviation = typeof scheduled === 'number'
-      ? Math.abs(estimatedArrival - scheduled)
+    // candidate with a real (finite) deviation wins. An authoritative FR24 ETA
+    // is a stronger rotation reference than a stale schedule for a delayed leg.
+    const deviation = typeof rotationReference === 'number'
+      ? Math.abs(estimatedArrival - rotationReference)
       : Number.POSITIVE_INFINITY;
-    if (typeof scheduled === 'number' && deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;   // another rotation
+    if (typeof rotationReference === 'number' && deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;   // another rotation
 
     const current = bestByAircraft.get(aircraft);
     if (!current || deviation < current.deviation) {
-      bestByAircraft.set(aircraft, { index, estimatedArrival, deviation });
+      bestByAircraft.set(aircraft, {
+        index,
+        estimatedArrival,
+        deviation,
+        preserveAuthoritativeEta,
+      });
     }
   });
 
   const overlayByIndex = new Map<number, number>();
   for (const candidate of bestByAircraft.values()) {
-    overlayByIndex.set(candidate.index, candidate.estimatedArrival);
+    // An official FR24 ETA wins over public ADS-B, but still participates in
+    // the per-aircraft rotation contest so the same aircraft is not attached
+    // to a later scheduled row.
+    if (!candidate.preserveAuthoritativeEta) {
+      overlayByIndex.set(candidate.index, candidate.estimatedArrival);
+    }
   }
 
   return arrivals.map((item, index) => {

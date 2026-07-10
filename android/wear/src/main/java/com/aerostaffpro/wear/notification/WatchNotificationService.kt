@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.aerostaffpro.wear.MainActivity
 import com.aerostaffpro.wear.R
 import com.aerostaffpro.wear.data.FlightData
+import com.aerostaffpro.wear.util.formatCountdownDuration
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import org.json.JSONObject
@@ -154,8 +155,7 @@ class WatchNotificationService : WearableListenerService() {
         if (flight.tab == "arrivals") {
             val best = flight.realArrival ?: flight.estimatedTime ?: flight.scheduledTime
             if (flight.realArrival != null) return "Atterrato"
-            val mins = ((best - now) / 60).coerceAtLeast(0)
-            return if (mins > 60) "ETA ${mins / 60}h ${mins % 60}m" else "ETA ${mins}m"
+            return "ETA ${formatCountdownDuration(best - now)}"
         }
 
         val dep = flight.scheduledTime
@@ -175,9 +175,7 @@ class WatchNotificationService : WearableListenerService() {
         val next = milestones.firstOrNull { it.ts > now }
             ?: return "Partito"
 
-        val mins = ((next.ts - now) / 60).coerceAtLeast(0)
-        val timeStr = if (mins > 60) "${mins / 60}h ${mins % 60}m" else "${mins}m"
-        return "${next.label} tra $timeStr"
+        return "${next.label} tra ${formatCountdownDuration(next.ts - now)}"
     }
 
     private fun formatTime(epochSec: Long): String {

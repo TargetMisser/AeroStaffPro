@@ -33,6 +33,7 @@ function runHelp(scriptName) {
 const packageJson = readJson('package.json');
 const scripts = packageJson.scripts || {};
 const releaseQuickSource = fs.readFileSync(path.join(root, 'scripts', 'release-quick.cjs'), 'utf8');
+const releaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'build-release.yml'), 'utf8');
 const windowsReleaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'build-release-windows.yml'), 'utf8');
 const setupLocalRunnerSource = fs.readFileSync(path.join(root, 'scripts', 'setup-local-runner.ps1'), 'utf8');
 const startLocalRunnerSource = fs.readFileSync(path.join(root, 'scripts', 'start-local-runner.ps1'), 'utf8');
@@ -58,12 +59,21 @@ assert(emulatorQaSource.includes('Aggiornamento disponibile'), 'emulator QA shou
 
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
+assert(releaseQuickSource.includes("'android/wear/build.gradle'"), 'release:quick should commit Wear version updates');
 assert(releaseQuickSource.includes("'--ref'"), 'release:quick should dispatch the GitHub workflow from the current branch');
 assert(releaseQuickSource.includes('--local-runner'), 'release:quick should expose the local runner option');
 assert(releaseQuickSource.includes('build-release-windows.yml'), 'release:quick should support the Windows local runner workflow');
 assert(windowsReleaseWorkflow.includes('runs-on: [self-hosted, Windows, X64, aerostaff]'), 'Windows workflow should target the AeroStaff self-hosted runner');
 assert(windowsReleaseWorkflow.includes('Resolve Android SDK'), 'Windows workflow should use the local Android SDK');
 assert(windowsReleaseWorkflow.includes('publish_release'), 'Windows workflow should support build-only smoke tests');
+for (const [name, workflow] of [
+  ['Linux', releaseWorkflow],
+  ['Windows', windowsReleaseWorkflow],
+]) {
+  assert(workflow.includes(':wear:assembleRelease'), `${name} workflow should build the Wear APK`);
+  assert(workflow.includes('AeroStaffPro-Wear-${{ steps.meta.outputs.tag }}.apk'), `${name} workflow should publish a distinct Wear APK`);
+  assert(workflow.includes('certificate SHA-256 digest'), `${name} workflow should compare phone and Wear signing certificates`);
+}
 assert(
   windowsReleaseWorkflow.includes("versionCode='([^']+)'\\s+versionName='([^']+)'"),
   'Windows workflow should not parse platformBuildVersionName as the APK versionName',
@@ -81,6 +91,10 @@ assert(
 assert(
   bumpVersionSource.includes('FALLBACK_APP_VERSION'),
   'version:bump should keep the updateChecker version fallback in sync',
+);
+assert(
+  bumpVersionSource.includes('android/wear/build.gradle'),
+  'version:bump should keep Wear version metadata in sync',
 );
 const releaseCheckSource = fs.readFileSync(path.join(root, 'scripts', 'release-check.cjs'), 'utf8');
 assert(
@@ -102,6 +116,15 @@ releaseTools.run('git', [
 ], { cwd: tempGitRepo, capture: true });
 const gitSubject = releaseTools.capture('git', ['log', '-1', '--format=%s'], { cwd: tempGitRepo }).stdout.trim();
 assert(gitSubject === 'chore: release command quoting test', 'release tooling should preserve git commit messages with spaces');
+
+assert(
+  releaseTools.phoneReleaseAssetName('2.7.34') === 'AeroStaffPro-v2.7.34.apk',
+  'release verification should select the phone APK explicitly',
+);
+assert(
+  releaseTools.wearReleaseAssetName('v2.7.34') === 'AeroStaffPro-Wear-v2.7.34.apk',
+  'Wear releases should use a distinct deterministic asset name',
+);
 
 const npmVersion = releaseTools.capture('npm', ['--version']).stdout.trim();
 assert(/^\d+\.\d+\.\d+/.test(npmVersion), 'release tooling should run npm commands through Windows .cmd shims');

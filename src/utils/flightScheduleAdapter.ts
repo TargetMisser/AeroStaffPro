@@ -344,20 +344,34 @@ function getFlightMergeIdentity(item: any, direction: FlightDirection): FlightMe
   };
 }
 
+export const FLIGHT_SERVICE_TIME_TOLERANCE_SECONDS = 2 * 60 * 60;
+
 function areFlightTimesCompatible(left: any, right: any, direction: FlightDirection): boolean {
-  const leftTs = getFlightBestTs(left, direction) ?? getFlightScheduledTs(left, direction);
-  const rightTs = getFlightBestTs(right, direction) ?? getFlightScheduledTs(right, direction);
+  // Prefer STD/STA for identity. A live estimate can move by several hours,
+  // but it is still the same service and must keep its pin/provider merge.
+  const leftTs = getFlightScheduledTs(left, direction) ?? getFlightBestTs(left, direction);
+  const rightTs = getFlightScheduledTs(right, direction) ?? getFlightBestTs(right, direction);
   if (!leftTs || !rightTs) return true;
 
-  return Math.abs(leftTs - rightTs) <= 2 * 60 * 60;
+  return Math.abs(leftTs - rightTs) <= FLIGHT_SERVICE_TIME_TOLERANCE_SECONDS;
 }
 
-function isLikelySameFlight(left: any, right: any, direction: FlightDirection): boolean {
+/**
+ * Matches one concrete flight service across provider representations.
+ *
+ * Providers can expose the same remote airport as an IATA/ICAO code or only
+ * as a free-form name. When that name is not in our alias table, a matching
+ * canonical flight number, service date and scheduled-time window provide the
+ * safe fallback. The time guard is always applied, including when both airport
+ * identifiers are identical, so repeated same-day rotations are not confused.
+ */
+export function isFlightServiceMatch(left: any, right: any, direction: FlightDirection): boolean {
   const leftIdentity = getFlightMergeIdentity(left, direction);
   const rightIdentity = getFlightMergeIdentity(right, direction);
 
   if (!leftIdentity.flightNumber || leftIdentity.flightNumber !== rightIdentity.flightNumber) return false;
   if (leftIdentity.serviceDate !== rightIdentity.serviceDate) return false;
+  if (!areFlightTimesCompatible(left, right, direction)) return false;
   if (leftIdentity.remoteAirport === rightIdentity.remoteAirport) return true;
 
   const bothHaveReliableCodes = leftIdentity.remoteAirportConfidence === 'code'
@@ -366,7 +380,7 @@ function isLikelySameFlight(left: any, right: any, direction: FlightDirection): 
     && rightIdentity.remoteAirportConfidence === 'name';
   if (bothHaveReliableCodes || bothOnlyHaveNames) return false;
 
-  return areFlightTimesCompatible(left, right, direction);
+  return true;
 }
 
 function findMergeCandidateKey(map: Map<string, any>, item: any, direction: FlightDirection): string | undefined {
@@ -376,7 +390,7 @@ function findMergeCandidateKey(map: Map<string, any>, item: any, direction: Flig
   }
 
   for (const [candidateKey, candidate] of map) {
-    if (isLikelySameFlight(candidate, item, direction)) {
+    if (isFlightServiceMatch(candidate, item, direction)) {
       return candidateKey;
     }
   }

@@ -1,9 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import { getFlightAirportLabel } from './flightScheduleAdapter';
 import { isFlightEasyJet } from './easyjetOverlapMode';
+import type { CurrentRequestCheck } from './currentRequestEffects';
 
 const PINNED_ONGOING_ID = 'aerostaff-pinned-flight-ongoing';
 const PINNED_ONGOING_CHANNEL = 'pinned-flight-ongoing';
+const ALWAYS_CURRENT: CurrentRequestCheck = () => true;
 
 async function setupPinnedChannel() {
   try {
@@ -31,8 +33,11 @@ export async function showOrUpdatePinnedFlightNotification(
   item: any,
   tab: 'arrivals' | 'departures',
   sticky = true,
+  isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
 ) {
+  if (!isCurrent()) return;
   await setupPinnedChannel();
+  if (!isCurrent()) return;
   const flightNumber = item?.flight?.identification?.number?.default || 'N/A';
   const airline = item?.flight?.airline?.name || 'Sconosciuta';
 
@@ -68,6 +73,9 @@ export async function showOrUpdatePinnedFlightNotification(
     },
     trigger: null,
   });
+  if (!isCurrent()) {
+    try { await Notifications.dismissNotificationAsync(PINNED_ONGOING_ID); } catch {}
+  }
 }
 
 export async function showOrUpdateEasyJetOverlapNotification(
@@ -102,7 +110,8 @@ export async function showOrUpdateEasyJetOverlapNotification(
   });
 }
 
-export async function dismissPinnedFlightNotification() {
+export async function dismissPinnedFlightNotification(isCurrent: CurrentRequestCheck = ALWAYS_CURRENT) {
+  if (!isCurrent()) return;
   try {
     await Notifications.dismissNotificationAsync(PINNED_ONGOING_ID);
   } catch {}

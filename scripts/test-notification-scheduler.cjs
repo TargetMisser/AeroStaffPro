@@ -343,6 +343,103 @@ async function main() {
     assert(snapshot.lastEvents[0].type === 'schedule' && snapshot.lastEvents[0].scheduled === 4, 'a schedule debug event recording the scheduled count should be appended');
   })();
 
+  // ─── scheduleShiftNotifications: empty tracked selection means no flights ──
+  await (async () => {
+    const asyncStorage = makeAsyncStorageMock();
+    const notifMock = makeNotificationsMock();
+    const mocks = {
+      '@react-native-async-storage/async-storage': asyncStorage,
+      'expo-notifications': notifMock,
+    };
+    const scheduler = loadTsModule('src/utils/flightNotificationScheduler.ts', mocks);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const makeFlight = (number, direction) => ({
+      flight: {
+        identification: { number: { default: number } },
+        airline: { name: 'Ryanair', code: { iata: 'FR' } },
+        airport: direction === 'arrival'
+          ? { origin: { code: { iata: 'STN' } } }
+          : { destination: { code: { iata: 'STN' } } },
+        time: {
+          scheduled: { [direction]: nowSec + 1800 },
+          estimated: {},
+          real: {},
+        },
+      },
+    });
+
+    const scheduledCount = await scheduler.scheduleShiftNotifications(
+      [makeFlight('FR1001', 'arrival')],
+      [makeFlight('FR1002', 'departure')],
+      nowSec + 3600,
+      'it-IT',
+      {
+        onlyTrackedAirlines: true,
+        includeArrivals: true,
+        includeDepartures: true,
+        includeShiftEnd: false,
+        sticky: false,
+        arrivalLeadMinutes: 15,
+        departureLeadMinutes: 10,
+      },
+      [],
+    );
+
+    assert(scheduledCount === 0, 'an empty tracked-airline selection must schedule no flight notifications');
+    assert(notifMock._scheduled.length === 0, 'no airline should be treated as implicitly selected');
+  })();
+
+  // ─── stale airport token: discard notifications created by old fetch ───────
+  await (async () => {
+    const asyncStorage = makeAsyncStorageMock();
+    const notifMock = makeNotificationsMock();
+    let isCurrent = true;
+    const scheduleNotificationAsync = notifMock.scheduleNotificationAsync;
+    notifMock.scheduleNotificationAsync = async request => {
+      const id = await scheduleNotificationAsync(request);
+      isCurrent = false;
+      return id;
+    };
+    const mocks = {
+      '@react-native-async-storage/async-storage': asyncStorage,
+      'expo-notifications': notifMock,
+    };
+    const scheduler = loadTsModule('src/utils/flightNotificationScheduler.ts', mocks);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const departure = {
+      flight: {
+        identification: { number: { default: 'FR7001' } },
+        airline: { name: 'Ryanair', code: { iata: 'FR' } },
+        airport: { destination: { code: { iata: 'STN' } } },
+        time: { scheduled: { departure: nowSec + 3600 }, estimated: {}, real: {} },
+      },
+    };
+
+    const count = await scheduler.scheduleShiftNotifications(
+      [],
+      [departure],
+      nowSec + 7200,
+      'it-IT',
+      {
+        onlyTrackedAirlines: true,
+        includeArrivals: false,
+        includeDepartures: true,
+        includeShiftEnd: true,
+        sticky: false,
+        arrivalLeadMinutes: 15,
+        departureLeadMinutes: 10,
+      },
+      ['Ryanair'],
+      () => isCurrent,
+    );
+
+    assert(count === 0, 'a notification schedule whose airport token becomes stale must report no committed notifications');
+    assert(notifMock._scheduled.length === 1 && notifMock._cancelledIds.includes('notif-1'),
+      'the scheduler must cancel notifications created before it observes the stale airport token');
+    assert(await asyncStorage.getItem('aerostaff_notif_ids_v1') === null,
+      'a stale schedule must not persist its notification IDs');
+  })();
+
   // ─── schedulePinnedNotifications: multi-phase departures via airline ops ───
   await (async () => {
     const asyncStorage = makeAsyncStorageMock();

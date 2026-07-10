@@ -17,7 +17,7 @@
             android:value="false" />
 
         <activity
-            android:name=".MainActivity"
+            android:name="com.aerostaffpro.wear.MainActivity"
             android:exported="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.DeviceDefault">
@@ -28,7 +28,7 @@
         </activity>
 
         <service
-            android:name=".data.DataLayerListenerService"
+            android:name="com.aerostaffpro.wear.data.DataLayerListenerService"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
@@ -37,7 +37,7 @@
         </service>
 
         <service
-            android:name=".notification.WatchNotificationService"
+            android:name="com.aerostaffpro.wear.notification.WatchNotificationService"
             android:exported="true">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
@@ -48,7 +48,7 @@
         </service>
 
         <service
-            android:name=".tile.FlightTileService"
+            android:name="com.aerostaffpro.wear.tile.FlightTileService"
             android:exported="true"
             android:label="AeroStaff Volo"
             android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
@@ -61,7 +61,7 @@
         </service>
 
         <service
-            android:name=".complication.FlightComplicationService"
+            android:name="com.aerostaffpro.wear.complication.FlightComplicationService"
             android:exported="true"
             android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
             <intent-filter>

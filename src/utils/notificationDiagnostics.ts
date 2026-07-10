@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import type { CurrentRequestCheck } from './currentRequestEffects';
 
 export const NOTIF_IDS_KEY = 'aerostaff_notif_ids_v1';
 export const NOTIF_ENABLED_KEY = 'aerostaff_notif_enabled';
@@ -73,6 +74,7 @@ export type NotificationCancelScope = {
   reason: string;
   source: NotificationDebugSource;
   logEmpty?: boolean;
+  isCurrent?: CurrentRequestCheck;
 };
 
 function safeString(value: unknown): string | null {
@@ -179,9 +181,12 @@ async function readStringArray(key: string): Promise<string[]> {
   }
 }
 
-async function cancelIds(ids: string[]): Promise<number> {
+const ALWAYS_CURRENT: CurrentRequestCheck = () => true;
+
+async function cancelIds(ids: string[], isCurrent: CurrentRequestCheck = ALWAYS_CURRENT): Promise<number> {
   let cancelled = 0;
   for (const id of ids) {
+    if (!isCurrent()) break;
     try {
       await Notifications.cancelScheduledNotificationAsync(id);
       cancelled += 1;
@@ -253,17 +258,24 @@ export function buildNotificationData(input: {
 }
 
 export async function cancelAeroStaffScheduledNotifications(scope: NotificationCancelScope): Promise<number> {
+  const isCurrent = scope.isCurrent ?? ALWAYS_CURRENT;
+  if (!isCurrent()) return 0;
   const before = await Notifications.getAllScheduledNotificationsAsync().catch(() => []);
+  if (!isCurrent()) return 0;
   const ids = new Set<string>();
 
   if (scope.includeShift) {
-    for (const id of await readStringArray(NOTIF_IDS_KEY)) {
+    const storedShiftIds = await readStringArray(NOTIF_IDS_KEY);
+    if (!isCurrent()) return 0;
+    for (const id of storedShiftIds) {
       ids.add(id);
     }
   }
 
   if (scope.includePinned) {
-    for (const id of await readStringArray(PINNED_NOTIF_IDS_KEY)) {
+    const storedPinnedIds = await readStringArray(PINNED_NOTIF_IDS_KEY);
+    if (!isCurrent()) return 0;
+    for (const id of storedPinnedIds) {
       ids.add(id);
     }
   }
@@ -274,12 +286,15 @@ export async function cancelAeroStaffScheduledNotifications(scope: NotificationC
     }
   }
 
-  const cancelled = await cancelIds(Array.from(ids));
+  const cancelled = await cancelIds(Array.from(ids), isCurrent);
+  if (!isCurrent()) return cancelled;
   if (scope.includeShift) {
     await AsyncStorage.removeItem(NOTIF_IDS_KEY);
+    if (!isCurrent()) return cancelled;
   }
   if (scope.includePinned) {
     await AsyncStorage.removeItem(PINNED_NOTIF_IDS_KEY);
+    if (!isCurrent()) return cancelled;
   }
 
   if (cancelled > 0 || scope.logEmpty !== false) {

@@ -5,6 +5,7 @@ import { getFlightAirportLabel } from './flightScheduleAdapter';
 import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from './flightTimes';
 import { shouldNotifyAirline, type FlightNotificationSettings } from './flightNotificationSettings';
 import { isFlightEasyJet } from './easyjetOverlapMode';
+import type { CurrentRequestCheck } from './currentRequestEffects';
 import {
   appendNotificationDebugEvent,
   buildNotificationData,
@@ -15,13 +16,40 @@ import {
   runNotificationScheduleExclusive,
 } from './notificationDiagnostics';
 
-export async function cancelPreviousNotifications(reason = 'flight shift reschedule', logEmpty = false) {
+const ALWAYS_CURRENT: CurrentRequestCheck = () => true;
+
+async function discardNewNotificationsIfStale(
+  isCurrent: CurrentRequestCheck,
+  ids: string[],
+  storageKey?: string,
+): Promise<boolean> {
+  if (isCurrent()) return false;
+
+  for (const id of ids) {
+    try { await Notifications.cancelScheduledNotificationAsync(id); } catch {}
+  }
+
+  if (storageKey) {
+    try {
+      const stored = await AsyncStorage.getItem(storageKey);
+      if (stored === JSON.stringify(ids)) await AsyncStorage.removeItem(storageKey);
+    } catch {}
+  }
+  return true;
+}
+
+export async function cancelPreviousNotifications(
+  reason = 'flight shift reschedule',
+  logEmpty = false,
+  isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
+) {
   return cancelAeroStaffScheduledNotifications({
     includeShift: true,
     includePinned: false,
     reason,
     source: 'flights',
     logEmpty,
+    isCurrent,
   });
 }
 
@@ -32,15 +60,19 @@ export async function scheduleShiftNotifications(
   locale: string,
   settings: FlightNotificationSettings,
   selectedAirlines: string[],
+  isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
 ): Promise<number> {
   return runNotificationScheduleExclusive('flights', 'shift notification schedule', async () => {
-    await cancelPreviousNotifications('flight shift reschedule', false);
+    if (!isCurrent()) return 0;
+    await cancelPreviousNotifications('flight shift reschedule', false, isCurrent);
+    if (!isCurrent()) return 0;
     const now = Date.now() / 1000;
     const newIds: string[] = [];
     const canNotify = (item: any) => shouldNotifyAirline(item, settings, selectedAirlines);
 
     if (settings.includeArrivals) {
       for (const item of shiftArrivals) {
+        if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
         if (!canNotify(item)) continue;
         const ts = getBestArrivalTs(item);
         if (!ts) continue;
@@ -75,6 +107,7 @@ export async function scheduleShiftNotifications(
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
           });
           newIds.push(id);
+          if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
         } catch {
           // Skip just this notification and keep scheduling the rest, so a
           // single OS rejection can't abort the batch and orphan the IDs we
@@ -85,6 +118,7 @@ export async function scheduleShiftNotifications(
 
     if (settings.includeDepartures) {
       for (const item of shiftDepartures) {
+        if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
         if (!canNotify(item)) continue;
         const ts = getBestDepartureTs(item);
         if (!ts) continue;
@@ -114,6 +148,7 @@ export async function scheduleShiftNotifications(
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
           });
           newIds.push(id);
+          if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
         } catch {
           // Skip just this notification and keep scheduling the rest, so a
           // single OS rejection can't abort the batch and orphan the IDs we
@@ -123,6 +158,7 @@ export async function scheduleShiftNotifications(
     }
 
     if (settings.includeShiftEnd) {
+      if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
       const secondsUntilEnd = shiftEnd - now;
       if (secondsUntilEnd > 0) {
         const endTime = new Date(shiftEnd * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
@@ -143,6 +179,7 @@ export async function scheduleShiftNotifications(
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilEnd), repeats: false },
           });
           newIds.push(endId);
+          if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
         } catch {
           // Best-effort: a failed shift-end notification must not abort the
           // batch or orphan the flight notifications already scheduled above.
@@ -150,13 +187,16 @@ export async function scheduleShiftNotifications(
       }
     }
 
+    if (await discardNewNotificationsIfStale(isCurrent, newIds)) return 0;
     await AsyncStorage.setItem(NOTIF_IDS_KEY, JSON.stringify(newIds));
+    if (await discardNewNotificationsIfStale(isCurrent, newIds, NOTIF_IDS_KEY)) return 0;
     await dedupeAeroStaffScheduledNotifications({
       includeShift: true,
       includePinned: false,
       reason: 'flight shift schedule complete',
       source: 'flights',
     });
+    if (await discardNewNotificationsIfStale(isCurrent, newIds, NOTIF_IDS_KEY)) return 0;
     await appendNotificationDebugEvent({
       source: 'flights',
       type: 'schedule',
@@ -169,17 +209,23 @@ export async function scheduleShiftNotifications(
         settings,
       },
     });
+    if (await discardNewNotificationsIfStale(isCurrent, newIds, NOTIF_IDS_KEY)) return 0;
     return newIds.length;
   });
 }
 
-export async function cancelPinnedNotifications(reason = 'pinned flight reschedule', logEmpty = false) {
+export async function cancelPinnedNotifications(
+  reason = 'pinned flight reschedule',
+  logEmpty = false,
+  isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
+) {
   return cancelAeroStaffScheduledNotifications({
     includeShift: false,
     includePinned: true,
     reason,
     source: 'pinned',
     logEmpty,
+    isCurrent,
   });
 }
 
@@ -188,9 +234,12 @@ export async function schedulePinnedNotifications(
   tab: 'arrivals' | 'departures',
   locale: string,
   settings: FlightNotificationSettings,
+  isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
 ): Promise<void> {
   return runNotificationScheduleExclusive('pinned', 'pinned flight notification schedule', async () => {
-    await cancelPinnedNotifications('pinned flight reschedule', false);
+    if (!isCurrent()) return;
+    await cancelPinnedNotifications('pinned flight reschedule', false, isCurrent);
+    if (!isCurrent()) return;
     const now = Date.now() / 1000;
     const ids: string[] = [];
 
@@ -227,6 +276,7 @@ export async function schedulePinnedNotifications(
           trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secsUntil), repeats: false },
         });
         ids.push(id);
+        if (await discardNewNotificationsIfStale(isCurrent, ids)) return;
       }
     } else {
       const stdTs = getScheduledFlightTs(item, 'departure');
@@ -252,6 +302,7 @@ export async function schedulePinnedNotifications(
       ];
 
       for (const phase of phases) {
+        if (await discardNewNotificationsIfStale(isCurrent, ids)) return;
         const secsUntil = phase.baseTs - phase.offset * 60 - now;
         if (secsUntil <= 0) continue;
         const id = await Notifications.scheduleNotificationAsync({
@@ -272,11 +323,14 @@ export async function schedulePinnedNotifications(
           trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secsUntil), repeats: false },
         });
         ids.push(id);
+        if (await discardNewNotificationsIfStale(isCurrent, ids)) return;
       }
     }
 
+    if (await discardNewNotificationsIfStale(isCurrent, ids)) return;
     if (ids.length > 0) {
       await AsyncStorage.setItem(PINNED_NOTIF_IDS_KEY, JSON.stringify(ids));
+      if (await discardNewNotificationsIfStale(isCurrent, ids, PINNED_NOTIF_IDS_KEY)) return;
     }
     await dedupeAeroStaffScheduledNotifications({
       includeShift: false,
@@ -284,6 +338,7 @@ export async function schedulePinnedNotifications(
       reason: 'pinned flight schedule complete',
       source: 'pinned',
     });
+    if (await discardNewNotificationsIfStale(isCurrent, ids, PINNED_NOTIF_IDS_KEY)) return;
     await appendNotificationDebugEvent({
       source: 'pinned',
       type: 'schedule',
@@ -291,5 +346,6 @@ export async function schedulePinnedNotifications(
       scheduled: ids.length,
       meta: { flightNumber, tab, sticky: settings.sticky },
     });
+    await discardNewNotificationsIfStale(isCurrent, ids, PINNED_NOTIF_IDS_KEY);
   });
 }

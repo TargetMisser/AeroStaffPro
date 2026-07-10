@@ -69,8 +69,12 @@ assert(/^\d+\.\d+\.\d+$/.test(nextVersion), `Invalid requested version: ${nextVe
 
 const buildGradlePath = 'android/app/build.gradle';
 const buildGradle = read(buildGradlePath);
+const wearBuildGradlePath = 'android/wear/build.gradle';
+const wearBuildGradle = read(wearBuildGradlePath);
 const versionCodeMatch = buildGradle.match(/versionCode\s+(\d+)/);
 assert(versionCodeMatch, 'android/app/build.gradle is missing versionCode');
+assert(/versionCode\s+\d+/.test(wearBuildGradle), 'android/wear/build.gradle is missing versionCode');
+assert(/versionName\s+"[^"]+"/.test(wearBuildGradle), 'android/wear/build.gradle is missing versionName');
 const nextVersionCode = requestedCode ?? Number(versionCodeMatch[1]) + 1;
 assert(Number.isInteger(nextVersionCode) && nextVersionCode > 0, `Invalid versionCode: ${nextVersionCode}`);
 
@@ -91,6 +95,12 @@ writeJson('app.json', appJson);
 write(
   buildGradlePath,
   buildGradle
+    .replace(/versionCode\s+\d+/, `versionCode ${nextVersionCode}`)
+    .replace(/versionName\s+"[^"]+"/, `versionName "${nextVersion}"`),
+);
+write(
+  wearBuildGradlePath,
+  wearBuildGradle
     .replace(/versionCode\s+\d+/, `versionCode ${nextVersionCode}`)
     .replace(/versionName\s+"[^"]+"/, `versionName "${nextVersion}"`),
 );

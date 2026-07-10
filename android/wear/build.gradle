@@ -21,16 +21,19 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     defaultConfig {
-        applicationId 'com.aerostaffpro.wear'
+        // The Wearable Data Layer only connects apps with the same package name
+        // and signing certificate on phone and watch.
+        applicationId 'com.aerostaffpro.app'
         minSdkVersion 30
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode 111
+        versionName "2.7.34"
     }
 
     signingConfigs {
         debug {
-            storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+            // Match the phone debug signature so Data Layer works in local builds.
+            storeFile rootProject.file('app/debug.keystore')
             storePassword 'android'
             keyAlias 'androiddebugkey'
             keyPassword 'android'
@@ -82,4 +85,5 @@ dependencies {
     implementation 'androidx.wear.protolayout:protolayout:1.2.1'
     implementation 'androidx.wear.protolayout:protolayout-expression:1.2.1'
     implementation 'com.google.guava:guava:33.0.0-android'
+    testImplementation 'junit:junit:4.13.2'
 }

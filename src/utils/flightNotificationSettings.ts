@@ -61,7 +61,7 @@ export function shouldNotifyAirline(
   settings: FlightNotificationSettings,
   selectedAirlines: string[],
 ): boolean {
-  if (!settings.onlyTrackedAirlines || selectedAirlines.length === 0) {
+  if (!settings.onlyTrackedAirlines) {
     return true;
   }
   return selectedAirlines.some(key => isFlightAirlineMatch(item, key));

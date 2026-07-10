@@ -220,6 +220,18 @@ assert(
   !flightNotificationSettings.shouldNotifyAirline(easyJetFlightNumberOnly, sanitizedNotifSettings, ['wizz']),
   'notification settings should reject non-matching tracked airlines',
 );
+assert(
+  !flightNotificationSettings.shouldNotifyAirline(easyJetFlightNumberOnly, sanitizedNotifSettings, []),
+  'notification settings should treat an empty tracked-airline selection as no flight alerts',
+);
+assert(
+  flightNotificationSettings.shouldNotifyAirline(
+    easyJetFlightNumberOnly,
+    { ...sanitizedNotifSettings, onlyTrackedAirlines: false },
+    [],
+  ),
+  'notification settings should ignore an empty selection only when tracked-airline filtering is disabled',
+);
 assert(flightNotificationSettings.sameAirlineKeys(['easyjet', 'wizz'], ['easyjet', 'wizz']), 'airline key comparison should accept identical order');
 assert(!flightNotificationSettings.sameAirlineKeys(['wizz', 'easyjet'], ['easyjet', 'wizz']), 'airline key comparison should remain order-sensitive');
 
@@ -538,6 +550,63 @@ assert(
 assert(
   preservedOfficialEta[0].flight._etaSource === 'fr24_api',
   'preserving an official ETA must also preserve its provenance',
+);
+
+const weakerAirportEstimate = {
+  flight: {
+    identification: { number: { default: 'FR9876' } },
+    aircraft: { registration: 'EIDWA' },
+    time: {
+      scheduled: { arrival: nowSec + 30 * 60 },
+      estimated: { arrival: nowSec + 45 * 60 },
+      real: {},
+    },
+    _source: 'staffMonitor',
+  },
+};
+const refreshedAirportEstimate = liveEta.applyLiveArrivalEtas(
+  [weakerAirportEstimate],
+  [inboundAircraft],
+  PSA_LAT, PSA_LON, nowSec,
+);
+assert(
+  refreshedAirportEstimate[0].flight.time.estimated.arrival === nowSec + etaInbound,
+  'public ADS-B should refresh weaker airport-provider arrival estimates',
+);
+assert(
+  refreshedAirportEstimate[0].flight._etaSource === 'adsb',
+  'refreshing a weaker estimate should update its provenance to ADS-B',
+);
+
+const laterRotationAfterOfficialEta = {
+  flight: {
+    identification: { number: { default: 'FR8269' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: nowSec + 2.8 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const delayedOfficialArrival = {
+  ...officialArrival,
+  flight: {
+    ...officialArrival.flight,
+    time: {
+      ...officialArrival.flight.time,
+      scheduled: { arrival: nowSec - 4 * 60 * 60 },
+    },
+  },
+};
+const officialEtaReservesRotation = liveEta.applyLiveArrivalEtas(
+  [laterRotationAfterOfficialEta, delayedOfficialArrival],
+  [inboundAircraft],
+  PSA_LAT, PSA_LON, nowSec,
+);
+assert(
+  officialEtaReservesRotation[1].flight.time.estimated.arrival === officialEta,
+  'the official FR24 ETA should remain untouched when a delayed aircraft is live',
+);
+assert(
+  officialEtaReservesRotation[0].flight.time.estimated.arrival === undefined,
+  'an official FR24 ETA must beat a stale schedule and reserve the aircraft from a later rotation',
 );
 
 const wrongRotation = {
@@ -1188,6 +1257,123 @@ async function runProviderLayerTests() {
     'FR24 API and StaffMonitor should start as one parallel core wave',
   );
 
+  const fr24PreferenceCalls = [];
+  const fr24PreferenceLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [makeProviderArrival('U29999', tomorrowTs)],
+        allDepartures: [makeProviderFlight('HV9999', tomorrowTs)],
+      }, fr24PreferenceCalls),
+    },
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', { allArrivals: [], allDepartures: [] }, fr24PreferenceCalls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
+        allArrivals: [makeProviderArrival('U28888', todayTs)],
+        allDepartures: [makeProviderFlight('HV8888', todayTs)],
+      }, fr24PreferenceCalls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: makeProvider('fr24Api', 'FlightRadar24 API', {
+        allArrivals: [],
+        allDepartures: [makeFr24LiveProviderFlight('FR7000', todayTs, 'STN')],
+      }, fr24PreferenceCalls),
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', {
+        allArrivals: [
+          makeProviderArrival('FR7001', todayTs, 'FCO'),
+          makeProviderArrival('FR7002', tomorrowTs, 'FCO'),
+        ],
+        allDepartures: [
+          makeProviderFlight('FR7003', todayTs, 'STN'),
+          makeProviderFlight('FR7004', tomorrowTs, 'STN'),
+        ],
+      }, fr24PreferenceCalls),
+    },
+  });
+  const fr24PreferencePayload = await fr24PreferenceLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    fr24ApiKey: 'fr24-key',
+    now,
+    preference: 'fr24',
+  }, fr24PreferenceLayer.getFlightScheduleProviders('fr24'));
+  assert(
+    fr24PreferenceCalls.join(',') === 'fr24Api,fr24Public',
+    'FR24 preference should try the API and then public FR24 before any other provider',
+  );
+  assert(
+    fr24PreferencePayload.allDepartures.some(item => item.flight.identification.number.default === 'FR7004'),
+    'FR24 preference should retain complete schedule coverage from the public fallback',
+  );
+
+  const stalledFr24Calls = [];
+  const stalledFr24Layer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {
+      aeroDataBoxProvider: makeProvider('aeroDataBox', 'AeroDataBox', {
+        allArrivals: [makeProviderArrival('U27777', tomorrowTs)],
+        allDepartures: [makeProviderFlight('HV7777', tomorrowTs)],
+      }, stalledFr24Calls),
+    },
+    './airLabsProvider': {
+      airLabsProvider: makeProvider('airlabs', 'AirLabs', { allArrivals: [], allDepartures: [] }, stalledFr24Calls),
+    },
+    './staffMonitorProvider': {
+      staffMonitorProvider: makeProvider('staffMonitor', 'StaffMonitor PSA', {
+        allArrivals: [makeProviderArrival('U26666', todayTs)],
+        allDepartures: [makeProviderFlight('HV6666', todayTs)],
+      }, stalledFr24Calls),
+    },
+    './fr24Provider': {
+      fr24ApiProvider: {
+        id: 'fr24Api',
+        label: 'FlightRadar24 API',
+        supports: () => true,
+        fetch: async () => {
+          stalledFr24Calls.push('fr24Api');
+          return new Promise(() => {});
+        },
+      },
+      fr24PublicProvider: makeProvider('fr24Public', 'FlightRadar24 public', {
+        allArrivals: [
+          makeProviderArrival('FR7101', todayTs, 'FCO'),
+          makeProviderArrival('FR7102', tomorrowTs, 'FCO'),
+        ],
+        allDepartures: [
+          makeProviderFlight('FR7103', todayTs, 'STN'),
+          makeProviderFlight('FR7104', tomorrowTs, 'STN'),
+        ],
+      }, stalledFr24Calls),
+    },
+  });
+  const stalledFr24Abort = new AbortController();
+  setTimeout(() => stalledFr24Abort.abort(), 25);
+  const stalledFr24Payload = await stalledFr24Layer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    fr24ApiKey: 'fr24-key',
+    providerTimeoutMs: 200,
+    signal: stalledFr24Abort.signal,
+    now,
+    preference: 'fr24',
+  }, stalledFr24Layer.getFlightScheduleProviders('fr24'));
+  assert(
+    stalledFr24Calls.join(',') === 'fr24Api,fr24Public',
+    'FR24 public should start beside a stalled API before the parent deadline aborts it',
+  );
+  assert(
+    stalledFr24Payload.allDepartures.some(item => item.flight.identification.number.default === 'FR7104'),
+    'a completed FR24 public result should survive the paired API parent abort',
+  );
+  assert(
+    stalledFr24Payload.source === 'fr24Public',
+    'the paired FR24 wave should attribute a successful fallback result to the public provider',
+  );
+  assert(
+    !stalledFr24Calls.includes('staffMonitor') && !stalledFr24Calls.includes('aeroDataBox'),
+    'StaffMonitor and AeroDataBox must not bypass the preferred FR24 pair',
+  );
+
   const stalledStaffCalls = [];
   const stalledStaffLayer = loadTsModule('src/utils/flightProviders/index.ts', {
     './aeroDataBoxProvider': {
@@ -1247,6 +1433,8 @@ async function runProviderLayerTests() {
 
   const authoritativeEta = todayTs + 5 * 60;
   const weakerAirportEta = todayTs + 20 * 60;
+  const outboundDestinationEta = todayTs + 4 * 60 * 60;
+  const airportEstimatedDeparture = todayTs + 10 * 60;
   const authorityPayload = await providerLayer.fetchFlightScheduleFromProviders({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
@@ -1271,7 +1459,19 @@ async function runProviderLayerTests() {
             _etaSource: 'fr24_api',
           },
         }, makeProviderArrival('FR7778', tomorrowTs, 'FCO')],
-        allDepartures: [makeProviderFlight('FR7779', tomorrowTs, 'FCO')],
+        allDepartures: [{
+          ...makeProviderFlight('FR7766', todayTs, 'FCO'),
+          flight: {
+            ...makeProviderFlight('FR7766', todayTs, 'FCO').flight,
+            time: {
+              scheduled: { departure: todayTs },
+              estimated: { departure: outboundDestinationEta },
+              real: {},
+            },
+            _source: 'fr24_api',
+            _etaSource: 'fr24_api',
+          },
+        }, makeProviderFlight('FR7779', tomorrowTs, 'FCO')],
       }),
     },
     {
@@ -1292,7 +1492,18 @@ async function runProviderLayerTests() {
             _source: 'staffMonitor',
           },
         }],
-        allDepartures: [makeProviderFlight('FR7780', todayTs, 'FCO')],
+        allDepartures: [{
+          ...makeProviderFlight('FR7766', todayTs, 'FCO'),
+          flight: {
+            ...makeProviderFlight('FR7766', todayTs, 'FCO').flight,
+            time: {
+              scheduled: { departure: todayTs },
+              estimated: { departure: airportEstimatedDeparture },
+              real: {},
+            },
+            _source: 'staffMonitor',
+          },
+        }, makeProviderFlight('FR7780', todayTs, 'FCO')],
       }),
     },
   ]);
@@ -1306,6 +1517,17 @@ async function runProviderLayerTests() {
   assert(
     authorityArrival.flight._operational.gate === 'A3' && authorityArrival.flight._operational.belt === '2',
     'provider merge must retain StaffMonitor operational fields beside the FR24 ETA',
+  );
+  const mergedOutboundEstimate = authorityPayload.allDepartures.find(
+    item => item.flight.identification.number.default === 'FR7766',
+  );
+  assert(
+    mergedOutboundEstimate.flight.time.estimated.departure === airportEstimatedDeparture,
+    'provider merge must not preserve a destination ETA as an authoritative departure time',
+  );
+  assert(
+    mergedOutboundEstimate.flight._etaSource !== 'fr24_api',
+    'outbound provider rows must not retain authoritative arrival-ETA provenance',
   );
 
   const payload = await providerLayer.fetchFlightScheduleFromProviders({
@@ -1802,6 +2024,7 @@ async function runProviderLayerTests() {
                     {
                       flight: 'U24924',
                       timestamp: '2026-05-14T13:15:00Z',
+                      eta: '2026-05-14T15:05:00Z',
                       dest_iata: 'ORY',
                       operating_as: 'easyJet',
                       reg: 'OE-TEST',
@@ -1847,7 +2070,11 @@ async function runProviderLayerTests() {
                             identification: { number: { default: 'EC4924' } },
                             airline: { name: 'Compagnia EC', code: { iata: 'EC', icao: 'EJU' } },
                             airport: { destination: { code: { iata: 'ORY' }, name: 'Paris Orly' } },
-                            time: { scheduled: { departure: easyJetVariantDepartureTs }, estimated: {}, real: {} },
+                            time: {
+                              scheduled: { departure: easyJetVariantDepartureTs },
+                              estimated: { departure: easyJetVariantDepartureTs + 5 * 60 },
+                              real: {},
+                            },
                             status: { text: 'Scheduled', generic: { status: { color: 'gray' } } },
                           },
                         }],
@@ -1894,6 +2121,18 @@ async function runProviderLayerTests() {
   assert(
     fr24MergedEasyJetVariants.allDepartures[0].flight.airline.name === 'easyJet',
     'FR24 merged easyJet variants should keep a canonical easyJet airline label',
+  );
+  const officialFr24Departure = fr24MergedEasyJetVariants.allDepartures.find(
+    item => item.flight.aircraft?.registration === 'OE-TEST',
+  );
+  assert(officialFr24Departure, 'FR24 provider should retain the official live outbound aircraft');
+  assert(
+    officialFr24Departure.flight.time.estimated.departure === easyJetVariantDepartureTs + 5 * 60,
+    'an outbound live-position ETA must not overwrite the airport schedule estimated departure',
+  );
+  assert(
+    officialFr24Departure.flight._etaSource !== 'fr24_api',
+    'an outbound live-position ETA must not be tagged as an authoritative departure estimate',
   );
   const officialFr24Arrival = fr24MergedEasyJetVariants.allArrivals.find(
     item => item.flight.identification.number.default === 'FR9876',
