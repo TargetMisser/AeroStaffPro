@@ -55,8 +55,7 @@
           ]
         }
       ],
-      "expo-font",
-      "./plugins/withWearDataSender"
+      "expo-font"
     ],
     "extra": {
       "eas": {

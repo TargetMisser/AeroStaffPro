@@ -39,6 +39,7 @@ function selectPhoneApkAsset(assets: unknown[], tag: string): GithubReleaseAsset
   return apkAssets.find(asset => asset.name?.toLowerCase() === expectedName)
     ?? apkAssets.find(asset => {
       const name = asset.name?.toLowerCase() ?? '';
+      // Historical dual-APK releases may list the retired companion before the phone APK.
       return !/(?:^|[-_.])(wear|watch)(?:[-_.]|$)/.test(name);
     });
 }

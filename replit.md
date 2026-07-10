@@ -3,11 +3,10 @@
 ## Overview
 
 AeroStaff Pro is an Expo / React Native application designed for airport
-operations work. It bundles shift planning, flight
-activity views, quick-reference manuals, contacts/passwords/notes, and
-companion phone + Wear OS support.
+operations work on Android phones. It bundles shift planning, flight
+activity views, quick-reference manuals, and contacts/passwords/notes.
 
-The repository is primarily targeted at Android (with a Wear OS module) but
+The repository is targeted at Android phones but
 also supports running the UI in a web browser via React Native Web for
 preview / development purposes.
 
@@ -18,7 +17,7 @@ preview / development purposes.
 - React 19
 - TypeScript ~5.9
 - React Native Web (for web preview)
-- Android native module + Wear OS module (in `android/`)
+- Android native project (in `android/`)
 
 ## Project Layout
 
@@ -30,8 +29,7 @@ preview / development purposes.
   - `context/` — Theme / Language / Airport providers.
   - `hooks/`, `i18n/`, `utils/`, `modules/`, `widgets/` — App support code.
   - `screens/` — Top-level screens (Home, Calendar, Flights, ...).
-- `plugins/withWearDataSender.js` — Custom Expo config plugin.
-- `android/` — Native Android project (incl. Wear OS module).
+- `android/` — Native Android project.
 - `assets/` — Icons, splash, widget preview.
 
 ## Replit Environment Setup

@@ -17,7 +17,6 @@ import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import com.aerostaffpro.app.runtime.RuntimeDiagnostics
 import com.aerostaffpro.app.runtime.RuntimeDiagnosticsPackage
-import com.aerostaffpro.app.wear.WearDataSenderPackage
 
 class MainApplication : Application(), ReactApplication {
   private val startupState by lazy { RuntimeDiagnostics.prepareStartup(this) }
@@ -27,7 +26,6 @@ class MainApplication : Application(), ReactApplication {
       object : DefaultReactNativeHost(this) {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
-            add(WearDataSenderPackage())
             add(RuntimeDiagnosticsPackage())
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())

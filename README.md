@@ -2,6 +2,8 @@
 
 AeroStaff Pro is a React Native app for airport shift work. It keeps the things that usually end up scattered across calendars, screenshots, notes, staff tools, and flight boards in one place.
 
+The active product targets Android phones only. The former Wear OS companion is retired; old companion APKs may remain in release history but are no longer built or supported.
+
 ## What It Does
 
 - Tracks shifts with month and week views.
@@ -9,7 +11,7 @@ AeroStaff Pro is a React Native app for airport shift work. It keeps the things 
 - Shows same-day and next-day flight activity for the selected airport.
 - Supports flight data providers such as AirLabs and Flightradar24 through user-provided API keys.
 - Opens flights in Flightradar24 when the installed app can handle the route.
-- Provides Android widgets and a Wear OS companion for quick shift and flight information.
+- Provides Android widgets for quick shift and flight information.
 - Stores operational notes, contacts, manuals, passwords, and useful links.
 - Includes notification controls for flight and shift reminders.
 
@@ -34,7 +36,6 @@ Claude and Codex are used as development tools for planning, implementation, deb
 - React 19
 - TypeScript
 - Android native code
-- Wear OS module
 - Android widget support
 
 ## Requirements
@@ -92,8 +93,6 @@ To install the Android app:
 1. Open the Releases page.
 2. Download `AeroStaffPro-vX.X.X.apk`.
 3. Install it on the Android device. You may need to allow installs from unknown sources.
-4. For Wear OS, also download `AeroStaffPro-Wear-vX.X.X.apk` and install that asset on the paired watch only.
-5. Keep phone and watch paired so pinned-flight data can synchronize through the Wearable Data Layer.
 
 ## Local Android Release Build
 
@@ -113,11 +112,10 @@ cd android
 .\gradlew.bat assembleRelease
 ```
 
-The phone and Wear APKs are generated at:
+The Android APK is generated at:
 
 ```text
 android/app/build/outputs/apk/release/app-release.apk
-android/wear/build/outputs/apk/release/wear-release.apk
 ```
 
 The GitHub Actions release workflow expects these repository secrets:

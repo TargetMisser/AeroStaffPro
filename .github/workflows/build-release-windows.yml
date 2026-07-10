@@ -144,7 +144,7 @@ jobs:
         shell: pwsh
         run: |
           cd android
-          & .\gradlew.bat ':app:assembleRelease' ':wear:assembleRelease' '-Pandroid.overridePathCheck=true'
+          & .\gradlew.bat ':app:assembleRelease' '-Pandroid.overridePathCheck=true'
         env:
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m"
 
@@ -152,9 +152,8 @@ jobs:
         shell: pwsh
         run: |
           $phoneApk = Get-ChildItem -Path 'android/app/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
-          $wearApk = Get-ChildItem -Path 'android/wear/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
-          if (-not $phoneApk -or -not $wearApk) {
-            throw 'Missing phone or Wear release APK'
+          if (-not $phoneApk) {
+            throw 'Missing phone release APK'
           }
 
           $aapt = Join-Path $env:ANDROID_HOME 'build-tools\37.0.0\aapt.exe'
@@ -182,47 +181,37 @@ jobs:
           }
 
           $phoneMeta = Get-ApkMeta $phoneApk
-          $wearMeta = Get-ApkMeta $wearApk
           $expectedPackage = node -p "require('./app.json').expo.android.package"
           $expectedTag = "v$($phoneMeta.VersionName)"
 
           Write-Host "Phone APK: $($phoneMeta.PackageName) v$($phoneMeta.VersionName) ($($phoneMeta.VersionCode))"
-          Write-Host "Wear APK: $($wearMeta.PackageName) v$($wearMeta.VersionName) ($($wearMeta.VersionCode))"
           Write-Host "Release tag=${{ steps.meta.outputs.tag }}"
 
-          if ($phoneMeta.PackageName -ne $expectedPackage -or $wearMeta.PackageName -ne $expectedPackage) {
-            throw "Phone and Wear package names must both match $expectedPackage for Data Layer"
+          if ($phoneMeta.PackageName -ne $expectedPackage) {
+            throw "Phone package name must match $expectedPackage"
           }
-          if ('${{ steps.meta.outputs.version }}' -ne $phoneMeta.VersionName -or $phoneMeta.VersionName -ne $wearMeta.VersionName) {
-            throw 'app.json, phone, and Wear versionName values do not match'
-          }
-          if ($phoneMeta.VersionCode -ne $wearMeta.VersionCode) {
-            throw 'Phone and Wear versionCode values do not match'
+          if ('${{ steps.meta.outputs.version }}' -ne $phoneMeta.VersionName) {
+            throw 'app.json and phone versionName values do not match'
           }
           if ('${{ steps.meta.outputs.tag }}' -ne $expectedTag) {
             throw "Release tag (${{ steps.meta.outputs.tag }}) does not match APK versionName ($($phoneMeta.VersionName))"
           }
 
           $phoneCert = Get-CertSha256 $phoneApk
-          $wearCert = Get-CertSha256 $wearApk
-          if ($phoneCert -ne $wearCert) {
-            throw 'Phone and Wear signing certificate SHA-256 digest values do not match'
+          if ([string]::IsNullOrWhiteSpace($phoneCert)) {
+            throw 'Could not read phone signing certificate SHA-256 digest'
           }
 
       - name: Rename APK
         shell: pwsh
         run: |
           $phoneApk = Get-ChildItem -Path 'android/app/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
-          $wearApk = Get-ChildItem -Path 'android/wear/build/outputs/apk/release' -Filter '*.apk' -Recurse | Select-Object -First 1
-          if (-not $phoneApk -or -not $wearApk) {
-            throw 'Missing phone or Wear release APK'
+          if (-not $phoneApk) {
+            throw 'Missing phone release APK'
           }
           $phoneDest = 'AeroStaffPro-${{ steps.meta.outputs.tag }}.apk'
-          $wearDest = 'AeroStaffPro-Wear-${{ steps.meta.outputs.tag }}.apk'
           Copy-Item -LiteralPath $phoneApk.FullName -Destination $phoneDest -Force
-          Copy-Item -LiteralPath $wearApk.FullName -Destination $wearDest -Force
           "apk=$phoneDest" >> $env:GITHUB_ENV
-          "wear_apk=$wearDest" >> $env:GITHUB_ENV
 
       - name: Create GitHub Release
         if: ${{ github.event.inputs.publish_release != 'false' }}
@@ -234,6 +223,5 @@ jobs:
           generate_release_notes: true
           files: |
             ${{ env.apk }}
-            ${{ env.wear_apk }}
           draft: false
           prerelease: false

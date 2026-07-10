@@ -82,10 +82,6 @@ import {
   schedulePinnedNotifications,
   scheduleShiftNotifications,
 } from '../utils/flightNotificationScheduler';
-import {
-  clearPinnedFlightOnWatch,
-  sendPinnedFlightToWatch,
-} from '../modules/WearDataSender';
 import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
 import {
   restoreStorageValueIfUnchanged,
@@ -853,9 +849,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             const effectsApplied = await runEffectsForCurrentRequest(isCurrentRequest, [
               () => cancelPinnedNotifications('pinned flight expired or missing', false, isCurrentRequest),
               () => dismissPinnedFlightNotification(isCurrentRequest),
-              async () => {
-                try { await clearPinnedFlightOnWatch(); } catch {}
-              },
             ]);
             if (!effectsApplied) {
               await restoreStorageValueIfUnchanged(AsyncStorage, PINNED_FLIGHT_KEY, null, pinnedRaw);
@@ -874,9 +867,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             );
             if (!pinRefreshed) return;
 
-            const pinEffects: Array<() => Promise<unknown>> = [async () => {
-              try { await sendPinnedFlightToWatch(refreshedPinned); } catch {}
-            }];
+            const pinEffects: Array<() => Promise<unknown>> = [];
             if (notificationsEnabledNow) {
               pinEffects.push(
                 async () => {
@@ -1348,7 +1339,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       } else {
         await dismissPinnedFlightNotification();
       }
-      try { await sendPinnedFlightToWatch(pinnedItem); } catch {}
     } catch {}
   }, [activeTab, locale, notifsEnabled]);
 
@@ -1358,7 +1348,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       try { await cancelPinnedNotifications(); } catch (e) { if (__DEV__) console.warn('[cancelPinNotif]', e); }
       await dismissPinnedFlightNotification();
       setPinnedFlight(null);
-      try { await clearPinnedFlightOnWatch(); } catch {}
     } catch (e) { if (__DEV__) console.error('[unpin]', e); }
   }, []);
 

@@ -273,9 +273,8 @@ assert(
 );
 assert(
   flightScreenSource.includes('schedulePinnedNotifications(')
-    && flightScreenSource.includes('isCurrentRequest,')
-    && flightScreenSource.includes('sendPinnedFlightToWatch(refreshedPinned)'),
-  'FlightScreen must reschedule and sync the refreshed pin with the originating request token',
+    && flightScreenSource.includes('isCurrentRequest,'),
+  'FlightScreen must reschedule the refreshed pin with the originating request token',
 );
 assert(
   flightScreenSource.includes('runEffectsForCurrentRequest(isCurrentRequest')
@@ -404,18 +403,6 @@ assert(
   'gate-window helper must remain anchored to the scheduled departure',
 );
 
-for (const relativePath of [
-  'src/modules/WearDataSender.ts',
-  'android/wear/src/main/java/com/aerostaffpro/wear/data/FlightData.kt',
-  'android/wear/src/main/java/com/aerostaffpro/wear/ui/FlightTimeline.kt',
-  'android/wear/src/main/java/com/aerostaffpro/wear/notification/WatchNotificationService.kt',
-  'android/wear/src/main/java/com/aerostaffpro/wear/complication/FlightComplicationService.kt',
-  'android/wear/src/main/java/com/aerostaffpro/wear/tile/FlightTileService.kt',
-]) {
-  const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
-  assert(!source.includes('inboundArrival'), `${relativePath} must keep gate timing fixed to the scheduled departure`);
-}
-
 const autoNotificationsSource = fs.readFileSync(path.join(root, 'src/utils/autoNotifications.ts'), 'utf8');
 const pinnedNotificationsSource = fs.readFileSync(path.join(root, 'src/utils/flightNotificationScheduler.ts'), 'utf8');
 assert(!autoNotificationsSource.includes("getScheduledFlightTs(item, 'departure') ?? etdTs"), 'automatic check-in/gate notifications must not fall back to delayed departure time');
@@ -434,19 +421,8 @@ assert(
 );
 assert(
   homeScreenSource.includes("cancelPinnedNotifications('home confirmed pinned flight expiry'")
-    && homeScreenSource.includes('dismissPinnedFlightNotification()')
-    && homeScreenSource.includes('clearPinnedFlightOnWatch()'),
-  'a pin that Home confirms as expired must clean scheduled, ongoing, and Watch surfaces',
-);
-const wearTileSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/tile/FlightTileService.kt'), 'utf8');
-assert(
-  wearTileSource.includes('flight.realDeparture ?: flight.estimatedTime ?: flight.scheduledTime'),
-  'the Wear tile must show a delayed departure time without moving operational milestones',
-);
-assert(
-  wearTileSource.includes('"Gate Close" to (dep - ops.gateClose * 60)')
-    && wearTileSource.includes('"DEP" to displayDeparture'),
-  'the Wear tile must keep Gate on STD and use the live departure only for DEP',
+    && homeScreenSource.includes('dismissPinnedFlightNotification()'),
+  'a pin that Home confirms as expired must clean scheduled and ongoing notification surfaces',
 );
 
 const shiftTimelineSource = fs.readFileSync(path.join(root, 'src/components/ShiftTimeline.tsx'), 'utf8');
@@ -461,28 +437,6 @@ assert(
 assert(
   shiftTimelineSource.includes('const depLeft = xPercent(flight.departureTs);'),
   'ShiftTimeline departure marker must use the live departure',
-);
-
-const wearTimelineSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/ui/FlightTimeline.kt'), 'utf8');
-assert(
-  /val displayDep = flight\.realDeparture \?: flight\.estimatedTime \?: dep/.test(wearTimelineSource),
-  'Wear FlightTimeline must derive a live departure time',
-);
-assert(
-  /RawEvent\("CI Open", dep - ops\.checkInOpen \* 60,[\s\S]*RawEvent\("Gate Close", dep - ops\.gateClose \* 60,[\s\S]*RawEvent\("DEP", displayDep,/.test(wearTimelineSource),
-  'Wear FlightTimeline must keep CI and Gate on STD while DEP stays live',
-);
-assert(
-  /dep - ops\.gateClose \* 60,\s*displayDep\s*\)/.test(wearTimelineSource),
-  'Wear FlightTimeline countdown must use the live DEP time',
-);
-
-const wearComplicationSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/complication/FlightComplicationService.kt'), 'utf8');
-const watchNotificationSource = fs.readFileSync(path.join(root, 'android/wear/src/main/java/com/aerostaffpro/wear/notification/WatchNotificationService.kt'), 'utf8');
-assert(
-  wearComplicationSource.includes('Ev("DEP", displayDeparture)')
-    && watchNotificationSource.includes('Milestone("DEP", displayDeparture)'),
-  'Wear complication and ongoing notification must count down to the live departure',
 );
 
 // ─── Shift Calendar Night-Shift Replacement Tests ────────────────────────────
@@ -537,7 +491,7 @@ assert(
     'global pin effects must stop between awaits when an airport request token becomes stale');
 
   const updateWrites = new Map();
-  const updateCheckerWithWearFirst = loadTsModule('src/utils/updateChecker.ts', {
+  const updateCheckerWithLegacyCompanionFirst = loadTsModule('src/utils/updateChecker.ts', {
     'expo-application': { nativeApplicationVersion: '1.0.0' },
     '@react-native-async-storage/async-storage': {
       getItem: async key => updateWrites.get(key) ?? null,
@@ -562,11 +516,11 @@ assert(
       }),
     },
   });
-  const wearFirstUpdate = await updateCheckerWithWearFirst.checkForUpdate(true);
+  const legacyCompanionFirstUpdate = await updateCheckerWithLegacyCompanionFirst.checkForUpdate(true);
   assert(
-    wearFirstUpdate?.assetName === 'AeroStaffPro-v9.9.9.apk'
-      && wearFirstUpdate?.downloadUrl === 'https://example.test/phone.apk',
-    'update checker must select the phone APK even when a Wear APK is listed first',
+    legacyCompanionFirstUpdate?.assetName === 'AeroStaffPro-v9.9.9.apk'
+      && legacyCompanionFirstUpdate?.downloadUrl === 'https://example.test/phone.apk',
+    'update checker must select the phone APK when a legacy companion APK is listed first',
   );
 
   const storedEvents = [

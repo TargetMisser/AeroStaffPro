@@ -59,7 +59,7 @@ assert(emulatorQaSource.includes('Aggiornamento disponibile'), 'emulator QA shou
 
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
-assert(releaseQuickSource.includes("'android/wear/build.gradle'"), 'release:quick should commit Wear version updates');
+assert(releaseQuickSource.includes("'android/app/build.gradle'"), 'release:quick should commit phone version updates');
 assert(releaseQuickSource.includes("'--ref'"), 'release:quick should dispatch the GitHub workflow from the current branch');
 assert(releaseQuickSource.includes('--local-runner'), 'release:quick should expose the local runner option');
 assert(releaseQuickSource.includes('build-release-windows.yml'), 'release:quick should support the Windows local runner workflow');
@@ -70,9 +70,11 @@ for (const [name, workflow] of [
   ['Linux', releaseWorkflow],
   ['Windows', windowsReleaseWorkflow],
 ]) {
-  assert(workflow.includes(':wear:assembleRelease'), `${name} workflow should build the Wear APK`);
-  assert(workflow.includes('AeroStaffPro-Wear-${{ steps.meta.outputs.tag }}.apk'), `${name} workflow should publish a distinct Wear APK`);
-  assert(workflow.includes('certificate SHA-256 digest'), `${name} workflow should compare phone and Wear signing certificates`);
+  assert(workflow.includes(':app:assembleRelease'), `${name} workflow should build the phone APK`);
+  assert(workflow.includes('AeroStaffPro-${{ steps.meta.outputs.tag }}.apk'), `${name} workflow should publish the deterministic phone APK`);
+  assert(workflow.includes('certificate SHA-256 digest'), `${name} workflow should validate the phone signing certificate`);
+  const releaseBuilds = workflow.match(/:[a-z]+:assembleRelease/g) || [];
+  assert(releaseBuilds.length === 1, `${name} workflow should build exactly one Android release module`);
 }
 assert(
   windowsReleaseWorkflow.includes("versionCode='([^']+)'\\s+versionName='([^']+)'"),
@@ -92,10 +94,7 @@ assert(
   bumpVersionSource.includes('FALLBACK_APP_VERSION'),
   'version:bump should keep the updateChecker version fallback in sync',
 );
-assert(
-  bumpVersionSource.includes('android/wear/build.gradle'),
-  'version:bump should keep Wear version metadata in sync',
-);
+assert(bumpVersionSource.includes('android/app/build.gradle'), 'version:bump should keep phone version metadata in sync');
 const releaseCheckSource = fs.readFileSync(path.join(root, 'scripts', 'release-check.cjs'), 'utf8');
 assert(
   releaseCheckSource.includes('FALLBACK_APP_VERSION'),
@@ -121,11 +120,6 @@ assert(
   releaseTools.phoneReleaseAssetName('2.7.34') === 'AeroStaffPro-v2.7.34.apk',
   'release verification should select the phone APK explicitly',
 );
-assert(
-  releaseTools.wearReleaseAssetName('v2.7.34') === 'AeroStaffPro-Wear-v2.7.34.apk',
-  'Wear releases should use a distinct deterministic asset name',
-);
-
 const npmVersion = releaseTools.capture('npm', ['--version']).stdout.trim();
 assert(/^\d+\.\d+\.\d+/.test(npmVersion), 'release tooling should run npm commands through Windows .cmd shims');
 

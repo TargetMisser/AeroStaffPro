@@ -27,7 +27,6 @@ import { loadFlightScreenCache } from '../utils/flightScreenCache';
 import { checkEasyJetOverlap } from '../utils/easyjetOverlapMode';
 import { dismissPinnedFlightNotification, showOrUpdateEasyJetOverlapNotification } from '../utils/pinnedFlightOngoingNotification';
 import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
-import { clearPinnedFlightOnWatch } from '../modules/WearDataSender';
 import {
   buildHomeHealthChips,
   buildHomeOperationalSummary,
@@ -469,7 +468,6 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
       await cancelPinnedNotifications('home confirmed pinned flight expiry', false).catch(() => {});
       await dismissPinnedFlightNotification().catch(() => {});
-      await clearPinnedFlightOnWatch().catch(() => {});
       if (active) setPinnedFlight(null);
     };
 

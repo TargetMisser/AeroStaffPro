@@ -126,10 +126,6 @@ function phoneReleaseAssetName(tag) {
   return `AeroStaffPro-${normalizeTag(tag)}.apk`;
 }
 
-function wearReleaseAssetName(tag) {
-  return `AeroStaffPro-Wear-${normalizeTag(tag)}.apk`;
-}
-
 function getDownloadsDir() {
   return path.join(os.homedir(), 'Downloads');
 }
@@ -267,5 +263,4 @@ module.exports = {
   run,
   sleep,
   tagToVersion,
-  wearReleaseAssetName,
 };

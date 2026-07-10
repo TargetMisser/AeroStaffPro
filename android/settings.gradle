@@ -36,5 +36,4 @@ rootProject.name = 'AeroStaffPro'
 expoAutolinking.useExpoVersionCatalog()
 
 include ':app'
-include ':wear'
 includeBuild(expoAutolinking.reactNativeGradlePlugin)
