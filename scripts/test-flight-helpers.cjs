@@ -175,14 +175,111 @@ assert(
 
 const flightExternalLinks = loadTsModule('src/utils/flightExternalLinks.ts');
 assert(
-  flightExternalLinks.buildFlightradar24FlightUrl('U20345') === 'https://www.flightradar24.com/data/flights/u20345',
-  'FR24 link builder should preserve leading zeros in published flight numbers',
+  flightExternalLinks.buildFlightradar24FlightUrl('U20345') === null,
+  'FR24 direct link builder should reject a flight-number-only ambiguous URL',
 );
 assert(
-  flightExternalLinks.buildFlightradar24FlightUrl(' FR-0123 ') === 'https://www.flightradar24.com/data/flights/fr0123',
-  'FR24 link builder should normalize separators without stripping digits',
+  flightExternalLinks.buildFlightradar24FlightUrl(' FR-0123 ') === null,
+  'FR24 direct link builder should require an exact leg id even for a valid published number',
+);
+assert(
+  flightExternalLinks.buildFlightradar24FlightUrl('FR1234', '3FABC123') === 'https://www.flightradar24.com/data/flights/fr1234#3fabc123',
+  'FR24 link builder should target the exact flight leg when a real FR24 id is available',
+);
+assert(
+  flightExternalLinks.buildFlightradar24FlightUrl('FR1234', 'staffmonitor_departures_FR1234') === null,
+  'FR24 direct link builder should reject synthetic provider ids instead of opening an ambiguous occurrence',
 );
 assert(flightExternalLinks.buildFlightradar24FlightUrl('N/A') === null, 'FR24 link builder should reject placeholder flight numbers');
+assert(
+  flightExternalLinks.buildFlightradar24AirportBoardUrl('PSA', 'departure') === 'https://www.flightradar24.com/data/airports/psa/departures',
+  'FR24 fallback should open the selected airport departures board',
+);
+assert(
+  flightExternalLinks.buildFlightradar24AirportBoardUrl('PSA', 'arrival') === 'https://www.flightradar24.com/data/airports/psa/arrivals',
+  'FR24 fallback should open the selected airport arrivals board',
+);
+const cachedExternalLinkItem = {
+  flight: {
+    identification: { number: { default: 'FR1234' } },
+    time: { scheduled: { departure: 1000 }, estimated: {}, real: {} },
+    _fr24Id: '3abc1234',
+  },
+};
+const freshExternalLinkItem = {
+  flight: {
+    identification: { number: { default: 'FR1234' } },
+    time: { scheduled: { departure: 1000 }, estimated: {}, real: {} },
+  },
+};
+const preservedExternalLink = adapter.mergeFlightLists(
+  [cachedExternalLinkItem],
+  [freshExternalLinkItem],
+  'departure',
+  Date.now(),
+  flightExternalLinks.mergeFlightExternalLinkMetadata,
+)[0];
+assert(
+  preservedExternalLink.flight._fr24Id === '3abc1234',
+  'a provider refresh without FR24 metadata should preserve the cached exact leg id',
+);
+const refreshedExternalLink = flightExternalLinks.mergeFlightExternalLinkMetadata(
+  cachedExternalLinkItem,
+  { ...freshExternalLinkItem, flight: { ...freshExternalLinkItem.flight, _fr24Id: '3abc5678' } },
+);
+assert(
+  refreshedExternalLink.flight._fr24Id === '3abc5678',
+  'fresh FR24 metadata should replace an older cached leg id',
+);
+
+const unifiedFlightList = loadTsModule('src/utils/unifiedFlightList.ts', {
+  './flightScheduleAdapter': adapter,
+});
+const unifiedDay = new Date(2026, 6, 11, 12, 0, 0);
+const unifiedTs = (hour, minute) => Math.floor(new Date(2026, 6, 11, hour, minute, 0).getTime() / 1000);
+const makeUnifiedFlight = (flightNumber, direction, scheduledTs, estimatedTs = scheduledTs) => ({
+  flight: {
+    identification: { number: { default: flightNumber } },
+    airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
+    airport: direction === 'arrival'
+      ? { origin: { code: { iata: 'CIA' }, name: 'Rome Ciampino' } }
+      : { destination: { code: { iata: 'CIA' }, name: 'Rome Ciampino' } },
+    time: {
+      scheduled: { [direction]: scheduledTs },
+      estimated: estimatedTs === scheduledTs ? {} : { [direction]: estimatedTs },
+      real: {},
+    },
+  },
+});
+const unifiedArrival = makeUnifiedFlight('FR4321', 'arrival', unifiedTs(9, 5), unifiedTs(11, 30));
+const unifiedDeparture = makeUnifiedFlight('FR4321', 'departure', unifiedTs(9, 10));
+const tomorrowDeparture = makeUnifiedFlight(
+  'FR9999',
+  'departure',
+  Math.floor(new Date(2026, 6, 12, 8, 0, 0).getTime() / 1000),
+);
+const unifiedRows = unifiedFlightList.buildUnifiedFlightList(
+  [unifiedArrival, { ...unifiedArrival }],
+  [unifiedDeparture, tomorrowDeparture],
+  unifiedDay,
+);
+assert(unifiedRows.length === 2, 'unified flight list should dedupe within a direction and exclude another day');
+assert(
+  unifiedRows[0].direction === 'departure' && unifiedRows[1].direction === 'arrival',
+  'unified flight list should follow the live times displayed on mixed-direction cards',
+);
+assert(
+  unifiedRows[0].key !== unifiedRows[1].key,
+  'the same published number must remain two distinct rows across arrival and departure directions',
+);
+assert(
+  unifiedFlightList.filterUnifiedFlightsByAirlines(unifiedRows, ['ryanair']).length === 2,
+  'the airline filter should apply to both directions in the unified list',
+);
+assert(
+  unifiedFlightList.filterUnifiedFlightsByAirlines(unifiedRows, []).length === 0,
+  'an empty airline selection should hide both directions in the unified list',
+);
 
 const airlineBranding = loadTsModule('src/utils/airlineBranding.ts', {
   './airlineOps': airlineOps,
@@ -1073,6 +1170,14 @@ assert(
     diagnostics: [{ provider: 'aeroDataBox', label: 'AeroDataBox', status: 'success', tomorrowDepartures: 0 }],
   }) === 'provider_empty',
   'tomorrow empty reason should detect providers that returned no future flights',
+);
+assert(
+  flightDiagnostics.getTomorrowEmptyReason({
+    rawDayCount: 0,
+    activeTab: 'all',
+    diagnostics: [{ provider: 'aeroDataBox', label: 'AeroDataBox', status: 'success', tomorrowArrivals: 1, tomorrowDepartures: 0 }],
+  }) !== 'provider_empty',
+  'unified tomorrow diagnostics should treat either movement direction as future coverage',
 );
 assert(
   flightDiagnostics.getTomorrowEmptyReason({
@@ -2022,6 +2127,7 @@ async function runProviderLayerTests() {
               data: isDeparture
                 ? [
                     {
+                      fr24_id: '333ca4a2',
                       flight: 'U24924',
                       timestamp: '2026-05-14T13:15:00Z',
                       eta: '2026-05-14T15:05:00Z',
@@ -2045,6 +2151,7 @@ async function runProviderLayerTests() {
                     },
                   ]
                 : [{
+                    fr24_id: '333ca4b0',
                     flight: 'FR9876',
                     timestamp: '2026-05-14T13:35:00Z',
                     eta: '2026-05-14T14:05:00Z',
@@ -2067,7 +2174,7 @@ async function runProviderLayerTests() {
                       departures: {
                         data: [{
                           flight: {
-                            identification: { number: { default: 'EC4924' } },
+                            identification: { id: '333ca4a2', number: { default: 'EC4924' } },
                             airline: { name: 'Compagnia EC', code: { iata: 'EC', icao: 'EJU' } },
                             airport: { destination: { code: { iata: 'ORY' }, name: 'Paris Orly' } },
                             time: {
@@ -2082,7 +2189,7 @@ async function runProviderLayerTests() {
                       arrivals: {
                         data: [{
                           flight: {
-                            identification: { number: { default: 'FR9876' } },
+                            identification: { id: '333ca4b0', number: { default: 'FR9876' } },
                             airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
                             airport: { origin: { code: { iata: 'FCO' }, name: 'Rome Fiumicino' } },
                             time: { scheduled: { arrival: 1778767500 }, estimated: {}, real: {} },
@@ -2108,6 +2215,36 @@ async function runProviderLayerTests() {
       },
     },
   });
+  const repeatedDeparture = (destination, scheduledTs, fr24Id) => ({
+    flight: {
+      identification: { number: { default: 'FR7777' } },
+      airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
+      airport: { destination: { code: { iata: destination }, name: destination } },
+      time: { scheduled: { departure: scheduledTs }, estimated: {}, real: {} },
+      ...(fr24Id ? { _fr24Id: fr24Id } : {}),
+    },
+  });
+  const repeatedFirstTs = Math.floor(new Date(2026, 4, 14, 8, 0, 0).getTime() / 1000);
+  const repeatedSecondTs = Math.floor(new Date(2026, 4, 14, 16, 0, 0).getTime() / 1000);
+  const repeatedIdentityOverlay = fr24Module.applyPublicFr24Ids(
+    [],
+    [
+      repeatedDeparture('ORY', repeatedFirstTs),
+      repeatedDeparture('BDS', repeatedSecondTs),
+    ],
+    {
+      allArrivals: [],
+      allDepartures: [
+        repeatedDeparture('BDS', repeatedSecondTs, '333ca4d2'),
+        repeatedDeparture('ORY', repeatedFirstTs, '333ca4d1'),
+      ],
+    },
+  );
+  assert(
+    repeatedIdentityOverlay.allDepartures[0].flight._fr24Id === '333ca4d1'
+      && repeatedIdentityOverlay.allDepartures[1].flight._fr24Id === '333ca4d2',
+    'FR24 identity enrichment should match repeated flight numbers by concrete route and service time',
+  );
   const fr24MergedEasyJetVariants = await fr24Module.fr24ApiProvider.fetch({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
@@ -2134,6 +2271,18 @@ async function runProviderLayerTests() {
     officialFr24Departure.flight._etaSource !== 'fr24_api',
     'an outbound live-position ETA must not be tagged as an authoritative departure estimate',
   );
+  assert(
+    officialFr24Departure.flight._fr24Id === '333ca4a2',
+    'the exact FR24 outbound leg id must survive the public/live schedule merge',
+  );
+  const staffLikeDeparture = {
+    ...officialFr24Departure,
+    flight: { ...officialFr24Departure.flight, _fr24Id: undefined, _source: 'staffMonitor' },
+  };
+  assert(
+    await fr24Module.resolveFlightradar24IdForFlight('PSA', staffLikeDeparture, 'departure') === '333ca4a2',
+    'a StaffMonitor departure should resolve to its exact public FR24 leg before opening the link',
+  );
   const officialFr24Arrival = fr24MergedEasyJetVariants.allArrivals.find(
     item => item.flight.identification.number.default === 'FR9876',
   );
@@ -2145,6 +2294,10 @@ async function runProviderLayerTests() {
   assert(
     officialFr24Arrival.flight._etaSource === 'fr24_api',
     'official FR24 ETA should be tagged as authoritative',
+  );
+  assert(
+    officialFr24Arrival.flight._fr24Id === '333ca4b0',
+    'the exact FR24 inbound leg id must remain attached to the matching arrival',
   );
 
   const aeroStorage = new Map();

@@ -183,6 +183,8 @@ const it = {
   homeCalendarAuth: 'Autorizza il calendario.',
   // Flight
   flightTitle: 'Voli in tempo reale', flightArrivals: 'Arrivi', flightDepartures: 'Partenze',
+  flightAllFlights: 'Arrivi e partenze', flightArrival: 'Arrivo', flightDeparture: 'Partenza',
+  flightOpenOnFr24: 'Apri {direction} {flight} su Flightradar24',
   flightToday: 'Oggi', flightTomorrow: 'Domani',
   flightLoadingTitle: 'Aggiorno le fonti voli',
   flightLoadingMsg: 'Controllo prima le API configurate, poi StaffMonitor e fallback pubblici se servono.',
@@ -477,6 +479,8 @@ const en: typeof it = {
   homeCalendarAuth: 'Authorize the calendar.',
   // Flight
   flightTitle: 'Real-time Flights', flightArrivals: 'Arrivals', flightDepartures: 'Departures',
+  flightAllFlights: 'Arrivals and departures', flightArrival: 'Arrival', flightDeparture: 'Departure',
+  flightOpenOnFr24: 'Open {direction} {flight} on Flightradar24',
   flightToday: 'Today', flightTomorrow: 'Tomorrow',
   flightLoadingTitle: 'Refreshing flight sources',
   flightLoadingMsg: 'Checking configured APIs first, then StaffMonitor and public fallbacks if needed.',

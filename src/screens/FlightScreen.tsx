@@ -23,7 +23,12 @@ import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils/airlineOps';
 import { statusToToken, delayToToken } from '../utils/statusColors';
-import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
+import {
+  enrichFlightScheduleWithFr24Ids,
+  fetchAirportScheduleRaw,
+  resolveFlightradar24IdForFlight,
+  type FlightScheduleProviderStatus,
+} from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines, reconcileSelectedAirlines } from '../utils/airportSettings';
 import { applyLiveArrivalEtas, applyLiveDepartureStatus, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
@@ -36,12 +41,10 @@ import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification }
 import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from '../utils/flightTimes';
 import { isFlightEasyJet } from '../utils/easyjetOverlapMode';
 import {
-  compareFlightsChronologically,
   filterFlightsByAirlines,
   type FlightDirection,
   getFlightAirportDisplay,
   getFlightAirportLabel,
-  getFlightMergeKey,
   isFlightServiceMatch,
   mergeFlightLists,
   pruneExpiredFlights,
@@ -60,7 +63,17 @@ import {
   shouldShowFlightRefreshIndicator,
 } from '../utils/flightLoadingState';
 import { formatFlightSourceLabel } from '../utils/flightSourceLabel';
-import { buildFlightradar24FlightUrl } from '../utils/flightExternalLinks';
+import {
+  buildFlightradar24AirportBoardUrl,
+  buildFlightradar24FlightUrl,
+  getFlightradar24FlightId,
+  mergeFlightExternalLinkMetadata,
+} from '../utils/flightExternalLinks';
+import {
+  buildUnifiedFlightList,
+  filterUnifiedFlightsByAirlines,
+  type UnifiedFlightListEntry,
+} from '../utils/unifiedFlightList';
 import {
   hexToRgba,
   mixHexColor,
@@ -105,8 +118,20 @@ type FetchAllOptions = {
   markRefreshing?: boolean;
 };
 
-async function openFlightradar24Flight(flightNumber: string): Promise<void> {
-  const url = buildFlightradar24FlightUrl(flightNumber);
+async function openFlightradar24Flight(
+  item: any,
+  direction: FlightDirection,
+  airportCode: string,
+): Promise<void> {
+  const flightNumber = item?.flight?.identification?.number?.default || '';
+  let fr24Id = getFlightradar24FlightId(item);
+  if (!fr24Id) {
+    try {
+      fr24Id = await resolveFlightradar24IdForFlight(airportCode, item, direction);
+    } catch {}
+  }
+  const url = buildFlightradar24FlightUrl(flightNumber, fr24Id)
+    ?? buildFlightradar24AirportBoardUrl(airportCode, direction);
   if (!url) return;
   await Linking.openURL(url);
 }
@@ -127,10 +152,11 @@ try { Notifications.setNotificationHandler({
 interface FlightRowProps {
   item: any;
   index: number;
-  activeTab: 'arrivals' | 'departures';
+  direction: FlightDirection;
+  airportCode: string;
   userShift: { start: number; end: number } | null;
   pinnedFlight: any | null;
-  onPin: (item: any) => void;
+  onPin: (item: any, direction: FlightDirection) => void;
   onUnpin: () => void;
   colors: ThemeColors;
   isOperations: boolean;
@@ -140,8 +166,18 @@ interface FlightRowProps {
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
+  const isArrival = direction === 'arrival';
+  const directionLabel = t(isArrival ? 'flightArrival' : 'flightDeparture');
+  const directionColor = isOperations ? (isArrival ? '#7DD3FC' : '#FBBF24') : '#FFFFFF';
+  const directionBadgeBackground = isOperations
+    ? hexToRgba(directionColor, 0.12)
+    : 'rgba(15,23,42,0.82)';
+  const directionBadgeBorder = isOperations ? directionColor : 'rgba(255,255,255,0.88)';
+  const fr24AccessibilityLabel = t('flightOpenOnFr24')
+    .replace('{direction}', directionLabel.toLowerCase())
+    .replace('{flight}', flightNumber);
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
   const icaoCode = item.flight?.airline?.code?.icao || '';
@@ -149,23 +185,23 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
   const statusColor = statusToToken(raw, colors);
-  const remoteAirport = activeTab === 'arrivals'
+  const remoteAirport = isArrival
     ? item.flight?.airport?.origin
     : item.flight?.airport?.destination;
   const airportDisplay = getFlightAirportDisplay(remoteAirport, 'N/A');
   const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
-  const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
+  const ts = isArrival ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
   const isEasyJet = isFlightEasyJet(item);
   // Header shows the live time (real > estimated > scheduled), so delays surface immediately
   // instead of the card always displaying the original timetable time.
-  const bestTs = activeTab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
+  const bestTs = isArrival ? getBestArrivalTs(item) : getBestDepartureTs(item);
   const time = bestTs ? new Date(bestTs * 1000).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
-    second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
+    second: (isArrival && isEasyJet) ? '2-digit' : undefined,
   }) : 'N/A';
   const duringShift = userShift && ts && (() => {
-    if (activeTab === 'arrivals') return ts >= userShift.start && ts <= userShift.end;
+    if (isArrival) return ts >= userShift.start && ts <= userShift.end;
     const opsData = getAirlineOps(airlineIdentity);
     const ciOpen = ts - opsData.checkInOpen * 60;
     const ciClose = ts - opsData.checkInClose * 60;
@@ -180,27 +216,26 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
   const airlineTint = hexToRgba(brandAccent, isOperations ? 0.20 : 0.14);
   const airlineTintStrong = hexToRgba(brandAccent, isOperations ? 0.42 : 0.22);
   const airlineBorder = hexToRgba(brandAccent, isOperations ? 0.62 : 0.36);
-  const ops = activeTab === 'departures' && ts ? getAirlineOps(airlineIdentity) : null;
+  const ops = !isArrival && ts ? getAirlineOps(airlineIdentity) : null;
   const fmt = (offsetMin: number) =>
     ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
   const fmtTs = (t: number) =>
     new Date(t * 1000).toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit',
-      second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
+      second: (isArrival && isEasyJet) ? '2-digit' : undefined,
     });
 
-  const gateWindow = activeTab === 'departures' && ts && ops
+  const gateWindow = !isArrival && ts && ops
     ? getDepartureGateWindow(ts, ops)
     : null;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [nowTs, setNowTs] = useState(() => Date.now() / 1000);
 
-  const flightDirection: FlightDirection = activeTab === 'arrivals' ? 'arrival' : 'departure';
   const pinnedDirection: FlightDirection = pinnedFlight?._pinTab === 'arrivals' ? 'arrival' : 'departure';
   const isPinned = pinnedFlight != null
-    && pinnedDirection === flightDirection
-    && isFlightServiceMatch(pinnedFlight, item, flightDirection);
+    && pinnedDirection === direction
+    && isFlightServiceMatch(pinnedFlight, item, direction);
 
   const normFn = normalizeFlightNumber(flightNumber);
   const normalizeForMatching = (s: string) => s.replace(/[\s\-_]/g, '').toUpperCase();
@@ -218,7 +253,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
   const gateLabel = smFlight?.gate ?? terminalGate(operational.departureTerminal, operational.departureGate);
   const beltLabel = smFlight?.belt ?? operational.belt ?? '—';
 
-  const arrivalProgress = activeTab === 'arrivals' && ts ? (() => {
+  const arrivalProgress = isArrival && ts ? (() => {
     const scheduledDep = item.flight?.time?.scheduled?.departure;
     const estimatedDep = item.flight?.time?.estimated?.departure;
     const realDep = item.flight?.time?.real?.departure;
@@ -241,13 +276,13 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
     };
   })() : null;
 
-  const checkinShouldPulse = activeTab === 'departures' && ts && ops ? (() => {
+  const checkinShouldPulse = !isArrival && ts && ops ? (() => {
     const ciOpenTs = ts - ops.checkInOpen * 60;
     const ciCloseTs = ts - ops.checkInClose * 60;
     return (nowTs >= ciOpenTs - 10 * 60 && nowTs < ciOpenTs)
       || (nowTs >= ciCloseTs - 10 * 60 && nowTs < ciCloseTs);
   })() : false;
-  const gateShouldPulse = activeTab === 'departures' && ts && ops ? (() => {
+  const gateShouldPulse = !isArrival && ts && ops ? (() => {
     const gateOpenTs = gateWindow?.openTs ?? (ts - ops.gateOpen * 60);
     const gateCloseTs = gateWindow?.closeTs ?? (ts - ops.gateClose * 60);
     return (nowTs >= gateOpenTs - 5 * 60 && nowTs < gateOpenTs)
@@ -313,7 +348,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
       <SwipeableFlightCard
         isPinned={isPinned}
         compact={isOperations}
-        onToggle={() => isPinned ? onUnpin() : onPin(item)}
+        onToggle={() => isPinned ? onUnpin() : onPin(item, direction)}
       >
         <Animated.View style={pinnedPulseStyle ?? undefined}>
         <TactilePressable
@@ -329,9 +364,9 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
           depth={isOperations ? 6 : 4}
           pressedScale={0.982}
           haptic={false}
-          onPress={() => { openFlightradar24Flight(flightNumber).catch(() => {}); }}
+          onPress={() => { openFlightradar24Flight(item, direction, airportCode).catch(() => {}); }}
           accessibilityRole="link"
-          accessibilityLabel={`Apri ${flightNumber} su Flightradar24`}
+          accessibilityLabel={fr24AccessibilityLabel}
         >
         {isPinned && <View style={s.pinBanner}><Text style={s.pinBannerText}>{t('flightPinned')}</Text></View>}
         {/* Header */}
@@ -347,7 +382,13 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
           <View style={s.headerLeft}>
             <LogoPill iataCode={iataCode} airlineName={airline} color={color} />
             <View style={s.headerText}>
-              <Text numberOfLines={1} style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
+              <View style={s.headerFlightRow}>
+                <Text numberOfLines={1} style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
+                <View style={[s.directionBadge, { borderColor: directionBadgeBorder, backgroundColor: directionBadgeBackground }]}>
+                  <MaterialIcons name={isArrival ? 'flight-land' : 'flight-takeoff'} size={10} color={directionColor} />
+                  <Text style={[s.directionBadgeText, { color: directionColor }]}>{directionLabel}</Text>
+                </View>
+              </View>
               <Text numberOfLines={1} style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>
             </View>
           </View>
@@ -365,7 +406,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
         </LinearGradient>
         {/* Body */}
         <View style={s.cardBody}>
-          {activeTab === 'departures' && ops ? (
+          {!isArrival && ops ? (
             <View style={s.opsRow}>
               <ValueChangeFlash
                 valueKey={`${fmt(ops.checkInOpen)}|${fmt(ops.checkInClose)}`}
@@ -392,7 +433,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
                 </View>
               </ValueChangeFlash>
             </View>
-          ) : activeTab === 'arrivals' && ts ? (() => {
+          ) : isArrival && ts ? (() => {
             const realDep = item.flight?.time?.real?.departure;
             const estDep = item.flight?.time?.estimated?.departure;
             const schedDep = item.flight?.time?.scheduled?.departure;
@@ -455,7 +496,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
             />
           )}
           {/* Status pill — own row, right-aligned */}
-          {activeTab === 'arrivals' && ts ? (() => {
+          {isArrival && ts ? (() => {
             const rArr = item.flight?.time?.real?.arrival;
             const eArr = item.flight?.time?.estimated?.arrival;
             const bArr = rArr || eArr || ts;
@@ -484,7 +525,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlight, o
             <MaterialIcons name="local-parking" size={11} color={isOperations ? brandAccent : colors.primary} />
             <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>Stand {standLabel}</Text>
           </ValueChangeFlash>
-          {activeTab === 'departures' ? (
+          {!isArrival ? (
             <>
               <ValueChangeFlash
                 valueKey={checkinLabel}
@@ -539,7 +580,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<'arrivals' | 'departures'>('departures');
   const [activeDay, setActiveDay] = useState<'today' | 'tomorrow'>('today');
   const [arrivals, setArrivals] = useState<any[]>([]);
   const [departures, setDepartures] = useState<any[]>([]);
@@ -727,10 +767,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         cachedDeps = (cache?.departures ?? []).map(stampLegacy);
       } catch {}
       let mergedArrs = pruneUnseenFlights(
-        pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival'),
+        pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival', Date.now(), mergeFlightExternalLinkMetadata), 'arrival'),
       );
       let mergedDeps = pruneUnseenFlights(
-        pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure'),
+        pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure', Date.now(), mergeFlightExternalLinkMetadata), 'departure'),
       );
 
       // Overlay ETA live dai dati ADS-B aperti (stessa fonte grezza di FR24):
@@ -816,6 +856,23 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         sourceLabel: sourceState.sourceLabel,
         fetchedAt: sourceState.fetchedAt,
         providerDiagnostics: sourceState.providerDiagnostics,
+      }).catch(() => {});
+
+      // Identity-only FR24 overlay: it runs after the board is visible, so a
+      // blocked public endpoint never slows the primary StaffMonitor/API load.
+      // The same resolver is retried on tap when this best-effort pass fails.
+      enrichFlightScheduleWithFr24Ids(requestAirportCode, mergedArrs, mergedDeps).then(enriched => {
+        if (!isCurrentRequest() || enriched.matched === 0) return;
+        setAllArrivalsFull(enriched.allArrivals);
+        setAllDeparturesFull(enriched.allDepartures);
+        saveFlightScreenCache({
+          airportCode: requestAirportCode,
+          arrivals: enriched.allArrivals.filter(isPersistable),
+          departures: enriched.allDepartures.filter(isPersistable),
+          sourceLabel: sourceState.sourceLabel,
+          fetchedAt: sourceState.fetchedAt,
+          providerDiagnostics: sourceState.providerDiagnostics,
+        }).catch(() => {});
       }).catch(() => {});
 
       setArrivals(fetchedArrivals);
@@ -1325,11 +1382,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     scheduleNotificationsForCurrentShift().catch(() => {});
   }, [notifsEnabled, scheduleNotificationsForCurrentShift, selectedAirlines]);
 
-  const pinFlight = useCallback(async (item: any) => {
+  const pinFlight = useCallback(async (item: any, direction: FlightDirection) => {
     try {
       const id = item.flight?.identification?.number?.default;
       if (!id) return;
-      const tab = activeTab;
+      const tab = direction === 'arrival' ? 'arrivals' : 'departures';
       const pinnedItem = { ...item, _pinTab: tab, _pinnedAt: Date.now() };
       await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(pinnedItem));
       setPinnedFlight(pinnedItem);
@@ -1340,7 +1397,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         await dismissPinnedFlightNotification();
       }
     } catch {}
-  }, [activeTab, locale, notifsEnabled]);
+  }, [locale, notifsEnabled]);
 
   const unpinFlight = useCallback(async () => {
     try {
@@ -1353,34 +1410,15 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
   const userShift = activeDay === 'today' ? shifts.today : shifts.tomorrow;
   const selectedDate = activeDay === 'today' ? new Date() : (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d; })();
-  const isSameDay = (d1: Date, d2: Date) =>
-    d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth() && d1.getDate() === d2.getDate();
 
   const allSelected = airportAirlines.length > 0 && airportAirlines.every(k => selectedAirlines.includes(k));
   const snapshotMatchesAirport = flightSnapshotAirportCode === airportCode;
   const visibleFlightDataSource = flightDataSource?.airportCode === airportCode ? flightDataSource : null;
 
-  const currentDayRawData = (() => {
-    const source = snapshotMatchesAirport
-      ? (activeTab === 'arrivals' ? allArrivalsFull : allDeparturesFull)
-      : [];
-    const timeField = activeTab === 'arrivals' ? 'arrival' : 'departure';
-    const seen = new Set<string>();
-    return source.filter(item => {
-      const ts = activeTab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
-      if (!ts || !isSameDay(new Date(ts * 1000), selectedDate)) return false;
-      const dedupeKey = getFlightMergeKey(item, timeField);
-      if (seen.has(dedupeKey)) return false;
-      seen.add(dedupeKey);
-      return true;
-    }).sort(compareFlightsChronologically(timeField));
-  })();
-
-  const currentData = (() => {
-    const timeField: FlightDirection = activeTab === 'arrivals' ? 'arrival' : 'departure';
-    return filterFlightsByAirlines(currentDayRawData, selectedAirlines)
-      .sort(compareFlightsChronologically(timeField));
-  })();
+  const currentDayRawData = snapshotMatchesAirport
+    ? buildUnifiedFlightList(allArrivalsFull, allDeparturesFull, selectedDate)
+    : [];
+  const currentData = filterUnifiedFlightsByAirlines(currentDayRawData, selectedAirlines);
   const hasFlightSnapshot = snapshotMatchesAirport
     && (allArrivalsFull.length > 0 || allDeparturesFull.length > 0);
   const showBlockingLoader = shouldShowBlockingFlightLoader({
@@ -1393,11 +1431,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     hasVisibleFlights: hasFlightSnapshot,
   });
 
-  const renderFlight = useCallback(({ item, index }: { item: any; index: number }) => (
+  const renderFlight = useCallback(({ item: entry, index }: { item: UnifiedFlightListEntry; index: number }) => (
     <FlightRow
-      item={item}
+      item={entry.item}
       index={index}
-      activeTab={activeTab}
+      direction={entry.direction}
+      airportCode={airportCode}
       userShift={userShift}
       pinnedFlight={pinnedFlight}
       onPin={pinFlight}
@@ -1405,11 +1444,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       colors={colors}
       isOperations={isOperations}
       s={s}
-      smPool={activeTab === 'departures' ? staffMonitorDeps : staffMonitorArrs}
+      smPool={entry.direction === 'departure' ? staffMonitorDeps : staffMonitorArrs}
       locale={locale}
       t={t}
     />
-  ), [activeTab, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
+  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');
@@ -1452,20 +1491,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         </TouchableOpacity>
       </View>
 
-      {/* Dual segmented controls */}
+      {/* Day selector: arrivals and departures share the same timeline. */}
       <View style={s.controlsRow}>
-        {/* Arrivi / Partenze */}
-        <View style={s.segment}>
-          {(['arrivals', 'departures'] as const).map(tab => (
-            <TouchableOpacity key={tab} style={[s.segBtn, activeTab === tab && s.segBtnActive]} onPress={() => setActiveTab(tab)}>
-              <Text style={[s.segBtnText, activeTab === tab && s.segBtnTextActive]}>{tab === 'arrivals' ? t('flightArrivals') : t('flightDepartures')}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {/* Oggi / Domani */}
         <View style={s.segment}>
           {(['today', 'tomorrow'] as const).map(d => (
-            <TouchableOpacity key={d} style={[s.segBtn, activeDay === d && s.segBtnActive]} onPress={() => setActiveDay(d)}>
+            <TouchableOpacity
+              key={d}
+              style={[s.segBtn, activeDay === d && s.segBtnActive]}
+              onPress={() => setActiveDay(d)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: activeDay === d }}
+            >
               <Text style={[s.segBtnText, activeDay === d && s.segBtnTextActive]}>{d === 'today' ? t('flightToday') : t('flightTomorrow')}</Text>
             </TouchableOpacity>
           ))}
@@ -1502,7 +1538,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       ) : (
         <FlatList
           data={currentData}
-          keyExtractor={(item, i) => item.flight?.identification?.id || String(i)}
+          keyExtractor={entry => entry.key}
           renderItem={renderFlight}
           contentContainerStyle={{
             paddingHorizontal: SPACING.lg,
@@ -1513,7 +1549,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           ListEmptyComponent={
             <EmptyFlightState
               activeDay={activeDay}
-              activeTab={activeTab}
+              activeTab="all"
               rawDayCount={currentDayRawData.length}
               sourceLabel={visibleFlightDataSource?.sourceLabel}
               diagnostics={visibleFlightDataSource?.providerDiagnostics}
@@ -1540,7 +1576,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       <FlightSourceDebugModal
         visible={sourceDebugVisible}
         activeDay={activeDay}
-        activeTab={activeTab}
+        activeTab="all"
         sourceLabel={visibleFlightDataSource?.sourceLabel}
         fetchedAt={visibleFlightDataSource?.fetchedAt}
         diagnostics={visibleFlightDataSource?.providerDiagnostics}
@@ -1636,10 +1672,10 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     refreshBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: RADIUS.pill, backgroundColor: isOperations ? 'rgba(15,23,42,0.82)' : c.cardSecondary, borderWidth: 1, borderColor: operationBorderSoft },
     refreshBadgeText: { fontSize: 11, fontWeight: '800', color: c.textSub },
     segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
-    segBtn: { flex: 1, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', borderRadius: isOperations ? 11 : 6 },
+    segBtn: { flex: 1, minHeight: 44, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', justifyContent: 'center', borderRadius: isOperations ? 11 : 6 },
     segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },
     segBtnText: { ...TYPE.caption, color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
-    segBtnTextActive: { color: isOperations ? c.primaryDark : c.primary, fontWeight: '800' },
+    segBtnTextActive: { color: c.primaryText, fontWeight: '800' },
     card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
     cardShift: { borderWidth: 1.5, borderColor: c.warning },
     shiftBanner: { backgroundColor: c.warning, paddingVertical: 5, paddingHorizontal: SPACING.md },
@@ -1653,7 +1689,10 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
     headerLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerText: { flex: 1, minWidth: 0 },
+    headerFlightRow: { flexDirection: 'row', alignItems: 'center', gap: 7, minWidth: 0 },
     headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
+    directionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0, paddingHorizontal: 7, paddingVertical: 3, borderRadius: RADIUS.pill, borderWidth: 1 },
+    directionBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: '900', letterSpacing: 0.45, textTransform: 'uppercase' },
     headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
     headerMetaFlash: { alignItems: 'flex-end', borderRadius: RADIUS.md, marginRight: -8, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, maxWidth: isOperations ? 150 : 142, flexShrink: 0 },
     headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 19 : 18, lineHeight: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },

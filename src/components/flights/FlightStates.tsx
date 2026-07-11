@@ -8,9 +8,9 @@ import {
   formatProviderDiagnostic,
   getTomorrowEmptyReason,
   getTomorrowEmptyReasonTranslationKey,
+  type FlightListTab,
 } from '../../utils/flightDiagnostics';
 
-type FlightListTab = 'arrivals' | 'departures';
 type FlightListDay = 'today' | 'tomorrow';
 
 export function EmptyFlightState({
@@ -47,7 +47,11 @@ export function EmptyFlightState({
   const tomorrowReason = activeDay === 'tomorrow'
     ? getTomorrowEmptyReason({ rawDayCount, activeTab, diagnostics })
     : null;
-  const tabLabel = activeTab === 'arrivals' ? t('flightArrivals') : t('flightDepartures');
+  const tabLabel = activeTab === 'all'
+    ? t('flightAllFlights')
+    : activeTab === 'arrivals'
+      ? t('flightArrivals')
+      : t('flightDepartures');
 
   return (
     <View style={{

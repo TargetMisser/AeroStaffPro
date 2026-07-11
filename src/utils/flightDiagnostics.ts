@@ -1,7 +1,7 @@
 import type { TranslationKey } from '../i18n/translations';
 import type { FlightScheduleProviderStatus } from './flightProviders';
 
-export type FlightListTab = 'arrivals' | 'departures';
+export type FlightListTab = 'all' | 'arrivals' | 'departures';
 
 export type TomorrowEmptyReason =
   | 'filtered'
@@ -29,9 +29,9 @@ function hasDayCounts(item: FlightScheduleProviderStatus): boolean {
 }
 
 function hasTomorrowCount(item: FlightScheduleProviderStatus, activeTab: FlightListTab): boolean {
-  return activeTab === 'arrivals'
-    ? (item.tomorrowArrivals ?? 0) > 0
-    : (item.tomorrowDepartures ?? 0) > 0;
+  if (activeTab === 'arrivals') return (item.tomorrowArrivals ?? 0) > 0;
+  if (activeTab === 'departures') return (item.tomorrowDepartures ?? 0) > 0;
+  return (item.tomorrowArrivals ?? 0) > 0 || (item.tomorrowDepartures ?? 0) > 0;
 }
 
 function isFutureRelevant(item: FlightScheduleProviderStatus): boolean {

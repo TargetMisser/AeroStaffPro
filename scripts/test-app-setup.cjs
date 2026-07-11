@@ -240,6 +240,19 @@ assert(
 
 const flightScreenSource = fs.readFileSync(path.join(root, 'src/screens/FlightScreen.tsx'), 'utf8');
 assert(
+  flightScreenSource.includes('buildUnifiedFlightList(allArrivalsFull, allDeparturesFull, selectedDate)')
+    && !flightScreenSource.includes('setActiveTab('),
+  'FlightScreen must render arrivals and departures in one timeline without a direction tab',
+);
+assert(
+  flightScreenSource.includes('openFlightradar24Flight(item, direction, airportCode)')
+    && flightScreenSource.includes('resolveFlightradar24IdForFlight(airportCode, item, direction)')
+    && flightScreenSource.includes('buildFlightradar24AirportBoardUrl(airportCode, direction)')
+    && flightScreenSource.includes('enrichFlightScheduleWithFr24Ids(requestAirportCode, mergedArrs, mergedDeps)')
+    && flightScreenSource.includes("direction === 'arrival' ? 'arrivals' : 'departures'"),
+  'unified rows must resolve their exact FR24 leg, use a direction-safe fallback, and retain the original pin direction',
+);
+assert(
   flightScreenSource.includes('filterFlightsByAirlines(mergedDeps, wAllowedAirlines)'),
   'the foreground widget writer must treat an empty airline selection as no flights',
 );
@@ -250,7 +263,7 @@ assert(
   'FlightScreen must clear cross-airport snapshots and reject late responses from the previous airport',
 );
 assert(
-  flightScreenSource.includes('isFlightServiceMatch(pinnedFlight, item, flightDirection)')
+  flightScreenSource.includes('isFlightServiceMatch(pinnedFlight, item, direction)')
     && flightScreenSource.includes("isFlightServiceMatch(pinnedDeparture, item, 'departure')")
     && widgetHandlerSource.includes("isFlightServiceMatch(pinnedDeparture, item, 'departure')"),
   'app and widget pin highlighting must use the full provider-tolerant service identity',

@@ -1,12 +1,21 @@
 import { buildFr24ScheduleUrl } from '../airportSettings';
 import type { AirportInfo } from '../airportSettings';
 import { getAirlineDisplayName } from '../airlineOps';
-import { getCanonicalFlightNumberIdentity } from '../flightScheduleAdapter';
+import {
+  getCanonicalFlightNumberIdentity,
+  isFlightServiceMatch,
+  type FlightDirection,
+} from '../flightScheduleAdapter';
 import type { FlightScheduleProvider } from './types';
 
 const FR24_API_BASE = 'https://fr24api.flightradar24.com/api/live/flight-positions/full';
+const FR24_IDENTITY_CACHE_TTL_MS = 5 * 60 * 1000;
+const FR24_IDENTITY_TIMEOUT_MS = 6_000;
 
 type Direction = 'arrivals' | 'departures';
+type PublicFr24Schedule = { allArrivals: any[]; allDepartures: any[] };
+const publicIdentityCache = new Map<string, { fetchedAt: number; schedule: PublicFr24Schedule }>();
+const publicIdentityRequests = new Map<string, Promise<PublicFr24Schedule>>();
 
 function toUnixSeconds(value: unknown): number | undefined {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -35,7 +44,7 @@ function publicScheduleCounts(result: { allArrivals: any[]; allDepartures: any[]
   return result.allArrivals.length + result.allDepartures.length;
 }
 
-async function fetchPublicFr24Schedule(airportCode: string, signal?: AbortSignal) {
+async function fetchPublicFr24Schedule(airportCode: string, signal?: AbortSignal): Promise<PublicFr24Schedule> {
   const res = await fetch(buildFr24ScheduleUrl(airportCode), {
     headers: {
       'User-Agent': 'Mozilla/5.0',
@@ -59,10 +68,39 @@ async function fetchPublicFr24Schedule(airportCode: string, signal?: AbortSignal
     throw new Error('FR24_PUBLIC_INVALID_JSON_RESPONSE');
   }
 
-  return {
+  const schedule = {
     allArrivals: (json.result?.response?.airport?.pluginData?.schedule?.arrivals?.data || []).map(normalizePublicScheduleItem),
     allDepartures: (json.result?.response?.airport?.pluginData?.schedule?.departures?.data || []).map(normalizePublicScheduleItem),
   };
+  publicIdentityCache.set(airportCode.toUpperCase(), { fetchedAt: Date.now(), schedule });
+  return schedule;
+}
+
+async function loadPublicFr24IdentitySchedule(airportCode: string): Promise<PublicFr24Schedule> {
+  const key = airportCode.toUpperCase();
+  const cached = publicIdentityCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt <= FR24_IDENTITY_CACHE_TTL_MS) {
+    return cached.schedule;
+  }
+
+  const inFlight = publicIdentityRequests.get(key);
+  if (inFlight) return inFlight;
+
+  const request = (async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), FR24_IDENTITY_TIMEOUT_MS);
+    try {
+      return await fetchPublicFr24Schedule(key, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  })();
+  publicIdentityRequests.set(key, request);
+  try {
+    return await request;
+  } finally {
+    if (publicIdentityRequests.get(key) === request) publicIdentityRequests.delete(key);
+  }
 }
 
 function buildOfficialLiveUrl(airportCode: string, direction: Direction): string {
@@ -119,24 +157,33 @@ function normalizeAirlineLabel(...values: unknown[]): string {
   return getAirlineDisplayName(identity, 'Sconosciuta');
 }
 
+function normalizeFr24Id(value: unknown): string | undefined {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return /^[a-f0-9]{6,16}$/.test(normalized) ? normalized : undefined;
+}
+
 function normalizePublicScheduleItem(item: any): any {
   const flight = item?.flight;
   const airline = flight?.airline;
-  if (!flight || !airline) return item;
+  if (!flight) return item;
+  const fr24Id = normalizeFr24Id(flight.identification?.id);
 
   return {
     ...item,
     flight: {
       ...flight,
-      airline: {
-        ...airline,
-        name: normalizeAirlineLabel(
-          airline.name,
-          airline.code?.iata,
-          airline.code?.icao,
-          flight.identification?.number?.default,
-        ),
-      },
+      ...(airline ? {
+        airline: {
+          ...airline,
+          name: normalizeAirlineLabel(
+            airline.name,
+            airline.code?.iata,
+            airline.code?.icao,
+            flight.identification?.number?.default,
+          ),
+        },
+      } : {}),
+      ...(fr24Id ? { _fr24Id: fr24Id } : {}),
     },
   };
 }
@@ -167,6 +214,7 @@ function officialLiveFlightToScheduleItem(
   if (!scheduledTs) return null;
 
   const airlineCode = airlineCodeFromFlightNumber(flightNumber);
+  const fr24Id = normalizeFr24Id(item.fr24_id);
   const localAirport = airportEndpoint(airport.name, airportCode, airport.icao);
   const remoteAirport = direction === 'arrivals'
     ? airportEndpoint(item.orig_iata ?? item.orig_icao ?? 'N/A', item.orig_iata, item.orig_icao)
@@ -202,6 +250,7 @@ function officialLiveFlightToScheduleItem(
         generic: { status: { color: direction === 'departures' ? 'green' : 'gray' } },
       },
       _source: 'fr24_api',
+      ...(fr24Id ? { _fr24Id: fr24Id } : {}),
       ...(authoritativeArrivalEtaTs ? { _etaSource: 'fr24_api' as const } : {}),
     },
   };
@@ -242,6 +291,82 @@ async function fetchOfficialFr24LiveSchedule(
 
 function flightNumberKey(item: any): string {
   return getCanonicalFlightNumberIdentity(item.flight?.identification?.number?.default);
+}
+
+function findMatchingFr24Item(item: any, candidates: any[], direction: FlightDirection): any | undefined {
+  const exact = candidates.find(candidate =>
+    normalizeFr24Id(candidate?.flight?._fr24Id)
+      && isFlightServiceMatch(item, candidate, direction),
+  );
+  if (exact) return exact;
+
+  const key = flightNumberKey(item);
+  if (!key) return undefined;
+  const sameNumber = candidates.filter(candidate =>
+    normalizeFr24Id(candidate?.flight?._fr24Id) && flightNumberKey(candidate) === key,
+  );
+  return sameNumber.length === 1 ? sameNumber[0] : undefined;
+}
+
+function attachFr24Id(item: any, fr24Id: string): any {
+  return {
+    ...item,
+    flight: {
+      ...(item?.flight ?? {}),
+      _fr24Id: fr24Id,
+    },
+  };
+}
+
+function enrichDirectionWithFr24Ids(
+  items: any[],
+  publicItems: any[],
+  direction: FlightDirection,
+): { items: any[]; matched: number } {
+  let matched = 0;
+  const enriched = items.map(item => {
+    const match = findMatchingFr24Item(item, publicItems, direction);
+    const fr24Id = normalizeFr24Id(match?.flight?._fr24Id);
+    if (!fr24Id || normalizeFr24Id(item?.flight?._fr24Id) === fr24Id) return item;
+    matched += 1;
+    return attachFr24Id(item, fr24Id);
+  });
+  return { items: enriched, matched };
+}
+
+export function applyPublicFr24Ids(
+  allArrivals: any[],
+  allDepartures: any[],
+  publicSchedule: PublicFr24Schedule,
+): { allArrivals: any[]; allDepartures: any[]; matched: number } {
+  const arrivals = enrichDirectionWithFr24Ids(allArrivals, publicSchedule.allArrivals, 'arrival');
+  const departures = enrichDirectionWithFr24Ids(allDepartures, publicSchedule.allDepartures, 'departure');
+  return {
+    allArrivals: arrivals.items,
+    allDepartures: departures.items,
+    matched: arrivals.matched + departures.matched,
+  };
+}
+
+export async function enrichFlightScheduleWithFr24Ids(
+  airportCode: string,
+  allArrivals: any[],
+  allDepartures: any[],
+): Promise<{ allArrivals: any[]; allDepartures: any[]; matched: number }> {
+  const publicSchedule = await loadPublicFr24IdentitySchedule(airportCode);
+  return applyPublicFr24Ids(allArrivals, allDepartures, publicSchedule);
+}
+
+export async function resolveFlightradar24IdForFlight(
+  airportCode: string,
+  item: any,
+  direction: FlightDirection,
+): Promise<string | null> {
+  const existing = normalizeFr24Id(item?.flight?._fr24Id);
+  if (existing) return existing;
+  const publicSchedule = await loadPublicFr24IdentitySchedule(airportCode);
+  const candidates = direction === 'arrival' ? publicSchedule.allArrivals : publicSchedule.allDepartures;
+  return normalizeFr24Id(findMatchingFr24Item(item, candidates, direction)?.flight?._fr24Id) ?? null;
 }
 
 function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 'arrival' | 'departure'): any {
@@ -288,6 +413,7 @@ function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 
       },
       status: liveFlight.status ?? scheduleFlight.status,
       _source: 'fr24_api_merged',
+      _fr24Id: scheduleFlight._fr24Id ?? liveFlight._fr24Id,
       _etaSource: estimatedTs ? 'fr24_api' : scheduleFlight._etaSource,
     },
   };
@@ -295,18 +421,19 @@ function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 
 
 function mergeScheduleWithLive(schedule: any[], live: any[], timeField: 'arrival' | 'departure'): any[] {
   const result = [...schedule];
-  const scheduleIndexByFlight = new Map<string, number>();
-
-  schedule.forEach((item, index) => {
-    const key = flightNumberKey(item);
-    if (key && !scheduleIndexByFlight.has(key)) {
-      scheduleIndexByFlight.set(key, index);
-    }
-  });
 
   for (const item of live) {
     const key = flightNumberKey(item);
-    const existingIndex = key ? scheduleIndexByFlight.get(key) : undefined;
+    const candidateIndexes = key
+      ? result.reduce<number[]>((indexes, candidate, index) => {
+          if (flightNumberKey(candidate) === key) indexes.push(index);
+          return indexes;
+        }, [])
+      : [];
+    const exactIndex = candidateIndexes.find(index =>
+      isFlightServiceMatch(result[index], item, timeField),
+    );
+    const existingIndex = exactIndex ?? (candidateIndexes.length === 1 ? candidateIndexes[0] : undefined);
     if (existingIndex === undefined) {
       result.push(item);
       continue;

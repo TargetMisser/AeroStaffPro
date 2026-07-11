@@ -17,6 +17,11 @@ import {
 import { getAeroDataBoxApiKey, getAeroDataBoxGateway, getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
 import { FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS } from './flightRefreshPolicy';
 import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, pruneExpiredFlights, type FlightDirection } from './flightScheduleAdapter';
+import { mergeFlightExternalLinkMetadata } from './flightExternalLinks';
+export {
+  enrichFlightScheduleWithFr24Ids,
+  resolveFlightradar24IdForFlight,
+} from './flightProviders/fr24Provider';
 
 const FETCH_TIMEOUT = FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS;
 const SCHEDULE_CACHE_KEY = 'aerostaff_schedule_provider_cache_v1';
@@ -112,11 +117,11 @@ function withActiveDayCache<T extends {
   if (!cached) return payload;
 
   const allArrivals = pruneExpiredFlights(
-    mergeFlightLists(cached.allArrivals, payload.allArrivals, 'arrival'),
+    mergeFlightLists(cached.allArrivals, payload.allArrivals, 'arrival', Date.now(), mergeFlightExternalLinkMetadata),
     'arrival',
   );
   const allDepartures = pruneExpiredFlights(
-    mergeFlightLists(cached.allDepartures, payload.allDepartures, 'departure'),
+    mergeFlightLists(cached.allDepartures, payload.allDepartures, 'departure', Date.now(), mergeFlightExternalLinkMetadata),
     'departure',
   );
   const freshCount = payload.allArrivals.length + payload.allDepartures.length;
