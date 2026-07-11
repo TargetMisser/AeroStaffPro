@@ -253,6 +253,23 @@ assert(
   'unified rows must resolve their exact FR24 leg, use a direction-safe fallback, and retain the original pin direction',
 );
 assert(
+  flightScreenSource.includes("t('flightScheduledDeparture')")
+    && flightScreenSource.includes("t('flightEstimatedDeparture')")
+    && flightScreenSource.includes("t('flightCheckin')")
+    && flightScreenSource.includes("t('flightGate')")
+    && flightScreenSource.includes('? item.flight?.time?.estimated?.departure')
+    && !flightScreenSource.includes('item.flight?.time?.estimated?.departure ?? scheduledDepartureTs')
+    && flightScreenSource.includes("Number.isFinite(value) ? fmtTs(value) : '--:--'"),
+  'departure cards must always render scheduled, estimated, check-in, and gate fields with honest missing-value fallbacks',
+);
+assert(
+  flightScreenSource.includes('departureCard: { minHeight: isOperations ? 300 : 330 }')
+    && flightScreenSource.includes('!isArrival && s.departureCard')
+    && flightScreenSource.includes('minHeight: isOperations ? 62 : 68')
+    && flightScreenSource.includes('departureTimesRow: { marginBottom: 10 }'),
+  'flight cards must remain large enough for both departure detail rows without clipping',
+);
+assert(
   flightScreenSource.includes('filterFlightsByAirlines(mergedDeps, wAllowedAirlines)'),
   'the foreground widget writer must treat an empty airline selection as no flights',
 );

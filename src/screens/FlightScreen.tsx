@@ -216,15 +216,21 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
   const airlineTint = hexToRgba(brandAccent, isOperations ? 0.20 : 0.14);
   const airlineTintStrong = hexToRgba(brandAccent, isOperations ? 0.42 : 0.22);
   const airlineBorder = hexToRgba(brandAccent, isOperations ? 0.62 : 0.36);
-  const ops = !isArrival && ts ? getAirlineOps(airlineIdentity) : null;
+  const ops = !isArrival ? getAirlineOps(airlineIdentity) : null;
+  const scheduledDepartureTs = !isArrival ? item.flight?.time?.scheduled?.departure : undefined;
+  const estimatedDepartureTs = !isArrival
+    ? item.flight?.time?.estimated?.departure
+    : undefined;
   const fmt = (offsetMin: number) =>
-    ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '';
+    ts ? new Date((ts - offsetMin * 60) * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '--:--';
   const fmtTs = (t: number) =>
     new Date(t * 1000).toLocaleTimeString(locale, {
       hour: '2-digit',
       minute: '2-digit',
       second: (isArrival && isEasyJet) ? '2-digit' : undefined,
     });
+  const fmtOptionalTs = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? fmtTs(value) : '--:--';
 
   const gateWindow = !isArrival && ts && ops
     ? getDepartureGateWindow(ts, ops)
@@ -354,6 +360,7 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
         <TactilePressable
           animatedStyle={[
             s.card,
+            !isArrival && s.departureCard,
             { marginBottom: 0 },
             isOperations && {
               borderLeftColor: brandAccent,
@@ -407,32 +414,58 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
         {/* Body */}
         <View style={s.cardBody}>
           {!isArrival && ops ? (
-            <View style={s.opsRow}>
-              <ValueChangeFlash
-                valueKey={`${fmt(ops.checkInOpen)}|${fmt(ops.checkInClose)}`}
-                enabled={isOperations}
-                style={[s.opsBadge, checkinPulseStyle]}
-              >
-                <MaterialIcons name="desktop-windows" size={16} color={colors.primary} />
-                <View>
-                  <Text style={s.opsLabel}>{t('flightCheckin')}</Text>
-                  <Text style={s.opsTime}>{fmt(ops.checkInOpen)} – {fmt(ops.checkInClose)}</Text>
-                </View>
-              </ValueChangeFlash>
-              <ValueChangeFlash
-                valueKey={`${gateWindow ? fmtTs(gateWindow.openTs) : fmt(ops.gateOpen)}|${gateWindow ? fmtTs(gateWindow.closeTs) : fmt(ops.gateClose)}`}
-                enabled={isOperations}
-                style={[s.opsBadge, gatePulseStyle]}
-              >
-                <MaterialIcons name="meeting-room" size={16} color={colors.primary} />
-                <View>
-                  <Text style={s.opsLabel}>{t('flightGate')}</Text>
-                  <Text style={s.opsTime}>
-                    {gateWindow ? fmtTs(gateWindow.openTs) : fmt(ops.gateOpen)} – {gateWindow ? fmtTs(gateWindow.closeTs) : fmt(ops.gateClose)}
-                  </Text>
-                </View>
-              </ValueChangeFlash>
-            </View>
+            <>
+              <View style={[s.opsRow, s.departureTimesRow]}>
+                <ValueChangeFlash
+                  valueKey={`scheduled|${scheduledDepartureTs ?? 'missing'}`}
+                  enabled={isOperations}
+                  style={[s.opsBadge, s.departureTimeBadge]}
+                >
+                  <MaterialIcons name="schedule" size={18} color={colors.textSub} />
+                  <View style={s.opsTextWrap}>
+                    <Text style={s.opsLabel}>{t('flightScheduledDeparture')}</Text>
+                    <Text style={s.opsTime}>{fmtOptionalTs(scheduledDepartureTs)}</Text>
+                  </View>
+                </ValueChangeFlash>
+                <ValueChangeFlash
+                  valueKey={`estimated|${estimatedDepartureTs ?? 'missing'}`}
+                  enabled={isOperations}
+                  style={[s.opsBadge, s.departureTimeBadge]}
+                >
+                  <MaterialIcons name="update" size={18} color={colors.primary} />
+                  <View style={s.opsTextWrap}>
+                    <Text style={[s.opsLabel, { color: colors.primary }]}>{t('flightEstimatedDeparture')}</Text>
+                    <Text style={s.opsTime}>{fmtOptionalTs(estimatedDepartureTs)}</Text>
+                  </View>
+                </ValueChangeFlash>
+              </View>
+              <View style={s.opsRow}>
+                <ValueChangeFlash
+                  valueKey={`${fmt(ops.checkInOpen)}|${fmt(ops.checkInClose)}`}
+                  enabled={isOperations}
+                  style={[s.opsBadge, checkinPulseStyle]}
+                >
+                  <MaterialIcons name="desktop-windows" size={18} color={colors.primary} />
+                  <View style={s.opsTextWrap}>
+                    <Text style={s.opsLabel}>{t('flightCheckin')}</Text>
+                    <Text style={s.opsTime}>{fmt(ops.checkInOpen)} – {fmt(ops.checkInClose)}</Text>
+                  </View>
+                </ValueChangeFlash>
+                <ValueChangeFlash
+                  valueKey={`${gateWindow ? fmtTs(gateWindow.openTs) : fmt(ops.gateOpen)}|${gateWindow ? fmtTs(gateWindow.closeTs) : fmt(ops.gateClose)}`}
+                  enabled={isOperations}
+                  style={[s.opsBadge, gatePulseStyle]}
+                >
+                  <MaterialIcons name="meeting-room" size={18} color={colors.primary} />
+                  <View style={s.opsTextWrap}>
+                    <Text style={s.opsLabel}>{t('flightGate')}</Text>
+                    <Text style={s.opsTime}>
+                      {gateWindow ? fmtTs(gateWindow.openTs) : fmt(ops.gateOpen)} – {gateWindow ? fmtTs(gateWindow.closeTs) : fmt(ops.gateClose)}
+                    </Text>
+                  </View>
+                </ValueChangeFlash>
+              </View>
+            </>
           ) : isArrival && ts ? (() => {
             const realDep = item.flight?.time?.real?.departure;
             const estDep = item.flight?.time?.estimated?.departure;
@@ -1676,7 +1709,8 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },
     segBtnText: { ...TYPE.caption, color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
     segBtnTextActive: { color: c.primaryText, fontWeight: '800' },
-    card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
+    card: { backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 12, elevation: isOperations || c.isDark ? 0 : 4, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
+    departureCard: { minHeight: isOperations ? 300 : 330 },
     cardShift: { borderWidth: 1.5, borderColor: c.warning },
     shiftBanner: { backgroundColor: c.warning, paddingVertical: 5, paddingHorizontal: SPACING.md },
     shiftBannerText: { color: '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
@@ -1685,28 +1719,31 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
     statusPill: { paddingHorizontal: 10, paddingVertical: isOperations ? 3 : 4, borderRadius: isOperations ? 10 : 20, marginTop: isOperations ? 6 : 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
     statusText: { ...TYPE.micro, letterSpacing: isOperations ? 0.6 : 0 },
-    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 12 : 14, paddingHorizontal: 16, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
     airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
     headerLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerText: { flex: 1, minWidth: 0 },
     headerFlightRow: { flexDirection: 'row', alignItems: 'center', gap: 7, minWidth: 0 },
-    headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
+    headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 18 : 17, lineHeight: 21, letterSpacing: isOperations ? 0.6 : 0 },
     directionBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0, paddingHorizontal: 7, paddingVertical: 3, borderRadius: RADIUS.pill, borderWidth: 1 },
     directionBadgeText: { fontSize: 10, lineHeight: 12, fontWeight: '900', letterSpacing: 0.45, textTransform: 'uppercase' },
-    headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
+    headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 11, lineHeight: 15, letterSpacing: isOperations ? 0.5 : 0 },
     headerMetaFlash: { alignItems: 'flex-end', borderRadius: RADIUS.md, marginRight: -8, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, maxWidth: isOperations ? 150 : 142, flexShrink: 0 },
-    headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 19 : 18, lineHeight: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
+    headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 21 : 20, lineHeight: 23, textAlign: 'right', fontVariant: ['tabular-nums'] },
     headerDest: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
     headerAirportCode: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.86)', fontSize: isOperations ? 11 : 10, lineHeight: 13, fontWeight: '900', letterSpacing: isOperations ? 1.1 : 0.8, textAlign: 'right' },
     headerAirportName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.72)', fontSize: isOperations ? 9 : 8.5, lineHeight: isOperations ? 10.5 : 10, textAlign: 'right' },
-    cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, backgroundColor: operationPanel },
+    cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 12 : 14, paddingHorizontal: 16, backgroundColor: operationPanel },
     bodyInfo: { fontSize: 11, color: c.textSub },
     bodyTime: { fontWeight: '700', color: c.text },
-    opsRow: { flexDirection: 'row', gap: SPACING.sm },
-    opsBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 12 : 10, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
+    opsRow: { flexDirection: 'row', gap: 10 },
+    departureTimesRow: { marginBottom: 10 },
+    departureTimeBadge: { backgroundColor: isOperations ? 'rgba(45,212,191,0.08)' : c.cardSecondary },
+    opsBadge: { flex: 1, minHeight: isOperations ? 62 : 68, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 14 : 12, paddingHorizontal: 12, paddingVertical: isOperations ? 9 : 11, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
+    opsTextWrap: { flex: 1, minWidth: 0 },
     opsIcon: { fontSize: 16 },
-    opsLabel: { fontSize: 10, fontWeight: '600', color: c.textSub, letterSpacing: 0.5 },
-    opsTime: { fontSize: 13, fontWeight: '800', color: c.primaryDark },
+    opsLabel: { fontSize: 11, lineHeight: 14, fontWeight: '700', color: c.textSub, letterSpacing: 0.35 },
+    opsTime: { fontSize: 15, lineHeight: 19, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
     pinBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
     filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
@@ -1760,8 +1797,8 @@ function makeStyles(c: ThemeColors, isOperations = false) {
       borderWidth: 1,
     },
     filterBrandDot: { width: 10, height: 10, borderRadius: 5 },
-    smFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: isOperations ? 8 : 10, backgroundColor: operationPanel, borderTopWidth: isOperations ? 1 : 0, borderTopColor: operationBorderSoft },
-    smPill: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 10 : 8, paddingHorizontal: SPACING.sm, paddingVertical: isOperations ? 3 : 4, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
-    smPillText: { fontSize: 11, fontWeight: '700', color: c.primaryDark },
+    smFooter: { minHeight: isOperations ? 48 : 54, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, paddingTop: 4, paddingHorizontal: 16, paddingBottom: isOperations ? 10 : 14, backgroundColor: operationPanel, borderTopWidth: isOperations ? 1 : 0, borderTopColor: operationBorderSoft },
+    smPill: { minHeight: isOperations ? 30 : 34, flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 11 : 10, paddingHorizontal: 10, paddingVertical: isOperations ? 5 : 6, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
+    smPillText: { fontSize: 12, lineHeight: 15, fontWeight: '800', color: c.primaryDark },
   });
 }
