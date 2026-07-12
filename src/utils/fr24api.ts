@@ -16,8 +16,16 @@ import {
 } from './flightProviders';
 import { getAeroDataBoxApiKey, getAeroDataBoxGateway, getAirLabsApiKey, getFlightProviderPreference, getFr24ApiKey } from './flightProviderSettings';
 import { FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS } from './flightRefreshPolicy';
-import { filterFlightsByAirlines, getFlightBestTs, mergeFlightLists, pruneExpiredFlights, type FlightDirection } from './flightScheduleAdapter';
+import {
+  filterFlightsByAirlines,
+  getFlightBestTs,
+  mergeFlightLists,
+  pruneExpiredFlights,
+  pruneUnseenFlights,
+  type FlightDirection,
+} from './flightScheduleAdapter';
 import { mergeFlightExternalLinkMetadata } from './flightExternalLinks';
+import { TURNAROUND_MATCH_WINDOW_SECONDS } from './unifiedFlightList';
 export {
   enrichFlightScheduleWithFr24Ids,
   resolveFlightradar24IdForFlight,
@@ -108,22 +116,39 @@ async function loadCachedSchedule(airportCode: string): Promise<ScheduleCacheEnt
   return loadCachedScheduleWithin(airportCode, SCHEDULE_CACHE_TTL_MS);
 }
 
+function pruneActiveDayFlights(items: any[], direction: FlightDirection, nowMs = Date.now()): any[] {
+  return pruneUnseenFlights(
+    pruneExpiredFlights(items, direction, nowMs / 1000, TURNAROUND_MATCH_WINDOW_SECONDS),
+    nowMs,
+    TURNAROUND_MATCH_WINDOW_SECONDS * 1000,
+  );
+}
+
 function withActiveDayCache<T extends {
   allArrivals: any[];
   allDepartures: any[];
   sourceLabel?: string;
   diagnostics?: FlightScheduleProviderStatus[];
 }>(payload: T, cached: ScheduleCacheEntry | null): T {
-  if (!cached) return payload;
-
-  const allArrivals = pruneExpiredFlights(
-    mergeFlightLists(cached.allArrivals, payload.allArrivals, 'arrival', Date.now(), mergeFlightExternalLinkMetadata),
+  const mergeNowMs = Date.now();
+  const allArrivals = pruneActiveDayFlights(
+    cached
+      ? mergeFlightLists(cached.allArrivals, payload.allArrivals, 'arrival', mergeNowMs, mergeFlightExternalLinkMetadata)
+      : payload.allArrivals,
     'arrival',
+    mergeNowMs,
   );
-  const allDepartures = pruneExpiredFlights(
-    mergeFlightLists(cached.allDepartures, payload.allDepartures, 'departure', Date.now(), mergeFlightExternalLinkMetadata),
+  const allDepartures = pruneActiveDayFlights(
+    cached
+      ? mergeFlightLists(cached.allDepartures, payload.allDepartures, 'departure', mergeNowMs, mergeFlightExternalLinkMetadata)
+      : payload.allDepartures,
     'departure',
+    mergeNowMs,
   );
+  if (!cached) {
+    return { ...payload, allArrivals, allDepartures };
+  }
+
   const freshCount = payload.allArrivals.length + payload.allDepartures.length;
   const mergedCount = allArrivals.length + allDepartures.length;
   const contributed = mergedCount > freshCount;
@@ -260,9 +285,10 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
       ?? await loadCachedSchedule(airportCode);
     if (!cached) throw error;
 
+    const fallbackNowMs = Date.now();
     payload = dedupeSchedulePayload({
-      allArrivals: pruneExpiredFlights(cached.allArrivals, 'arrival'),
-      allDepartures: pruneExpiredFlights(cached.allDepartures, 'departure'),
+      allArrivals: pruneActiveDayFlights(cached.allArrivals, 'arrival', fallbackNowMs),
+      allDepartures: pruneActiveDayFlights(cached.allDepartures, 'departure', fallbackNowMs),
       source: cached.source ?? 'cache',
       sourceLabel: `${cached.sourceLabel ?? 'Cache voli'} (cache)`,
       fetchedAt: cached.fetchedAt,
@@ -284,13 +310,16 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
   }
 
   const { allArrivals, allDepartures } = payload;
+  const visibleNowSeconds = Date.now() / 1000;
+  const visibleArrivals = pruneExpiredFlights(allArrivals, 'arrival', visibleNowSeconds);
+  const visibleDepartures = pruneExpiredFlights(allDepartures, 'departure', visibleNowSeconds);
   await storeDetectedAirportAirlines(airportCode, allArrivals, allDepartures);
   const airlines = getAirportAirlines(airportCode);
   return {
     allArrivals,
     allDepartures,
-    arrivals: filterFlightsByAirlines(allArrivals, airlines),
-    departures: filterFlightsByAirlines(allDepartures, airlines),
+    arrivals: filterFlightsByAirlines(visibleArrivals, airlines),
+    departures: filterFlightsByAirlines(visibleDepartures, airlines),
     airportCode,
     airport,
     source: payload.source,

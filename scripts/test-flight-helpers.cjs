@@ -237,10 +237,11 @@ const unifiedFlightList = loadTsModule('src/utils/unifiedFlightList.ts', {
 });
 const unifiedDay = new Date(2026, 6, 11, 12, 0, 0);
 const unifiedTs = (hour, minute) => Math.floor(new Date(2026, 6, 11, hour, minute, 0).getTime() / 1000);
-const makeUnifiedFlight = (flightNumber, direction, scheduledTs, estimatedTs = scheduledTs) => ({
+const makeUnifiedFlight = (flightNumber, direction, scheduledTs, estimatedTs = scheduledTs, registration = '') => ({
   flight: {
     identification: { number: { default: flightNumber } },
     airline: { name: 'Ryanair', code: { iata: 'FR', icao: 'RYR' } },
+    aircraft: { registration },
     airport: direction === 'arrival'
       ? { origin: { code: { iata: 'CIA' }, name: 'Rome Ciampino' } }
       : { destination: { code: { iata: 'CIA' }, name: 'Rome Ciampino' } },
@@ -251,34 +252,164 @@ const makeUnifiedFlight = (flightNumber, direction, scheduledTs, estimatedTs = s
     },
   },
 });
-const unifiedArrival = makeUnifiedFlight('FR4321', 'arrival', unifiedTs(9, 5), unifiedTs(11, 30));
-const unifiedDeparture = makeUnifiedFlight('FR4321', 'departure', unifiedTs(9, 10));
+const unifiedArrival = makeUnifiedFlight('FR4320', 'arrival', unifiedTs(9, 5), unifiedTs(11, 30), '9H-QAA');
+const unifiedDeparture = makeUnifiedFlight('FR4321', 'departure', unifiedTs(9, 40), unifiedTs(10, 10), '9h-qaa');
+const unrelatedArrival = makeUnifiedFlight('FR7770', 'arrival', unifiedTs(8, 30), unifiedTs(8, 45), '9H-OTHER');
 const tomorrowDeparture = makeUnifiedFlight(
   'FR9999',
   'departure',
   Math.floor(new Date(2026, 6, 12, 8, 0, 0).getTime() / 1000),
+  undefined,
+  '9H-QZZ',
 );
 const unifiedRows = unifiedFlightList.buildUnifiedFlightList(
-  [unifiedArrival, { ...unifiedArrival }],
+  [unifiedArrival, { ...unifiedArrival }, unrelatedArrival],
   [unifiedDeparture, tomorrowDeparture],
   unifiedDay,
 );
-assert(unifiedRows.length === 2, 'unified flight list should dedupe within a direction and exclude another day');
+assert(unifiedRows.length === 1, 'operational flight list should show one card per departure and exclude another day');
 assert(
-  unifiedRows[0].direction === 'departure' && unifiedRows[1].direction === 'arrival',
-  'unified flight list should follow the live times displayed on mixed-direction cards',
+  unifiedRows[0].direction === 'departure' && unifiedRows[0].linkedArrival === unifiedArrival,
+  'a departure should absorb the exact-registration inbound even when its ETA is later than STD',
 );
 assert(
-  unifiedRows[0].key !== unifiedRows[1].key,
-  'the same published number must remain two distinct rows across arrival and departure directions',
+  !unifiedRows.some(row => row.item === unrelatedArrival),
+  'an unmatched arrival should not render as a standalone operational card',
 );
 assert(
-  unifiedFlightList.filterUnifiedFlightsByAirlines(unifiedRows, ['ryanair']).length === 2,
-  'the airline filter should apply to both directions in the unified list',
+  unifiedFlightList.filterUnifiedFlightsByAirlines(unifiedRows, ['ryanair']).length === 1,
+  'the airline filter should apply to the departure that owns the turnaround card',
 );
 assert(
   unifiedFlightList.filterUnifiedFlightsByAirlines(unifiedRows, []).length === 0,
-  'an empty airline selection should hide both directions in the unified list',
+  'an empty airline selection should hide every operational departure card',
+);
+
+const earlierScheduledDeparture = makeUnifiedFlight(
+  'FR1001', 'departure', unifiedTs(10, 0), unifiedTs(12, 0), '9H-QB1',
+);
+const laterScheduledDeparture = makeUnifiedFlight(
+  'FR1003', 'departure', unifiedTs(11, 0), unifiedTs(9, 30), '9H-QB2',
+);
+const scheduledSortedRows = unifiedFlightList.buildUnifiedFlightList(
+  [], [laterScheduledDeparture, earlierScheduledDeparture], unifiedDay,
+);
+assert(
+  scheduledSortedRows[0].item === earlierScheduledDeparture && scheduledSortedRows[1].item === laterScheduledDeparture,
+  'turnaround cards must remain ordered by STD instead of moving with ETD',
+);
+
+const estimatedOnlyDeparture = makeUnifiedFlight(
+  'FR1005', 'departure', unifiedTs(12, 30), unifiedTs(13, 0), '9H-QB3',
+);
+estimatedOnlyDeparture.flight.time.scheduled = {};
+assert(
+  unifiedFlightList.buildUnifiedFlightList([], [estimatedOnlyDeparture], unifiedDay).length === 0,
+  'a departure without a real STD must not enter the operational list through its ETD',
+);
+
+const firstRotationArrival = makeUnifiedFlight('FR2000', 'arrival', unifiedTs(7, 30), unifiedTs(8, 45), '9H-ROT');
+const secondRotationArrival = makeUnifiedFlight('FR2002', 'arrival', unifiedTs(11, 20), unifiedTs(11, 35), '9H-ROT');
+const futureSameAircraftArrival = makeUnifiedFlight('FR2004', 'arrival', unifiedTs(13, 0), unifiedTs(13, 10), '9H-ROT');
+const firstRotationDeparture = makeUnifiedFlight('FR2001', 'departure', unifiedTs(8, 0), unifiedTs(9, 0), '9H-ROT');
+const secondRotationDeparture = makeUnifiedFlight('FR2003', 'departure', unifiedTs(12, 0), unifiedTs(12, 20), '9H-ROT');
+const rotationRows = unifiedFlightList.buildUnifiedFlightList(
+  [firstRotationArrival, secondRotationArrival, futureSameAircraftArrival],
+  [secondRotationDeparture, firstRotationDeparture],
+  unifiedDay,
+);
+assert(
+  rotationRows[0].linkedArrival === firstRotationArrival && rotationRows[1].linkedArrival === secondRotationArrival,
+  'same-aircraft rotations must use the nearest preceding STA one-to-one and reject a later arrival',
+);
+
+const staleArrival = makeUnifiedFlight('FR2100', 'arrival', unifiedTs(7, 0), unifiedTs(7, 5), '9H-STALE');
+const latestArrival = makeUnifiedFlight('FR2102', 'arrival', unifiedTs(9, 0), unifiedTs(9, 10), '9H-STALE');
+const departureAfterLatestArrival = makeUnifiedFlight('FR2103', 'departure', unifiedTs(9, 30), unifiedTs(9, 45), '9H-STALE');
+const departureWithMissingInbound = makeUnifiedFlight('FR2105', 'departure', unifiedTs(12, 0), unifiedTs(12, 10), '9H-STALE');
+const noBacktrackingRows = unifiedFlightList.buildUnifiedFlightList(
+  [staleArrival, latestArrival],
+  [departureWithMissingInbound, departureAfterLatestArrival],
+  unifiedDay,
+);
+assert(
+  noBacktrackingRows[0].linkedArrival === latestArrival && noBacktrackingRows[1].linkedArrival === undefined,
+  'after consuming the latest inbound, a later departure must not backtrack to an older arrival of the same aircraft',
+);
+const activeNoBacktrackingRows = unifiedFlightList.filterActiveUnifiedFlights(
+  noBacktrackingRows,
+  unifiedTs(11, 0),
+);
+assert(
+  activeNoBacktrackingRows.length === 1
+    && activeNoBacktrackingRows[0].item === departureWithMissingInbound
+    && activeNoBacktrackingRows[0].linkedArrival === undefined,
+  'a completed departure may disappear from the board without freeing its consumed inbound for reuse',
+);
+
+const syntheticLiveArrival = makeUnifiedFlight('FR2200', 'arrival', unifiedTs(12, 30), unifiedTs(12, 45), '9H-LIVE');
+syntheticLiveArrival.flight._scheduledSynthetic = true;
+const scheduledAfterSyntheticArrival = makeUnifiedFlight('FR2201', 'departure', unifiedTs(13, 0), unifiedTs(13, 10), '9H-LIVE');
+assert(
+  unifiedFlightList.buildUnifiedFlightList(
+    [syntheticLiveArrival],
+    [scheduledAfterSyntheticArrival],
+    unifiedDay,
+  )[0].linkedArrival === undefined,
+  'a live ETA stored defensively in the schedule shape must never be treated as a real STA',
+);
+
+const previousDayArrivalTs = Math.floor(new Date(2026, 6, 10, 23, 40, 0).getTime() / 1000);
+const earlyDepartureTs = unifiedTs(5, 30);
+const overnightArrival = makeUnifiedFlight('FR3000', 'arrival', previousDayArrivalTs, previousDayArrivalTs, '9H-NIGHT');
+const overnightDeparture = makeUnifiedFlight('FR3001', 'departure', earlyDepartureTs, earlyDepartureTs, '9H-NIGHT');
+assert(
+  unifiedFlightList.buildUnifiedFlightList([overnightArrival], [overnightDeparture], unifiedDay)[0].linkedArrival === overnightArrival,
+  'an overnight inbound inside the turnaround window should attach to the next-day departure',
+);
+
+const previousRotationArrivalTs = Math.floor(new Date(2026, 6, 10, 22, 30, 0).getTime() / 1000);
+const previousRotationDepartureTs = Math.floor(new Date(2026, 6, 10, 23, 30, 0).getTime() / 1000);
+const previousRotationArrival = makeUnifiedFlight(
+  'FR3100', 'arrival', previousRotationArrivalTs, previousRotationArrivalTs, '9H-CROSS',
+);
+const previousRotationDeparture = makeUnifiedFlight(
+  'FR3101', 'departure', previousRotationDepartureTs, previousRotationDepartureTs, '9H-CROSS',
+);
+const nextDayDepartureWithoutInbound = makeUnifiedFlight(
+  'FR3103', 'departure', unifiedTs(4, 0), unifiedTs(4, 10), '9H-CROSS',
+);
+const crossDayRows = unifiedFlightList.buildUnifiedFlightList(
+  [previousRotationArrival],
+  [nextDayDepartureWithoutInbound, previousRotationDeparture],
+  unifiedDay,
+);
+assert(
+  crossDayRows.length === 1
+    && crossDayRows[0].item === nextDayDepartureWithoutInbound
+    && crossDayRows[0].linkedArrival === undefined,
+  'a hidden previous-day departure must still consume its inbound before the next-day board is built',
+);
+
+const noRegistrationArrival = makeUnifiedFlight('FR4000', 'arrival', unifiedTs(14, 0));
+const noRegistrationDeparture = makeUnifiedFlight('FR4001', 'departure', unifiedTs(14, 40));
+assert(
+  unifiedFlightList.buildUnifiedFlightList([noRegistrationArrival], [noRegistrationDeparture], unifiedDay)[0].linkedArrival === undefined,
+  'missing registrations must not trigger a guessed turnaround match',
+);
+
+const hintedArrival = makeUnifiedFlight('FR5000', 'arrival', unifiedTs(15, 0));
+const hintedDeparture = makeUnifiedFlight('FR5001', 'departure', unifiedTs(15, 35));
+const hintedRows = unifiedFlightList.buildUnifiedFlightList(
+  [hintedArrival],
+  [hintedDeparture],
+  unifiedDay,
+  [{ flightNumber: 'FR05000', scheduledTime: '15:00', registration: 'EI-HINT' }],
+  [{ flightNumber: 'FR05001', scheduledTime: '15:35', registration: 'ei-hint' }],
+);
+assert(
+  hintedRows[0].linkedArrival === hintedArrival,
+  'StaffMonitor registration hints should recover an exact pairing without reconstructing the service date',
 );
 
 const airlineBranding = loadTsModule('src/utils/airlineBranding.ts', {
@@ -2031,7 +2162,7 @@ async function runProviderLayerTests() {
       setItem: async (key, value) => dailyCacheStorage.set(key, value),
     },
     './airportSettings': {
-      getAirportAirlines: () => [],
+      getAirportAirlines: () => ['transavia'],
       getAirportInfo: code => ({ code, name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false }),
       getStoredAirportCode: async () => 'PSA',
       isValidAirportCode: code => code === 'PSA',
@@ -2070,8 +2201,14 @@ async function runProviderLayerTests() {
     'schedule fetch should seed thin fresh provider results with the cached day list',
   );
   assert(
-    !dailyCachedFlightNumbers.includes('FR0001'),
-    'schedule fetch should prune expired cached flights while keeping the active day list',
+    dailyCachedFlightNumbers.includes('FR0001'),
+    'raw schedule history should retain a completed departure long enough to protect turnaround pairing',
+  );
+  assert(
+    dailyCachedSchedule.departures.some(item => item.flight.identification.number.default === 'HV9050')
+      && dailyCachedSchedule.departures.some(item => item.flight.identification.number.default === 'U24000')
+      && !dailyCachedSchedule.departures.some(item => item.flight.identification.number.default === 'FR0001'),
+    'completed departure history must remain hidden from the normal visible schedule list',
   );
   const dailyCacheStatus = dailyCachedSchedule.providerDiagnostics.find(item => item.provider === 'cache');
   assert(dailyCacheStatus?.mode === 'dailyMerge', 'daily cache diagnostics should identify merge mode');
@@ -2084,7 +2221,7 @@ async function runProviderLayerTests() {
       setItem: async (key, value) => fallbackStorage.set(key, value),
     },
     './airportSettings': {
-      getAirportAirlines: () => [],
+      getAirportAirlines: () => ['transavia'],
       getAirportInfo: code => ({ code, name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false }),
       getStoredAirportCode: async () => 'PSA',
       isValidAirportCode: code => code === 'PSA',
@@ -2112,6 +2249,7 @@ async function runProviderLayerTests() {
   const fallbackCacheStatus = fallbackSchedule.providerDiagnostics.find(item => item.provider === 'cache' && item.mode === 'fallback');
   assert(fallbackCacheStatus?.cacheMerged === false, 'fallback cache diagnostics should identify total cache fallback instead of merge');
 
+  let fr24PublicUnavailable = false;
   const fr24Module = loadTsModule('src/utils/flightProviders/fr24Provider.ts', {
     '../airportSettings': {
       buildFr24ScheduleUrl: airportCode => `https://fr24-public.test/${airportCode}`,
@@ -2160,6 +2298,14 @@ async function runProviderLayerTests() {
                     reg: 'EI-ETA',
                   }],
             }),
+          };
+        }
+
+        if (fr24PublicUnavailable) {
+          return {
+            ok: false,
+            status: 503,
+            text: async () => 'FR24 public unavailable',
           };
         }
 
@@ -2252,8 +2398,8 @@ async function runProviderLayerTests() {
     now,
   });
   assert(
-    fr24MergedEasyJetVariants.allDepartures.length === 2,
-    'FR24 provider should merge public schedule rows with numeric live callsigns and discard ambiguous callsign-only rows',
+    fr24MergedEasyJetVariants.allDepartures.length === 1,
+    'FR24 provider should overlay numeric live callsigns only onto real public departure schedule rows',
   );
   assert(
     fr24MergedEasyJetVariants.allDepartures[0].flight.airline.name === 'easyJet',
@@ -2274,6 +2420,22 @@ async function runProviderLayerTests() {
   assert(
     officialFr24Departure.flight._fr24Id === '333ca4a2',
     'the exact FR24 outbound leg id must survive the public/live schedule merge',
+  );
+  fr24PublicUnavailable = true;
+  const fr24LiveOnlySchedule = await fr24Module.fr24ApiProvider.fetch({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    fr24ApiKey: 'fr24-key',
+    now,
+  });
+  fr24PublicUnavailable = false;
+  assert(
+    fr24LiveOnlySchedule.allDepartures.length === 0,
+    'FR24 live positions without a public schedule must not fabricate outbound STD rows',
+  );
+  assert(
+    fr24LiveOnlySchedule.allArrivals.length === 0,
+    'FR24 live-only fallback must also withhold arrivals whose ETA is not a real STA',
   );
   const staffLikeDeparture = {
     ...officialFr24Departure,

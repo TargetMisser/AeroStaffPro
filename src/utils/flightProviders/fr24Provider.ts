@@ -250,6 +250,8 @@ function officialLiveFlightToScheduleItem(
         generic: { status: { color: direction === 'departures' ? 'green' : 'gray' } },
       },
       _source: 'fr24_api',
+      _scheduledSource: direction === 'departures' ? 'fr24_api_live_position' : 'fr24_api_live_eta',
+      _scheduledSynthetic: true,
       ...(fr24Id ? { _fr24Id: fr24Id } : {}),
       ...(authoritativeArrivalEtaTs ? { _etaSource: 'fr24_api' as const } : {}),
     },
@@ -433,9 +435,10 @@ function mergeScheduleWithLive(schedule: any[], live: any[], timeField: 'arrival
     const exactIndex = candidateIndexes.find(index =>
       isFlightServiceMatch(result[index], item, timeField),
     );
-    const existingIndex = exactIndex ?? (candidateIndexes.length === 1 ? candidateIndexes[0] : undefined);
+    const existingIndex = exactIndex;
     if (existingIndex === undefined) {
-      result.push(item);
+      // Live timestamps are observations/estimates, never STA/STD. A live row
+      // is therefore valid only as an overlay on a concrete public schedule.
       continue;
     }
 
@@ -470,7 +473,10 @@ export const fr24ApiProvider: FlightScheduleProvider = {
     }
 
     if (liveResult.status === 'fulfilled') {
-      return liveResult.value;
+      return {
+        allArrivals: [],
+        allDepartures: [],
+      };
     }
 
     const publicMessage = publicResult.status === 'rejected' ? String(publicResult.reason) : 'FR24_PUBLIC_EMPTY_SCHEDULE';

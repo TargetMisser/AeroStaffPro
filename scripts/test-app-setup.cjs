@@ -239,10 +239,41 @@ assert(
 );
 
 const flightScreenSource = fs.readFileSync(path.join(root, 'src/screens/FlightScreen.tsx'), 'utf8');
+const fr24ApiSource = fs.readFileSync(path.join(root, 'src/utils/fr24api.ts'), 'utf8');
 assert(
-  flightScreenSource.includes('buildUnifiedFlightList(allArrivalsFull, allDeparturesFull, selectedDate)')
+  flightScreenSource.includes('buildUnifiedFlightList(')
+    && flightScreenSource.includes("const useStaffMonitorRegistrationHints = airportCode === 'PSA' && activeDay === 'today'")
+    && flightScreenSource.includes('const visibleStaffMonitorDepartures = useStaffMonitorRegistrationHints')
+    && flightScreenSource.includes(': EMPTY_STAFF_MONITOR_FLIGHTS')
+    && flightScreenSource.includes('useStaffMonitorRegistrationHints ? staffMonitorArrs : []')
+    && flightScreenSource.includes('useStaffMonitorRegistrationHints ? staffMonitorDeps : []')
+    && flightScreenSource.includes('smPool={visibleStaffMonitorDepartures}')
+    && flightScreenSource.includes('linkedArrival={entry.linkedArrival}')
     && !flightScreenSource.includes('setActiveTab('),
-  'FlightScreen must render arrivals and departures in one timeline without a direction tab',
+  'FlightScreen must render one outbound card per rotation and use StaffMonitor registration and gate data only for PSA today',
+);
+assert(
+  flightScreenSource.includes('TURNAROUND_MATCH_WINDOW_SECONDS')
+    && flightScreenSource.includes('TURNAROUND_MATCH_WINDOW_SECONDS * 1000')
+    && flightScreenSource.includes('filterActiveUnifiedFlights(currentDayRotationData)')
+    && fr24ApiSource.includes('function pruneActiveDayFlights(')
+    && fr24ApiSource.includes('pruneExpiredFlights(items, direction, nowMs / 1000, TURNAROUND_MATCH_WINDOW_SECONDS)')
+    && fr24ApiSource.includes('TURNAROUND_MATCH_WINDOW_SECONDS * 1000'),
+  'screen and provider cache must retain arrivals and their unseen timestamps for the full turnaround window',
+);
+assert(
+  flightScreenSource.includes("pinned?._pinTab === 'arrivals'")
+    && flightScreenSource.includes('try { await AsyncStorage.removeItem(PINNED_FLIGHT_KEY); } catch {}')
+    && flightScreenSource.includes("cancelPinnedNotifications('legacy arrival pin removed', false)")
+    && flightScreenSource.includes('await dismissPinnedFlightNotification()'),
+  'startup must remove legacy arrival pins and clean both scheduled and ongoing pinned notifications',
+);
+assert(
+  flightScreenSource.includes('const time = ts ? new Date(ts * 1000)')
+    && !flightScreenSource.includes('const bestTs = isArrival ? getBestArrivalTs(item) : getBestDepartureTs(item)')
+    && flightScreenSource.includes("t('flightLinkedArrival')")
+    && flightScreenSource.includes("t('flightLinkedArrivalPending')"),
+  'card headers must stay on scheduled time while the linked arrival remains a contextual detail',
 );
 assert(
   flightScreenSource.includes('openFlightradar24Flight(item, direction, airportCode)')
@@ -281,6 +312,7 @@ assert(
 );
 assert(
   flightScreenSource.includes('isFlightServiceMatch(pinnedFlight, item, direction)')
+    && flightScreenSource.includes("isFlightServiceMatch(pinnedFlight, linkedArrival, 'arrival')")
     && flightScreenSource.includes("isFlightServiceMatch(pinnedDeparture, item, 'departure')")
     && widgetHandlerSource.includes("isFlightServiceMatch(pinnedDeparture, item, 'departure')"),
   'app and widget pin highlighting must use the full provider-tolerant service identity',

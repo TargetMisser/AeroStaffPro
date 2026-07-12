@@ -71,7 +71,9 @@ import {
 } from '../utils/flightExternalLinks';
 import {
   buildUnifiedFlightList,
+  filterActiveUnifiedFlights,
   filterUnifiedFlightsByAirlines,
+  TURNAROUND_MATCH_WINDOW_SECONDS,
   type UnifiedFlightListEntry,
 } from '../utils/unifiedFlightList';
 import {
@@ -106,6 +108,7 @@ import { SPACING, RADIUS } from '../theme/spacing';
 
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const FLIGHT_FILTER_KEY = 'aerostaff_flight_filter_v1';
+const EMPTY_STAFF_MONITOR_FLIGHTS: StaffMonitorFlight[] = [];
 type FlightAlertTone = 'success' | 'warning' | 'info';
 type FlightDataSourceState = {
   airportCode: string;
@@ -151,6 +154,7 @@ try { Notifications.setNotificationHandler({
 // ─── FlightRow ────────────────────────────────────────────────────────────────
 interface FlightRowProps {
   item: any;
+  linkedArrival?: any;
   index: number;
   direction: FlightDirection;
   airportCode: string;
@@ -166,7 +170,7 @@ interface FlightRowProps {
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, linkedArrival, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const isArrival = direction === 'arrival';
   const directionLabel = t(isArrival ? 'flightArrival' : 'flightDeparture');
@@ -192,10 +196,9 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
   const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
   const ts = isArrival ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
   const isEasyJet = isFlightEasyJet(item);
-  // Header shows the live time (real > estimated > scheduled), so delays surface immediately
-  // instead of the card always displaying the original timetable time.
-  const bestTs = isArrival ? getBestArrivalTs(item) : getBestDepartureTs(item);
-  const time = bestTs ? new Date(bestTs * 1000).toLocaleTimeString(locale, {
+  // Operational calculations and ordering are anchored to STA/STD. Live
+  // estimates stay in the detail rows and never replace the header time.
+  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: (isArrival && isEasyJet) ? '2-digit' : undefined,
@@ -232,6 +235,19 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
   const fmtOptionalTs = (value: number | undefined) =>
     typeof value === 'number' && Number.isFinite(value) ? fmtTs(value) : '--:--';
 
+  const linkedArrivalNumber = linkedArrival?.flight?.identification?.number?.default || '—';
+  const linkedArrivalOrigin = getFlightAirportDisplay(linkedArrival?.flight?.airport?.origin, 'N/A');
+  const linkedArrivalScheduledTs = linkedArrival?.flight?.time?.scheduled?.arrival;
+  const linkedArrivalEstimatedTs = linkedArrival?.flight?.time?.estimated?.arrival;
+  const linkedArrivalRealTs = linkedArrival?.flight?.time?.real?.arrival;
+  const linkedArrivalCurrentTs = linkedArrivalRealTs ?? linkedArrivalEstimatedTs;
+  const linkedArrivalDelayMinutes = linkedArrivalScheduledTs && linkedArrivalCurrentTs
+    ? Math.round((linkedArrivalCurrentTs - linkedArrivalScheduledTs) / 60)
+    : 0;
+  const linkedArrivalColor = linkedArrivalCurrentTs
+    ? delayToToken(linkedArrivalDelayMinutes, Boolean(linkedArrivalRealTs), colors, colors.success)
+    : colors.neutral;
+
   const gateWindow = !isArrival && ts && ops
     ? getDepartureGateWindow(ts, ops)
     : null;
@@ -239,9 +255,14 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
   const [nowTs, setNowTs] = useState(() => Date.now() / 1000);
 
   const pinnedDirection: FlightDirection = pinnedFlight?._pinTab === 'arrivals' ? 'arrival' : 'departure';
-  const isPinned = pinnedFlight != null
+  const primaryIsPinned = pinnedFlight != null
     && pinnedDirection === direction
     && isFlightServiceMatch(pinnedFlight, item, direction);
+  const linkedArrivalIsPinned = pinnedFlight != null
+    && linkedArrival != null
+    && pinnedDirection === 'arrival'
+    && isFlightServiceMatch(pinnedFlight, linkedArrival, 'arrival');
+  const isPinned = primaryIsPinned || linkedArrivalIsPinned;
 
   const normFn = normalizeFlightNumber(flightNumber);
   const normalizeForMatching = (s: string) => s.replace(/[\s\-_]/g, '').toUpperCase();
@@ -411,6 +432,43 @@ function FlightRowComponent({ item, index, direction, airportCode, userShift, pi
             )}
           </ValueChangeFlash>
         </LinearGradient>
+        {!isArrival && (
+          <View style={s.linkedArrivalPanel}>
+            <View style={s.linkedArrivalIdentity}>
+              <View style={s.linkedArrivalTitleRow}>
+                <MaterialIcons
+                  name={linkedArrival ? 'flight-land' : 'link-off'}
+                  size={16}
+                  color={linkedArrival ? colors.primary : colors.neutral}
+                />
+                <Text style={s.linkedArrivalTitle}>{t('flightLinkedArrival')}</Text>
+              </View>
+              {linkedArrival ? (
+                <Text numberOfLines={1} style={s.linkedArrivalRoute}>
+                  {linkedArrivalNumber} · {linkedArrivalOrigin.compactLabel}
+                </Text>
+              ) : (
+                <Text style={s.linkedArrivalPending}>{t('flightLinkedArrivalPending')}</Text>
+              )}
+            </View>
+            {linkedArrival && (
+              <View style={s.linkedArrivalTimes}>
+                <View style={s.linkedArrivalTimeBlock}>
+                  <Text style={s.linkedArrivalTimeLabel}>{t('flightSta')}</Text>
+                  <Text style={s.linkedArrivalTime}>{fmtOptionalTs(linkedArrivalScheduledTs)}</Text>
+                </View>
+                <View style={s.linkedArrivalTimeBlock}>
+                  <Text style={[s.linkedArrivalTimeLabel, { color: linkedArrivalColor }]}>
+                    {linkedArrivalRealTs ? t('flightAta') : t('flightEta')}
+                  </Text>
+                  <Text style={[s.linkedArrivalTime, { color: linkedArrivalColor }]}>
+                    {fmtOptionalTs(linkedArrivalCurrentTs)}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
         {/* Body */}
         <View style={s.cardBody}>
           {!isArrival && ops ? (
@@ -785,11 +843,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       if (reconciledSelection) {
         applySelectedAirlines(reconciledSelection);
       }
-      // Accumula voli: fonde i dati freschi con quelli in cache e conserva solo
-      // i voli non più vecchi di 1 ora dall'orario migliore disponibile.
-      // I voli in cache che NESSUNA fonte conferma da più di 2 ore decadono
-      // (cancellati o mai esistiti): senza eviction la cache si auto-rinnova
-      // e i voli fantasma sopravvivono fino al loro orario previsto.
+      // Accumula lo storico minimo della rotazione per arrivi e partenze. Le
+      // partenze concluse verranno nascoste dalla lista, ma restano disponibili
+      // al matcher per impedire che il loro inbound venga riusato più tardi.
+      // Senza eviction la cache si auto-rinnova e conserva voli fantasma.
       let cachedArrs: any[] = [], cachedDeps: any[] = [];
       try {
         const cache = await loadFlightScreenCache(requestAirportCode);
@@ -799,11 +856,26 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         cachedArrs = (cache?.arrivals ?? []).map(stampLegacy);
         cachedDeps = (cache?.departures ?? []).map(stampLegacy);
       } catch {}
+      const mergeNowMs = Date.now();
       let mergedArrs = pruneUnseenFlights(
-        pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival', Date.now(), mergeFlightExternalLinkMetadata), 'arrival'),
+        pruneExpiredFlights(
+          mergeFlightLists(cachedArrs, allArrivals, 'arrival', mergeNowMs, mergeFlightExternalLinkMetadata),
+          'arrival',
+          mergeNowMs / 1000,
+          TURNAROUND_MATCH_WINDOW_SECONDS,
+        ),
+        mergeNowMs,
+        TURNAROUND_MATCH_WINDOW_SECONDS * 1000,
       );
       let mergedDeps = pruneUnseenFlights(
-        pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure', Date.now(), mergeFlightExternalLinkMetadata), 'departure'),
+        pruneExpiredFlights(
+          mergeFlightLists(cachedDeps, allDepartures, 'departure', mergeNowMs, mergeFlightExternalLinkMetadata),
+          'departure',
+          mergeNowMs / 1000,
+          TURNAROUND_MATCH_WINDOW_SECONDS,
+        ),
+        mergeNowMs,
+        TURNAROUND_MATCH_WINDOW_SECONDS * 1000,
       );
 
       // Overlay ETA live dai dati ADS-B aperti (stessa fonte grezza di FR24):
@@ -1244,15 +1316,28 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   }, [airportLoading, fetchAll, isFocused]);
 
   useEffect(() => {
-    AsyncStorage.getItem(PINNED_FLIGHT_KEY).then(raw => {
+    let active = true;
+    const loadPinnedFlight = async () => {
+      const raw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
       if (!raw) return;
       try {
         const pinned = JSON.parse(raw);
-        if (pinned.flight?.identification?.number?.default) {
+        if (pinned?._pinTab === 'arrivals') {
+          try { await AsyncStorage.removeItem(PINNED_FLIGHT_KEY); } catch {}
+          try { await cancelPinnedNotifications('legacy arrival pin removed', false); } catch {}
+          try { await dismissPinnedFlightNotification(); } catch {}
+          if (active) setPinnedFlight(null);
+          return;
+        }
+        if (active && pinned.flight?.identification?.number?.default) {
           setPinnedFlight(pinned);
         }
       } catch {}
-    });
+    };
+    loadPinnedFlight().catch(() => {});
+    return () => {
+      active = false;
+    };
   }, []);
 
   const staffMonitorDepsRef = useRef<StaffMonitorFlight[]>([]);
@@ -1443,14 +1528,25 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
   const userShift = activeDay === 'today' ? shifts.today : shifts.tomorrow;
   const selectedDate = activeDay === 'today' ? new Date() : (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d; })();
+  const useStaffMonitorRegistrationHints = airportCode === 'PSA' && activeDay === 'today';
+  const visibleStaffMonitorDepartures = useStaffMonitorRegistrationHints
+    ? staffMonitorDeps
+    : EMPTY_STAFF_MONITOR_FLIGHTS;
 
   const allSelected = airportAirlines.length > 0 && airportAirlines.every(k => selectedAirlines.includes(k));
   const snapshotMatchesAirport = flightSnapshotAirportCode === airportCode;
   const visibleFlightDataSource = flightDataSource?.airportCode === airportCode ? flightDataSource : null;
 
-  const currentDayRawData = snapshotMatchesAirport
-    ? buildUnifiedFlightList(allArrivalsFull, allDeparturesFull, selectedDate)
+  const currentDayRotationData = snapshotMatchesAirport
+    ? buildUnifiedFlightList(
+        allArrivalsFull,
+        allDeparturesFull,
+        selectedDate,
+        useStaffMonitorRegistrationHints ? staffMonitorArrs : [],
+        useStaffMonitorRegistrationHints ? staffMonitorDeps : [],
+      )
     : [];
+  const currentDayRawData = filterActiveUnifiedFlights(currentDayRotationData);
   const currentData = filterUnifiedFlightsByAirlines(currentDayRawData, selectedAirlines);
   const hasFlightSnapshot = snapshotMatchesAirport
     && (allArrivalsFull.length > 0 || allDeparturesFull.length > 0);
@@ -1467,6 +1563,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const renderFlight = useCallback(({ item: entry, index }: { item: UnifiedFlightListEntry; index: number }) => (
     <FlightRow
       item={entry.item}
+      linkedArrival={entry.linkedArrival}
       index={index}
       direction={entry.direction}
       airportCode={airportCode}
@@ -1477,11 +1574,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       colors={colors}
       isOperations={isOperations}
       s={s}
-      smPool={entry.direction === 'departure' ? staffMonitorDeps : staffMonitorArrs}
+      smPool={visibleStaffMonitorDepartures}
       locale={locale}
       t={t}
     />
-  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, staffMonitorDeps, staffMonitorArrs, locale, t]);
+  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, visibleStaffMonitorDepartures, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');
@@ -1524,7 +1621,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         </TouchableOpacity>
       </View>
 
-      {/* Day selector: arrivals and departures share the same timeline. */}
+      {/* Day selector: each row is an outbound operation with inbound context. */}
       <View style={s.controlsRow}>
         <View style={s.segment}>
           {(['today', 'tomorrow'] as const).map(d => (
@@ -1733,6 +1830,16 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     headerDest: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
     headerAirportCode: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.86)', fontSize: isOperations ? 11 : 10, lineHeight: 13, fontWeight: '900', letterSpacing: isOperations ? 1.1 : 0.8, textAlign: 'right' },
     headerAirportName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.72)', fontSize: isOperations ? 9 : 8.5, lineHeight: isOperations ? 10.5 : 10, textAlign: 'right' },
+    linkedArrivalPanel: { minHeight: isOperations ? 66 : 72, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: isOperations ? 9 : 11, paddingHorizontal: 16, backgroundColor: isOperations ? 'rgba(125,211,252,0.07)' : c.cardSecondary, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
+    linkedArrivalIdentity: { flex: 1, minWidth: 0 },
+    linkedArrivalTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    linkedArrivalTitle: { fontSize: 10, lineHeight: 13, fontWeight: '900', color: c.textSub, letterSpacing: 0.65, textTransform: 'uppercase' },
+    linkedArrivalRoute: { marginTop: 4, fontSize: 13, lineHeight: 17, fontWeight: '800', color: c.text },
+    linkedArrivalPending: { marginTop: 4, fontSize: 12, lineHeight: 16, fontWeight: '700', color: c.neutral },
+    linkedArrivalTimes: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    linkedArrivalTimeBlock: { minWidth: 48, alignItems: 'flex-end' },
+    linkedArrivalTimeLabel: { fontSize: 9, lineHeight: 12, fontWeight: '900', color: c.textSub, letterSpacing: 0.7 },
+    linkedArrivalTime: { marginTop: 2, fontSize: 14, lineHeight: 17, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
     cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 12 : 14, paddingHorizontal: 16, backgroundColor: operationPanel },
     bodyInfo: { fontSize: 11, color: c.textSub },
     bodyTime: { fontWeight: '700', color: c.text },
