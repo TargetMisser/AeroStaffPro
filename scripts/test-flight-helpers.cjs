@@ -174,6 +174,20 @@ assert(
 );
 
 const flightExternalLinks = loadTsModule('src/utils/flightExternalLinks.ts');
+const inboundLinkTarget = { flight: { identification: { number: { default: 'FR4320' } } } };
+const outboundLinkTarget = { flight: { identification: { number: { default: 'FR4321' } } } };
+assert(
+  flightExternalLinks.getFlightradar24ArrivalTarget(outboundLinkTarget, inboundLinkTarget, 'departure') === inboundLinkTarget,
+  'a unified departure card should target its linked inbound FR24 leg',
+);
+assert(
+  flightExternalLinks.getFlightradar24ArrivalTarget(outboundLinkTarget, undefined, 'departure') === null,
+  'a departure without a linked inbound must not fall back to the outbound FR24 leg',
+);
+assert(
+  flightExternalLinks.getFlightradar24ArrivalTarget(inboundLinkTarget, undefined, 'arrival') === inboundLinkTarget,
+  'a standalone arrival should keep itself as the FR24 target',
+);
 assert(
   flightExternalLinks.buildFlightradar24FlightUrl('U20345') === null,
   'FR24 direct link builder should reject a flight-number-only ambiguous URL',
@@ -191,6 +205,22 @@ assert(
   'FR24 direct link builder should reject synthetic provider ids instead of opening an ambiguous occurrence',
 );
 assert(flightExternalLinks.buildFlightradar24FlightUrl('N/A') === null, 'FR24 link builder should reject placeholder flight numbers');
+assert(
+  flightExternalLinks.buildFlightradar24FlightNumberUrl(' FR-4320 ') === 'https://www.flightradar24.com/data/flights/fr4320',
+  'FR24 inbound fallback should stay on the selected flight-number page when the exact leg id is unavailable',
+);
+assert(
+  flightExternalLinks.buildFlightradar24FlightNumberUrl('N/A') === null,
+  'FR24 flight-number fallback should reject placeholder flight numbers',
+);
+assert(
+  flightExternalLinks.buildFlightradar24FlightPageUrl('FR4320', '3FABC123') === 'https://www.flightradar24.com/data/flights/fr4320#3fabc123',
+  'FR24 arrival page should prefer the exact inbound leg when its id is known',
+);
+assert(
+  flightExternalLinks.buildFlightradar24FlightPageUrl('FR4320') === 'https://www.flightradar24.com/data/flights/fr4320',
+  'FR24 arrival page should fall back to the inbound flight number, never the airport board',
+);
 assert(
   flightExternalLinks.buildFlightradar24AirportBoardUrl('PSA', 'departure') === 'https://www.flightradar24.com/data/airports/psa/departures',
   'FR24 fallback should open the selected airport departures board',

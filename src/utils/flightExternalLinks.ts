@@ -3,8 +3,22 @@ function normalizeFlightradar24Id(value: unknown): string | null {
   return /^[a-f0-9]{6,16}$/.test(normalized) ? normalized : null;
 }
 
+function normalizeFlightradar24FlightNumber(value: unknown): string | null {
+  const normalized = String(value ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').toLowerCase();
+  return normalized && normalized !== 'na' ? normalized : null;
+}
+
 export function getFlightradar24FlightId(item: any): string | null {
   return normalizeFlightradar24Id(item?.flight?._fr24Id);
+}
+
+/** A unified departure card must link to its inbound leg, never the outbound. */
+export function getFlightradar24ArrivalTarget(
+  item: any,
+  linkedArrival: any | undefined,
+  direction: 'arrival' | 'departure',
+): any | null {
+  return direction === 'arrival' ? item ?? null : linkedArrival ?? null;
 }
 
 /** Keep an exact FR24 leg id through cache/provider refreshes that lack one. */
@@ -23,12 +37,24 @@ export function mergeFlightExternalLinkMetadata(cachedItem: any, freshItem: any)
 export function buildFlightradar24FlightUrl(flightNumber: string, fr24Id?: unknown): string | null {
   // A flight-number-only URL is ambiguous when FR24 has multiple occurrences
   // of the service. Only build a direct URL when the exact leg id is known;
-  // callers can otherwise use the direction-specific airport board.
-  const normalized = flightNumber.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').toLowerCase();
-  if (!normalized || normalized === 'na') return null;
+  // callers can otherwise choose an explicit flight-page or airport fallback.
+  const normalized = normalizeFlightradar24FlightNumber(flightNumber);
+  if (!normalized) return null;
   const normalizedId = normalizeFlightradar24Id(fr24Id);
   if (!normalizedId) return null;
   return `https://www.flightradar24.com/data/flights/${normalized}#${normalizedId}`;
+}
+
+/** Flight-number page fallback when the exact inbound leg id is unavailable. */
+export function buildFlightradar24FlightNumberUrl(flightNumber: string): string | null {
+  const normalized = normalizeFlightradar24FlightNumber(flightNumber);
+  return normalized ? `https://www.flightradar24.com/data/flights/${normalized}` : null;
+}
+
+/** Prefer an exact inbound leg; otherwise stay on that inbound flight number. */
+export function buildFlightradar24FlightPageUrl(flightNumber: string, fr24Id?: unknown): string | null {
+  return buildFlightradar24FlightUrl(flightNumber, fr24Id)
+    ?? buildFlightradar24FlightNumberUrl(flightNumber);
 }
 
 export function buildFlightradar24AirportBoardUrl(

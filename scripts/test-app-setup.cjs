@@ -276,12 +276,18 @@ assert(
   'card headers must stay on scheduled time while the linked arrival remains a contextual detail',
 );
 assert(
-  flightScreenSource.includes('openFlightradar24Flight(item, direction, airportCode)')
-    && flightScreenSource.includes('resolveFlightradar24IdForFlight(airportCode, item, direction)')
-    && flightScreenSource.includes('buildFlightradar24AirportBoardUrl(airportCode, direction)')
+  flightScreenSource.includes('const arrivalLinkItem = getFlightradar24ArrivalTarget(item, linkedArrival, direction)')
+    && flightScreenSource.includes('openFlightradar24Arrival(arrivalLinkItem, airportCode)')
+    && flightScreenSource.includes("resolveFlightradar24IdForFlight(airportCode, arrivalItem, 'arrival')")
+    && flightScreenSource.includes('buildFlightradar24FlightPageUrl(flightNumber, fr24Id)')
+    && flightScreenSource.includes("buildFlightradar24AirportBoardUrl(airportCode, 'arrival')")
+    && flightScreenSource.includes('openFlightradar24AirportArrivals(airportCode)')
+    && flightScreenSource.includes('disabled={!canOpenArrivalLink}')
+    && flightScreenSource.includes("t('flightAirportArrivalsFr24')")
+    && !flightScreenSource.includes('openFlightradar24Flight(item, direction, airportCode)')
     && flightScreenSource.includes('enrichFlightScheduleWithFr24Ids(requestAirportCode, mergedArrs, mergedDeps)')
     && flightScreenSource.includes("direction === 'arrival' ? 'arrivals' : 'departures'"),
-  'unified rows must resolve their exact FR24 leg, use a direction-safe fallback, and retain the original pin direction',
+  'unified rows must open only the linked inbound flight page while the dedicated button owns the airport arrivals board',
 );
 assert(
   flightScreenSource.includes("t('flightScheduledDeparture')")

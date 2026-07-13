@@ -65,7 +65,8 @@ import {
 import { formatFlightSourceLabel } from '../utils/flightSourceLabel';
 import {
   buildFlightradar24AirportBoardUrl,
-  buildFlightradar24FlightUrl,
+  buildFlightradar24FlightPageUrl,
+  getFlightradar24ArrivalTarget,
   getFlightradar24FlightId,
   mergeFlightExternalLinkMetadata,
 } from '../utils/flightExternalLinks';
@@ -121,20 +122,24 @@ type FetchAllOptions = {
   markRefreshing?: boolean;
 };
 
-async function openFlightradar24Flight(
-  item: any,
-  direction: FlightDirection,
+async function openFlightradar24Arrival(
+  arrivalItem: any | null,
   airportCode: string,
 ): Promise<void> {
-  const flightNumber = item?.flight?.identification?.number?.default || '';
-  let fr24Id = getFlightradar24FlightId(item);
-  if (!fr24Id) {
+  const flightNumber = arrivalItem?.flight?.identification?.number?.default || '';
+  let fr24Id = getFlightradar24FlightId(arrivalItem);
+  if (arrivalItem && !fr24Id) {
     try {
-      fr24Id = await resolveFlightradar24IdForFlight(airportCode, item, direction);
+      fr24Id = await resolveFlightradar24IdForFlight(airportCode, arrivalItem, 'arrival');
     } catch {}
   }
-  const url = buildFlightradar24FlightUrl(flightNumber, fr24Id)
-    ?? buildFlightradar24AirportBoardUrl(airportCode, direction);
+  const url = buildFlightradar24FlightPageUrl(flightNumber, fr24Id);
+  if (!url) return;
+  await Linking.openURL(url);
+}
+
+async function openFlightradar24AirportArrivals(airportCode: string): Promise<void> {
+  const url = buildFlightradar24AirportBoardUrl(airportCode, 'arrival');
   if (!url) return;
   await Linking.openURL(url);
 }
@@ -179,9 +184,14 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
     ? hexToRgba(directionColor, 0.12)
     : 'rgba(15,23,42,0.82)';
   const directionBadgeBorder = isOperations ? directionColor : 'rgba(255,255,255,0.88)';
-  const fr24AccessibilityLabel = t('flightOpenOnFr24')
-    .replace('{direction}', directionLabel.toLowerCase())
-    .replace('{flight}', flightNumber);
+  const arrivalLinkItem = getFlightradar24ArrivalTarget(item, linkedArrival, direction);
+  const arrivalLinkFlightNumber = arrivalLinkItem?.flight?.identification?.number?.default || '';
+  const canOpenArrivalLink = Boolean(arrivalLinkItem && arrivalLinkFlightNumber);
+  const fr24AccessibilityLabel = canOpenArrivalLink
+    ? t('flightOpenOnFr24')
+        .replace('{direction}', t('flightArrival').toLowerCase())
+        .replace('{flight}', arrivalLinkFlightNumber)
+    : t('flightLinkedArrivalPending');
   const airline = item.flight?.airline?.name || 'Sconosciuta';
   const iataCode = item.flight?.airline?.code?.iata || '';
   const icaoCode = item.flight?.airline?.code?.icao || '';
@@ -392,9 +402,13 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
           depth={isOperations ? 6 : 4}
           pressedScale={0.982}
           haptic={false}
-          onPress={() => { openFlightradar24Flight(item, direction, airportCode).catch(() => {}); }}
+          disabled={!canOpenArrivalLink}
+          onPress={canOpenArrivalLink
+            ? () => { openFlightradar24Arrival(arrivalLinkItem, airportCode).catch(() => {}); }
+            : undefined}
           accessibilityRole="link"
           accessibilityLabel={fr24AccessibilityLabel}
+          accessibilityState={{ disabled: !canOpenArrivalLink }}
         >
         {isPinned && <View style={s.pinBanner}><Text style={s.pinBannerText}>{t('flightPinned')}</Text></View>}
         {/* Header */}
@@ -1636,6 +1650,16 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity
+          style={s.fr24ArrivalsBtn}
+          onPress={() => { openFlightradar24AirportArrivals(airportCode).catch(() => {}); }}
+          activeOpacity={0.82}
+          accessibilityRole="link"
+          accessibilityLabel={t('flightOpenAirportArrivalsFr24').replace('{airport}', airportCode)}
+        >
+          <MaterialIcons name="flight-land" size={17} color={colors.primary} />
+          <Text numberOfLines={1} style={s.fr24ArrivalsBtnText}>{t('flightAirportArrivalsFr24')}</Text>
+        </TouchableOpacity>
       </View>
 
       {(visibleFlightDataSource || showRefreshIndicator) && (
@@ -1796,6 +1820,8 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pageTitle: { ...(isOperations ? TYPE.titleLg : TYPE.title), color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
     controlsRow: { flexDirection: 'row', gap: SPACING.sm, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
+    fr24ArrivalsBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: isOperations ? 14 : 8, backgroundColor: isOperations ? 'rgba(125,211,252,0.10)' : c.primaryLight, borderWidth: 1, borderColor: isOperations ? 'rgba(125,211,252,0.28)' : c.primary },
+    fr24ArrivalsBtnText: { fontSize: 10, lineHeight: 13, fontWeight: '900', color: c.primaryDark, letterSpacing: 0.25 },
     sourceRow: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: SPACING.sm, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: SPACING.lg },
     sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%', flexShrink: 1, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: RADIUS.pill, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
     sourceBadgeText: { flexShrink: 1, flexWrap: 'wrap', fontSize: 11, lineHeight: 15, fontWeight: '800', color: c.primaryDark },
