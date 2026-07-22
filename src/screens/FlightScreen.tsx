@@ -109,6 +109,7 @@ import { SPACING, RADIUS } from '../theme/spacing';
 
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const FLIGHT_FILTER_KEY = 'aerostaff_flight_filter_v1';
+const FLIGHT_COMPACT_MODE_KEY = 'aerostaff_flight_compact_mode_v1';
 const EMPTY_STAFF_MONITOR_FLIGHTS: StaffMonitorFlight[] = [];
 type FlightAlertTone = 'success' | 'warning' | 'info';
 type FlightDataSourceState = {
@@ -169,13 +170,14 @@ interface FlightRowProps {
   onUnpin: () => void;
   colors: ThemeColors;
   isOperations: boolean;
+  compactMode: boolean;
   s: ReturnType<typeof makeStyles>;
   smPool: StaffMonitorFlight[];
   locale: string;
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, linkedArrival, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, linkedArrival, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, compactMode, s, smPool, locale, t }: FlightRowProps) {
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
   const isArrival = direction === 'arrival';
   const directionLabel = t(isArrival ? 'flightArrival' : 'flightDeparture');
@@ -380,11 +382,34 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
     return () => clearInterval(interval);
   }, []);
 
+  const compactArrivalRealTs = isArrival ? item.flight?.time?.real?.arrival : undefined;
+  const compactArrivalEstimatedTs = isArrival ? item.flight?.time?.estimated?.arrival : undefined;
+  const compactArrivalBestTs = compactArrivalRealTs ?? compactArrivalEstimatedTs ?? ts;
+  const compactArrivalDelayMinutes = isArrival && ts && compactArrivalBestTs
+    ? Math.round((compactArrivalBestTs - ts) / 60)
+    : 0;
+  const compactStatusLabel = isArrival
+    ? compactArrivalRealTs
+      ? t('flightLanded')
+      : compactArrivalDelayMinutes > 0
+        ? `+${compactArrivalDelayMinutes} min`
+        : t('flightOnTime')
+    : statusText;
+  const compactStatusToken = isArrival
+    ? delayToToken(compactArrivalDelayMinutes, Boolean(compactArrivalRealTs), colors, colors.success)
+    : statusColor;
+  const compactLiveTs = isArrival
+    ? compactArrivalRealTs ?? compactArrivalEstimatedTs
+    : item.flight?.time?.real?.departure ?? estimatedDepartureTs;
+  const compactLivePrefix = isArrival
+    ? compactArrivalRealTs ? t('flightAta') : t('flightEta')
+    : item.flight?.time?.real?.departure ? 'ATD' : 'ETD';
+
   return (
     <BoardReveal index={index} enabled={isOperations}>
       <SwipeableFlightCard
         isPinned={isPinned}
-        compact={isOperations}
+        compact={compactMode || isOperations}
         onToggle={() => isPinned ? onUnpin() : onPin(item, direction)}
       >
         <Animated.View style={pinnedPulseStyle ?? undefined}>
@@ -392,6 +417,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
           animatedStyle={[
             s.card,
             !isArrival && s.departureCard,
+            compactMode && s.cardCompact,
             { marginBottom: 0 },
             isOperations && {
               borderLeftColor: brandAccent,
@@ -418,11 +444,11 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
             : [color, hexToRgba(color, 0.84)]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={[s.cardHeader, { borderBottomColor: airlineBorder }]}
+          style={[s.cardHeader, compactMode && s.cardHeaderCompact, { borderBottomColor: airlineBorder }]}
         >
           <View style={[s.airlineBrandRail, { backgroundColor: brandAccent }]} />
           <View style={s.headerLeft}>
-            <LogoPill iataCode={iataCode} airlineName={airline} color={color} />
+            {!compactMode && <LogoPill iataCode={iataCode} airlineName={airline} color={color} />}
             <View style={s.headerText}>
               <View style={s.headerFlightRow}>
                 <Text numberOfLines={1} style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
@@ -431,7 +457,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
                   <Text style={[s.directionBadgeText, { color: directionColor }]}>{directionLabel}</Text>
                 </View>
               </View>
-              <Text numberOfLines={1} style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>
+              {!compactMode && <Text numberOfLines={1} style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>}
             </View>
           </View>
           <ValueChangeFlash
@@ -441,11 +467,39 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
           >
             <Text style={s.headerTime}>{time}</Text>
             <Text style={s.headerAirportCode}>{airportDisplay.code || airportDisplay.compactLabel}</Text>
-            {airportDisplay.name && Boolean(airportDisplay.code) && (
+            {!compactMode && airportDisplay.name && Boolean(airportDisplay.code) && (
               <Text numberOfLines={2} style={s.headerAirportName}>{airportDisplay.name}</Text>
             )}
           </ValueChangeFlash>
         </LinearGradient>
+        {compactMode ? (
+          <View style={s.compactBody}>
+            <View style={s.compactStatusRow}>
+              <ValueChangeFlash
+                valueKey={`${compactStatusLabel}|${compactLiveTs ?? 'scheduled'}`}
+                enabled={isOperations}
+                style={[s.compactStatusPill, { backgroundColor: compactStatusToken + '22' }]}
+              >
+                <Text style={[s.compactStatusText, { color: compactStatusToken }]}>{compactStatusLabel}</Text>
+              </ValueChangeFlash>
+              {compactLiveTs && compactLiveTs !== ts && (
+                <Text style={s.compactLiveTime}>{compactLivePrefix} {fmtTs(compactLiveTs)}</Text>
+              )}
+            </View>
+            <View style={s.compactOpsRow}>
+              <Text style={s.compactOpsText}>{t('flightStand')} <Text style={s.compactOpsValue}>{standLabel}</Text></Text>
+              {!isArrival ? (
+                <>
+                  <Text style={s.compactOpsText}>{t('flightCheckin')} <Text style={s.compactOpsValue}>{checkinLabel}</Text></Text>
+                  <Text style={s.compactOpsText}>{t('flightGate')} <Text style={s.compactOpsValue}>{gateLabel}</Text></Text>
+                </>
+              ) : (
+                <Text style={s.compactOpsText}>{t('flightBelt')} <Text style={s.compactOpsValue}>{beltLabel}</Text></Text>
+              )}
+            </View>
+          </View>
+        ) : (
+          <>
         {!isArrival && (
           <View style={s.linkedArrivalPanel}>
             <View style={s.linkedArrivalIdentity}>
@@ -660,6 +714,8 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
             </ValueChangeFlash>
           )}
         </View>
+          </>
+        )}
         </TactilePressable>
         </Animated.View>
       </SwipeableFlightCard>
@@ -693,6 +749,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const [scheduledCount, setScheduledCount] = useState(0);
   const [pinnedFlight, setPinnedFlight] = useState<any | null>(null);
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
+  const [compactMode, setCompactMode] = useState(false);
   const [sourceDebugVisible, setSourceDebugVisible] = useState(false);
   const [notifSettingsVisible, setNotifSettingsVisible] = useState(false);
   const [notifDialog, setNotifDialog] = useState<{ title: string; message: string; tone: FlightAlertTone } | null>(null);
@@ -709,6 +766,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     setSelectedAirlines(next);
     persistSelectedAirlines(next).catch(() => {});
   }, [persistSelectedAirlines]);
+  const toggleCompactMode = useCallback(() => {
+    setCompactMode(current => {
+      const next = !current;
+      AsyncStorage.setItem(FLIGHT_COMPACT_MODE_KEY, String(next)).catch(() => {});
+      return next;
+    });
+  }, []);
   const selectedAirlinesRef = useRef<string[]>([]);
   const notifSettingsRef = useRef<FlightNotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
@@ -729,6 +793,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
   useEffect(() => {
     AsyncStorage.getItem(NOTIF_ENABLED_KEY).then(v => setNotifsEnabled(v === 'true'));
+    AsyncStorage.getItem(FLIGHT_COMPACT_MODE_KEY).then(v => setCompactMode(v === 'true'));
     AsyncStorage.getItem(NOTIF_SETTINGS_KEY).then(raw => {
       if (!raw) return;
       try {
@@ -1587,12 +1652,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       onUnpin={unpinFlight}
       colors={colors}
       isOperations={isOperations}
+      compactMode={compactMode}
       s={s}
       smPool={visibleStaffMonitorDepartures}
       locale={locale}
       t={t}
     />
-  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, visibleStaffMonitorDepartures, locale, t]);
+  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, compactMode, visibleStaffMonitorDepartures, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');
@@ -1613,6 +1679,16 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           accessibilityRole="button"
         >
           <MaterialIcons name="filter-list" size={20} color={!allSelected ? '#fff' : '#64748B'} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.viewModeBtn, compactMode && s.viewModeBtnActive]}
+          onPress={toggleCompactMode}
+          activeOpacity={0.8}
+          accessibilityLabel={t(compactMode ? 'flightCompactDisable' : 'flightCompactEnable')}
+          accessibilityRole="button"
+          accessibilityState={{ selected: compactMode }}
+        >
+          <MaterialIcons name={compactMode ? 'view-stream' : 'view-agenda'} size={20} color={compactMode ? '#fff' : '#64748B'} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.notifBtn, notifsEnabled && s.notifBtnActive]}
@@ -1834,6 +1910,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     segBtnTextActive: { color: c.primaryText, fontWeight: '800' },
     card: { backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 12, elevation: isOperations || c.isDark ? 0 : 4, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
     departureCard: { minHeight: isOperations ? 300 : 330 },
+    cardCompact: { minHeight: 0 },
     cardShift: { borderWidth: 1.5, borderColor: c.warning },
     shiftBanner: { backgroundColor: c.warning, paddingVertical: 5, paddingHorizontal: SPACING.md },
     shiftBannerText: { color: '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
@@ -1843,6 +1920,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     statusPill: { paddingHorizontal: 10, paddingVertical: isOperations ? 3 : 4, borderRadius: isOperations ? 10 : 20, marginTop: isOperations ? 6 : 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
     statusText: { ...TYPE.micro, letterSpacing: isOperations ? 0.6 : 0 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 12 : 14, paddingHorizontal: 16, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
+    cardHeaderCompact: { minHeight: 64, paddingVertical: 9, paddingHorizontal: 14 },
     airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
     headerLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerText: { flex: 1, minWidth: 0 },
@@ -1867,6 +1945,14 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     linkedArrivalTimeLabel: { fontSize: 9, lineHeight: 12, fontWeight: '900', color: c.textSub, letterSpacing: 0.7 },
     linkedArrivalTime: { marginTop: 2, fontSize: 14, lineHeight: 17, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
     cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 12 : 14, paddingHorizontal: 16, backgroundColor: operationPanel },
+    compactBody: { paddingHorizontal: 14, paddingVertical: 9, gap: 8, backgroundColor: operationPanel },
+    compactStatusRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    compactStatusPill: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: RADIUS.pill },
+    compactStatusText: { ...TYPE.micro, fontWeight: '900' },
+    compactLiveTime: { fontSize: 12, lineHeight: 16, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
+    compactOpsRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10 },
+    compactOpsText: { fontSize: 11, lineHeight: 15, color: c.textSub },
+    compactOpsValue: { fontWeight: '900', color: c.text },
     bodyInfo: { fontSize: 11, color: c.textSub },
     bodyTime: { fontWeight: '700', color: c.text },
     opsRow: { flexDirection: 'row', gap: 10 },
@@ -1881,6 +1967,8 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
     filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     filterBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
+    viewModeBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    viewModeBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
     alertOverlay: { flex: 1, backgroundColor: 'rgba(2,6,23,0.55)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xxl },
     alertCard: {

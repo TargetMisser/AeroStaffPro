@@ -137,6 +137,41 @@ const shortYearParsed = parser.parseShiftCells(shortYearCells);
 assert(JSON.stringify(shortYearParsed.dates) === JSON.stringify(['2026-08-03', '2026-08-04']), 'dd/mm/yy dates should be accepted');
 assert(shortYearParsed.employees[0].shifts[1].type === 'work' && shortYearParsed.employees[0].shifts[1].start === '08:00', 'comma-separated shifts should remain supported with short-year dates');
 
+// ─── parseShiftCells: horizontally paginated weekday/weekend export ─────────
+const splitPageCells = [
+  cell('17/08/26', 100, 50, 0),
+  cell('18/08/26', 160, 50, 0),
+  cell('Mario Rossi', 10, 80, 0),
+  cell('08.00-16.00', 100, 80, 0),
+  cell('R', 160, 80, 0),
+  cell('PAPUCCI', 10, 80, 1),
+  cell('CORRADO', 10, 88, 1),
+  cell('18.00-22.00', 100, 80, 1),
+  cell('R', 160, 80, 1),
+  cell('22/08/26', 100, 50, 3),
+  cell('23/08/26', 160, 50, 3),
+  cell('09.00-17.00', 100, 80, 3),
+  cell('R', 160, 80, 3),
+  cell('19.30-23.30', 100, 80, 4),
+  cell('17.30-21.30', 160, 80, 4),
+];
+const splitPageParsed = parser.parseShiftCells(splitPageCells);
+assert(
+  JSON.stringify(splitPageParsed.dates) === JSON.stringify(['2026-08-17', '2026-08-18', '2026-08-22', '2026-08-23']),
+  'horizontal page sections should keep weekday and weekend dates in section order',
+);
+const splitCorrado = splitPageParsed.employees.find(e => e.name === 'PAPUCCI CORRADO');
+assert(splitCorrado, 'names from vertically continued pages should be retained');
+assert(
+  JSON.stringify(splitCorrado.shifts) === JSON.stringify([
+    { date: '2026-08-17', type: 'work', start: '18:00', end: '22:00' },
+    { date: '2026-08-18', type: 'rest' },
+    { date: '2026-08-22', type: 'work', start: '19:30', end: '23:30' },
+    { date: '2026-08-23', type: 'work', start: '17:30', end: '21:30' },
+  ]),
+  'weekend continuation cells should attach to the matching employee row',
+);
+
 // ─── parseShiftCells: empty input ────────────────────────────────────────────
 const emptyParsed = parser.parseShiftCells([]);
 assert(emptyParsed.dates.length === 0 && emptyParsed.employees.length === 0, 'parsing an empty cell list should return empty dates and employees');

@@ -307,6 +307,15 @@ assert(
   'flight cards must remain large enough for both departure detail rows without clipping',
 );
 assert(
+  flightScreenSource.includes("const FLIGHT_COMPACT_MODE_KEY = 'aerostaff_flight_compact_mode_v1'")
+    && flightScreenSource.includes('AsyncStorage.getItem(FLIGHT_COMPACT_MODE_KEY)')
+    && flightScreenSource.includes('AsyncStorage.setItem(FLIGHT_COMPACT_MODE_KEY, String(next))')
+    && flightScreenSource.includes('compactMode={compactMode}')
+    && flightScreenSource.includes('compactMode ? (')
+    && flightScreenSource.includes("t(compactMode ? 'flightCompactDisable' : 'flightCompactEnable')"),
+  'flight compact mode must be persisted, user-toggleable, and passed to every flight row',
+);
+assert(
   flightScreenSource.includes('filterFlightsByAirlines(mergedDeps, wAllowedAirlines)'),
   'the foreground widget writer must treat an empty airline selection as no flights',
 );

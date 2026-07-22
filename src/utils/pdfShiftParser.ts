@@ -12,6 +12,16 @@ export type ParsedSchedule = { dates: string[]; employees: ParsedEmployee[] };
 export type PdfTextCell = { text: string; x: number; y: number; page: number };
 export type PdfExtractedFile = { cells: PdfTextCell[] };
 
+type DatedPdfTextCell = PdfTextCell & { date: string };
+type ColumnLayout = {
+  dates: string[];
+  ranges: { min: number; max: number }[];
+  nameThreshold: number;
+};
+
+const DAY_HEADER_PATTERN = /^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i;
+const SHIFT_CELL_PATTERN = /^\d{1,2}[,.:]\d{2}-\d{1,2}[,.:]\d{2,3}$/;
+
 function parsePdfDate(text: string): string | null {
   const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
   if (!match) return null;
@@ -43,6 +53,104 @@ function parsePdfDate(text: string): string | null {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+function buildColumnLayout(dateCells: DatedPdfTextCell[]): ColumnLayout {
+  const sorted = [...dateCells].sort((a, b) => a.x - b.x);
+  const centers = sorted.map(cell => cell.x);
+  const ranges = centers.map((center, index) => {
+    const previous = index > 0 ? centers[index - 1] : center - 80;
+    const next = index < centers.length - 1 ? centers[index + 1] : center + 80;
+    return { min: (previous + center) / 2, max: (center + next) / 2 };
+  });
+  return {
+    dates: sorted.map(cell => cell.date),
+    ranges,
+    nameThreshold: ranges[0].min,
+  };
+}
+
+function findColumnIndex(x: number, ranges: ColumnLayout['ranges']): number {
+  return ranges.findIndex(range => x >= range.min && x < range.max);
+}
+
+function parseShiftValue(text: string, date: string): ParsedShift {
+  if (text.toUpperCase() === 'R' || text.toUpperCase() === 'F') return { date, type: 'rest' };
+  const match = text.match(/^(\d{1,2})[,.:.](\d{2})-(\d{1,2})[,.:.](\d{2})/);
+  if (!match) return { date, type: 'rest' };
+  return {
+    date,
+    type: 'work',
+    start: `${match[1].padStart(2, '0')}:${match[2]}`,
+    end: `${match[3].padStart(2, '0')}:${match[4]}`,
+  };
+}
+
+function parseHorizontallySplitSchedule(
+  cells: PdfTextCell[],
+  datedCells: DatedPdfTextCell[],
+  headerPages: number[],
+): ParsedSchedule {
+  const nonEmptyPages = Array.from(new Set(cells.map(cell => cell.page))).sort((a, b) => a - b);
+  const sections = headerPages.map((headerPage, index) => {
+    const nextHeaderPage = headerPages[index + 1] ?? Number.POSITIVE_INFINITY;
+    const pages = nonEmptyPages.filter(page => page >= headerPage && page < nextHeaderPage);
+    const layout = buildColumnLayout(datedCells.filter(cell => cell.page === headerPage));
+    return { pages, layout };
+  });
+  const primary = sections[0];
+  const employees: { name: string; y: number; pageOffset: number }[] = [];
+
+  primary.pages.forEach((page, pageOffset) => {
+    const nameOnly = cells
+      .filter(cell => (
+        cell.page === page
+        && cell.x < primary.layout.nameThreshold
+        && parsePdfDate(cell.text) === null
+        && !DAY_HEADER_PATTERN.test(cell.text)
+        && !SHIFT_CELL_PATTERN.test(cell.text)
+        && cell.text !== 'R'
+        && cell.text !== 'F'
+      ))
+      .sort((a, b) => a.y - b.y);
+
+    let index = 0;
+    while (index < nameOnly.length) {
+      const base = nameOnly[index];
+      let name = base.text;
+      let next = index + 1;
+      while (next < nameOnly.length && nameOnly[next].y - base.y < 20) {
+        name += ` ${nameOnly[next].text}`;
+        next++;
+      }
+      employees.push({ name: name.trim(), y: base.y, pageOffset });
+      index = next;
+    }
+  });
+
+  const result = employees.map(employee => {
+    const shifts = sections.flatMap(section => {
+      const targetPage = section.pages[employee.pageOffset];
+      if (targetPage === undefined) return [];
+      const nearby = cells.filter(cell => (
+        cell.page === targetPage
+        && cell.x >= section.layout.nameThreshold
+        && parsePdfDate(cell.text) === null
+        && !DAY_HEADER_PATTERN.test(cell.text)
+        && Math.abs(cell.y - employee.y) < 20
+      ));
+      return section.layout.dates.flatMap((date, dateIndex): ParsedShift[] => {
+        const cell = nearby.find(candidate => findColumnIndex(candidate.x, section.layout.ranges) === dateIndex);
+        return cell ? [parseShiftValue(cell.text, date)] : [];
+      });
+    });
+    return { name: employee.name, shifts };
+  });
+
+  return {
+    dates: sections.flatMap(section => section.layout.dates),
+    employees: result,
+  };
+}
+
 export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
   // 1. Find dates and build dynamic column ranges. Current company exports
   // may mix dd/mm/yy, dd/mm/yyyy and unpadded mm/dd/yyyy in the same sheet.
@@ -50,6 +158,10 @@ export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
     .map(c => ({ ...c, date: parsePdfDate(c.text) }))
     .filter((c): c is PdfTextCell & { date: string } => c.date !== null)
     .sort((a, b) => a.x - b.x);
+  const headerPages = Array.from(new Set(dateCells.map(cell => cell.page))).sort((a, b) => a - b);
+  if (headerPages.length > 1) {
+    return parseHorizontallySplitSchedule(cells, dateCells, headerPages);
+  }
   const dates = dateCells.map(c => c.date);
 
   if (dates.length === 0) return { dates: [], employees: [] };
@@ -74,12 +186,11 @@ export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
 
   // 2. Separate name cells (x < first column min) and shift cells
   const nameThreshold = colRanges[0].min;
-  const nameCells = cells.filter(c => c.x < nameThreshold && parsePdfDate(c.text) === null && !/^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i.test(c.text));
-  const shiftCells = cells.filter(c => c.x >= nameThreshold && parsePdfDate(c.text) === null && !/^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i.test(c.text));
+  const nameCells = cells.filter(c => c.x < nameThreshold && parsePdfDate(c.text) === null && !DAY_HEADER_PATTERN.test(c.text));
+  const shiftCells = cells.filter(c => c.x >= nameThreshold && parsePdfDate(c.text) === null && !DAY_HEADER_PATTERN.test(c.text));
 
   // 3. Group name cells into employee names (multi-line names within 20px y)
-  const shiftPattern = /^\d{1,2}[,.:]\d{2}-\d{1,2}[,.:]\d{2,3}$/;
-  const nameOnly = nameCells.filter(c => !shiftPattern.test(c.text) && c.text !== 'R' && c.text !== 'F');
+  const nameOnly = nameCells.filter(c => !SHIFT_CELL_PATTERN.test(c.text) && c.text !== 'R' && c.text !== 'F');
   nameOnly.sort((a, b) => a.page - b.page || a.y - b.y);
 
   const employees: { name: string; y: number; page: number }[] = [];
@@ -106,17 +217,7 @@ export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
       // 1-2 August export) keep earlier dates as empty layout columns; turning
       // those blanks into rest events would overwrite previously saved shifts.
       if (!cell) return [];
-      if (cell.text.toUpperCase() === 'R' || cell.text.toUpperCase() === 'F') return [{ date, type: 'rest' as const }];
-      const match = cell.text.match(/^(\d{1,2})[,.:.](\d{2})-(\d{1,2})[,.:.](\d{2})/);
-      if (match) {
-        return [{
-          date,
-          type: 'work' as const,
-          start: `${match[1].padStart(2, '0')}:${match[2]}`,
-          end: `${match[3].padStart(2, '0')}:${match[4]}`,
-        }];
-      }
-      return [{ date, type: 'rest' as const }];
+      return [parseShiftValue(cell.text, date)];
     });
     return { name: emp.name, shifts };
   });
