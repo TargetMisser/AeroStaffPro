@@ -307,13 +307,15 @@ assert(
   'flight cards must remain large enough for both departure detail rows without clipping',
 );
 assert(
-  flightScreenSource.includes("const FLIGHT_COMPACT_MODE_KEY = 'aerostaff_flight_compact_mode_v1'")
-    && flightScreenSource.includes('AsyncStorage.getItem(FLIGHT_COMPACT_MODE_KEY)')
-    && flightScreenSource.includes('AsyncStorage.setItem(FLIGHT_COMPACT_MODE_KEY, String(next))')
-    && flightScreenSource.includes('compactMode={compactMode}')
+  flightScreenSource.includes('const [expanded, setExpanded] = useState(false)')
+    && flightScreenSource.includes('const compactMode = !expanded')
+    && flightScreenSource.includes('onPress={() => setExpanded(current => !current)}')
+    && flightScreenSource.includes("t(expanded ? 'flightCollapseDetails' : 'flightExpandDetails')")
     && flightScreenSource.includes('compactMode ? (')
-    && flightScreenSource.includes("t(compactMode ? 'flightCompactDisable' : 'flightCompactEnable')"),
-  'flight compact mode must be persisted, user-toggleable, and passed to every flight row',
+    && flightScreenSource.includes('event.stopPropagation()')
+    && flightScreenSource.includes('>FR24</Text>')
+    && !flightScreenSource.includes('FLIGHT_COMPACT_MODE_KEY'),
+  'flight rows must start compact, expand on card press, and keep FR24 behind a separate button',
 );
 assert(
   flightScreenSource.includes('filterFlightsByAirlines(mergedDeps, wAllowedAirlines)'),
