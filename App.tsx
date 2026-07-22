@@ -126,16 +126,6 @@ function AppInner() {
 
   }, []);
 
-  // ─── Android back button: overlay → home, drawer → close ───────────────────
-  useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (drawerOpen) { setDrawerOpen(false); return true; }
-      if (overlay) { setOverlay(null); return true; }
-      return false; // default behaviour (exit app) solo dalla home
-    });
-    return () => sub.remove();
-  }, [drawerOpen, overlay]);
-
   // ─── Sincronizzazione tema widget all'avvio/ripristino ───────────────────────
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
@@ -196,6 +186,17 @@ function AppInner() {
     const targetOffset = -newIdx * SCREEN_W;
     goToTabTransition(targetOffset, animated);
   }, [SCREEN_W, goToTabTransition, setTabIndex]);
+
+  // ─── Android back button: overlay/drawer → close, tab secondaria → home ─────
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (drawerOpen) { setDrawerOpen(false); return true; }
+      if (overlay) { setOverlay(null); return true; }
+      if (activeTab !== 'Shifts') { goToTab(0); return true; }
+      return false; // il comportamento di sistema chiude l'app solo dalla Home
+    });
+    return () => sub.remove();
+  }, [activeTab, drawerOpen, goToTab, overlay]);
 
   const settleCurrentTab = useCallback((idx: number) => {
     const targetOffset = -idx * SCREEN_W;

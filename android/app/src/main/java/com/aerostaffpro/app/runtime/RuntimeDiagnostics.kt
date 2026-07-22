@@ -29,7 +29,10 @@ object RuntimeDiagnostics {
     private const val KEY_LAST_EXIT_INFO = "last_exit_info"
     private const val KEY_LAST_PROCESSED_EXIT_TIMESTAMP = "last_processed_exit_timestamp"
     private const val LOG_FILE_NAME = "runtime-events.log"
-    private const val PUBLIC_LOG_FILE_NAME = "AeroStaffPro-runtime-events.log"
+    // Some MediaStore implementations append .txt automatically to text/plain
+    // names that end in .log, so the subsequent exact-name lookup misses the
+    // file and creates a numbered duplicate at every startup.
+    private const val PUBLIC_LOG_FILE_NAME = "AeroStaffPro-runtime-events.txt"
     private const val LOG_MIME_TYPE = "text/plain"
     private const val MAX_EXIT_TRACE_LINES = 120
     private const val MAX_EXIT_TRACE_CHARS = 12000

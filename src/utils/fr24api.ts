@@ -19,6 +19,7 @@ import { FLIGHT_CRITICAL_REFRESH_TIMEOUT_MS } from './flightRefreshPolicy';
 import {
   filterFlightsByAirlines,
   getFlightBestTs,
+  getFlightScheduledTs,
   mergeFlightLists,
   pruneExpiredFlights,
   pruneUnseenFlights,
@@ -195,7 +196,10 @@ function isSameLocalDay(ts: number | undefined, day: Date): boolean {
 
 function countFlightsOnDay(items: any[], direction: FlightDirection, day: Date): number {
   return items.reduce(
-    (count, item) => count + (isSameLocalDay(getFlightBestTs(item, direction), day) ? 1 : 0),
+    (count, item) => count + (isSameLocalDay(
+      getFlightScheduledTs(item, direction) ?? getFlightBestTs(item, direction),
+      day,
+    ) ? 1 : 0),
     0,
   );
 }

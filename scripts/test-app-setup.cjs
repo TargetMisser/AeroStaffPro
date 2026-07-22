@@ -238,6 +238,21 @@ assert(
   'widget background refresh must call staffMonitorProvider.fetch for supported airports',
 );
 
+const appSource = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
+assert(
+  /activeTab\s*!==\s*['"]Shifts['"]\)\s*\{\s*goToTab\(0\);\s*return true;\s*\}/.test(appSource),
+  'Android back from a secondary tab should navigate home instead of exiting the app',
+);
+
+const runtimeDiagnosticsSource = fs.readFileSync(
+  path.join(root, 'android/app/src/main/java/com/aerostaffpro/app/runtime/RuntimeDiagnostics.kt'),
+  'utf8',
+);
+assert(
+  runtimeDiagnosticsSource.includes('PUBLIC_LOG_FILE_NAME = "AeroStaffPro-runtime-events.txt"'),
+  'the public runtime log should use a stable .txt display name that MediaStore can find again',
+);
+
 const flightScreenSource = fs.readFileSync(path.join(root, 'src/screens/FlightScreen.tsx'), 'utf8');
 const fr24ApiSource = fs.readFileSync(path.join(root, 'src/utils/fr24api.ts'), 'utf8');
 assert(

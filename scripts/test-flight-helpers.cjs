@@ -261,6 +261,38 @@ assert(
   refreshedExternalLink.flight._fr24Id === '3abc5678',
   'fresh FR24 metadata should replace an older cached leg id',
 );
+const cachedAdsbDeparture = {
+  ...cachedExternalLinkItem,
+  flight: {
+    ...cachedExternalLinkItem.flight,
+    time: { ...cachedExternalLinkItem.flight.time, real: { departure: 1120 } },
+    _departureStatusSource: 'adsb',
+  },
+};
+const preservedAdsbDeparture = flightExternalLinks.mergeFlightExternalLinkMetadata(
+  cachedAdsbDeparture,
+  freshExternalLinkItem,
+);
+assert(
+  preservedAdsbDeparture.flight.time.real.departure === 1120
+    && preservedAdsbDeparture.flight._departureStatusSource === 'adsb',
+  'a provider refresh must preserve an ADS-B-confirmed real departure',
+);
+const providerRealDeparture = flightExternalLinks.mergeFlightExternalLinkMetadata(
+  cachedAdsbDeparture,
+  {
+    ...freshExternalLinkItem,
+    flight: {
+      ...freshExternalLinkItem.flight,
+      time: { ...freshExternalLinkItem.flight.time, real: { departure: 1130 } },
+    },
+  },
+);
+assert(
+  providerRealDeparture.flight.time.real.departure === 1130
+    && providerRealDeparture.flight._departureStatusSource !== 'adsb',
+  'a fresh provider real departure must replace the older ADS-B estimate',
+);
 
 const unifiedFlightList = loadTsModule('src/utils/unifiedFlightList.ts', {
   './flightScheduleAdapter': adapter,
@@ -1449,6 +1481,7 @@ async function runProviderLayerTests() {
   const now = new Date(2026, 4, 12, 12, 0, 0);
   const todayTs = Math.floor(new Date(2026, 4, 12, 14, 0, 0).getTime() / 1000);
   const tomorrowTs = Math.floor(new Date(2026, 4, 13, 14, 0, 0).getTime() / 1000);
+  const delayedPastMidnightTs = Math.floor(new Date(2026, 4, 13, 0, 55, 0).getTime() / 1000);
   const calls = [];
   const contexts = [];
   const providerLayer = loadTsModule('src/utils/flightProviders/index.ts', {
@@ -1828,6 +1861,22 @@ async function runProviderLayerTests() {
   assert(aeroDataBoxStatus?.tomorrowDepartures === 1, 'provider diagnostics should count AeroDataBox tomorrow departures');
   assert(aeroDataBoxStatus?.tomorrowArrivals === 1, 'provider diagnostics should count AeroDataBox tomorrow arrivals');
   assert(aeroDataBoxStatus?.todayDepartures === 0, 'provider diagnostics should count AeroDataBox today departures separately');
+
+  const delayedToday = makeProviderFlight('FR6334', todayTs);
+  delayedToday.flight.time.estimated.departure = delayedPastMidnightTs;
+  const delayedDayPayload = await providerLayer.fetchFlightScheduleFromProviders({
+    airportCode: 'PSA',
+    airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+    now,
+  }, [makeProvider('staffMonitor', 'StaffMonitor PSA', {
+    allArrivals: [],
+    allDepartures: [delayedToday],
+  }, [])]);
+  const delayedDayStatus = delayedDayPayload.diagnostics[0];
+  assert(
+    delayedDayStatus.todayDepartures === 1 && delayedDayStatus.tomorrowDepartures === 0,
+    'provider coverage must bucket a delayed-after-midnight flight by its scheduled service day',
+  );
 
   const thinTodayCalls = [];
   const thinTodayContexts = [];

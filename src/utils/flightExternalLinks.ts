@@ -24,12 +24,28 @@ export function getFlightradar24ArrivalTarget(
 /** Keep an exact FR24 leg id through cache/provider refreshes that lack one. */
 export function mergeFlightExternalLinkMetadata(cachedItem: any, freshItem: any): any {
   const fr24Id = getFlightradar24FlightId(freshItem) ?? getFlightradar24FlightId(cachedItem);
-  if (!fr24Id) return freshItem;
+  const cachedDeparture = cachedItem?.flight?.time?.real?.departure;
+  const freshDeparture = freshItem?.flight?.time?.real?.departure;
+  const preserveAdsbDeparture = cachedItem?.flight?._departureStatusSource === 'adsb'
+    && typeof cachedDeparture === 'number'
+    && typeof freshDeparture !== 'number';
+
+  if (!fr24Id && !preserveAdsbDeparture) return freshItem;
   return {
     ...freshItem,
     flight: {
       ...(freshItem?.flight ?? {}),
-      _fr24Id: fr24Id,
+      ...(fr24Id ? { _fr24Id: fr24Id } : {}),
+      ...(preserveAdsbDeparture ? {
+        time: {
+          ...(freshItem?.flight?.time ?? {}),
+          real: {
+            ...(freshItem?.flight?.time?.real ?? {}),
+            departure: cachedDeparture,
+          },
+        },
+        _departureStatusSource: 'adsb',
+      } : {}),
     },
   };
 }

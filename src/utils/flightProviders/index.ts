@@ -2,7 +2,7 @@ import { aeroDataBoxProvider } from './aeroDataBoxProvider';
 import { airLabsProvider } from './airLabsProvider';
 import { fr24ApiProvider, fr24PublicProvider } from './fr24Provider';
 import { staffMonitorProvider } from './staffMonitorProvider';
-import { getFlightBestTs, mergeFlightLists, type FlightDirection } from '../flightScheduleAdapter';
+import { getFlightBestTs, getFlightScheduledTs, mergeFlightLists, type FlightDirection } from '../flightScheduleAdapter';
 import type { FlightProviderPreference } from '../flightProviderSettings';
 import type {
   FlightSchedulePayload,
@@ -202,8 +202,12 @@ function isSameLocalDay(ts: number | undefined, day: Date): boolean {
     && actual.getDate() === day.getDate();
 }
 
+function getFlightServiceDayTs(item: any, direction: FlightDirection): number | undefined {
+  return getFlightScheduledTs(item, direction) ?? getFlightBestTs(item, direction);
+}
+
 function hasFlightsOnDay(items: any[], direction: FlightDirection, day: Date): boolean {
-  return items.some(item => isSameLocalDay(getFlightBestTs(item, direction), day));
+  return items.some(item => isSameLocalDay(getFlightServiceDayTs(item, direction), day));
 }
 
 function isScheduleBackedFlight(item: any): boolean {
@@ -212,12 +216,12 @@ function isScheduleBackedFlight(item: any): boolean {
 }
 
 function hasScheduleBackedFlightsOnDay(items: any[], direction: FlightDirection, day: Date): boolean {
-  return items.some(item => isScheduleBackedFlight(item) && isSameLocalDay(getFlightBestTs(item, direction), day));
+  return items.some(item => isScheduleBackedFlight(item) && isSameLocalDay(getFlightServiceDayTs(item, direction), day));
 }
 
 function countFlightsOnDay(items: any[], direction: FlightDirection, day: Date): number {
   return items.reduce(
-    (count, item) => count + (isSameLocalDay(getFlightBestTs(item, direction), day) ? 1 : 0),
+    (count, item) => count + (isSameLocalDay(getFlightServiceDayTs(item, direction), day) ? 1 : 0),
     0,
   );
 }
