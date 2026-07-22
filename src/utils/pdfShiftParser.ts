@@ -12,14 +12,45 @@ export type ParsedSchedule = { dates: string[]; employees: ParsedEmployee[] };
 export type PdfTextCell = { text: string; x: number; y: number; page: number };
 export type PdfExtractedFile = { cells: PdfTextCell[] };
 
+function parsePdfDate(text: string): string | null {
+  const match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (!match) return null;
+
+  const first = Number(match[1]);
+  const second = Number(match[2]);
+  const year = match[3].length === 2 ? 2000 + Number(match[3]) : Number(match[3]);
+
+  let day = first;
+  let month = second;
+
+  // The company exports use both Italian dates (01/08/26) and Excel's
+  // unpadded US dates (7/27/2026). A value above 12 is definitive; for
+  // otherwise ambiguous four-digit dates, the unpadded first component is
+  // the format emitted by the US-style export.
+  if (second > 12 || (first <= 12 && second <= 12 && match[3].length === 4 && match[1].length === 1)) {
+    day = second;
+    month = first;
+  }
+
+  if (day < 1 || month < 1 || month > 12) return null;
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    candidate.getUTCFullYear() !== year
+    || candidate.getUTCMonth() !== month - 1
+    || candidate.getUTCDate() !== day
+  ) return null;
+
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
-  // 1. Find dates (format dd/mm/yyyy) and build dynamic column ranges
-  const datePattern = /^\d{2}\/\d{2}\/\d{4}$/;
-  const dateCells = cells.filter(c => datePattern.test(c.text)).sort((a, b) => a.x - b.x);
-  const dates = dateCells.map(c => {
-    const [d, m, y] = c.text.split('/');
-    return `${y}-${m}-${d}`; // ISO format
-  });
+  // 1. Find dates and build dynamic column ranges. Current company exports
+  // may mix dd/mm/yy, dd/mm/yyyy and unpadded mm/dd/yyyy in the same sheet.
+  const dateCells = cells
+    .map(c => ({ ...c, date: parsePdfDate(c.text) }))
+    .filter((c): c is PdfTextCell & { date: string } => c.date !== null)
+    .sort((a, b) => a.x - b.x);
+  const dates = dateCells.map(c => c.date);
 
   if (dates.length === 0) return { dates: [], employees: [] };
 
@@ -43,8 +74,8 @@ export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
 
   // 2. Separate name cells (x < first column min) and shift cells
   const nameThreshold = colRanges[0].min;
-  const nameCells = cells.filter(c => c.x < nameThreshold && !datePattern.test(c.text) && !/^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i.test(c.text));
-  const shiftCells = cells.filter(c => c.x >= nameThreshold && !datePattern.test(c.text) && !/^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i.test(c.text));
+  const nameCells = cells.filter(c => c.x < nameThreshold && parsePdfDate(c.text) === null && !/^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i.test(c.text));
+  const shiftCells = cells.filter(c => c.x >= nameThreshold && parsePdfDate(c.text) === null && !/^(luned|marted|mercoled|gioved|venerd|sabato|domenica)/i.test(c.text));
 
   // 3. Group name cells into employee names (multi-line names within 20px y)
   const shiftPattern = /^\d{1,2}[,.:]\d{2}-\d{1,2}[,.:]\d{2,3}$/;
@@ -69,20 +100,23 @@ export function parseShiftCells(cells: PdfTextCell[]): ParsedSchedule {
   // 4. For each employee, find their shift values by matching nearby cells to columns
   const result: ParsedEmployee[] = employees.map(emp => {
     const nearby = shiftCells.filter(c => c.page === emp.page && Math.abs(c.y - emp.y) < 20);
-    const shifts: ParsedShift[] = dates.map((date, di) => {
+    const shifts: ParsedShift[] = dates.flatMap((date, di): ParsedShift[] => {
       const cell = nearby.find(c => colIndex(c.x) === di);
-      if (!cell) return { date, type: 'rest' as const };
-      if (cell.text.toUpperCase() === 'R' || cell.text.toUpperCase() === 'F') return { date, type: 'rest' as const };
+      // A missing cell is not a rest day. Partial sheets (for example the
+      // 1-2 August export) keep earlier dates as empty layout columns; turning
+      // those blanks into rest events would overwrite previously saved shifts.
+      if (!cell) return [];
+      if (cell.text.toUpperCase() === 'R' || cell.text.toUpperCase() === 'F') return [{ date, type: 'rest' as const }];
       const match = cell.text.match(/^(\d{1,2})[,.:.](\d{2})-(\d{1,2})[,.:.](\d{2})/);
       if (match) {
-        return {
+        return [{
           date,
           type: 'work' as const,
           start: `${match[1].padStart(2, '0')}:${match[2]}`,
           end: `${match[3].padStart(2, '0')}:${match[4]}`,
-        };
+        }];
       }
-      return { date, type: 'rest' as const };
+      return [{ date, type: 'rest' as const }];
     });
     return { name: emp.name, shifts };
   });

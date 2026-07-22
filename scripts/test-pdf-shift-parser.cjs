@@ -100,6 +100,43 @@ assert(anna.shifts[0].type === 'rest', '"R" cell should be parsed as a rest day 
 assert(anna.shifts[1].type === 'work' && anna.shifts[1].start === '14:30' && anna.shifts[1].end === '22:45', 'dot-separated shift "14.30-22.45" should parse as a work shift 14:30-22:45');
 assert(anna.shifts[2].type === 'rest', '"F" cell should be parsed as a rest day');
 
+// ─── parseShiftCells: mixed date formats from the August company export ─────
+const augustCells = [
+  cell('7/27/2026', 100, 50),
+  cell('7/28/2026', 160, 50),
+  cell('7/29/2026', 220, 50),
+  cell('7/30/2026', 280, 50),
+  cell('7/31/2026', 340, 50),
+  cell('01/08/26', 400, 50),
+  cell('02/08/26', 460, 50),
+  cell('PAPUCCI CORRADO', 10, 80),
+  cell('19.30-23.30', 400, 80),
+  cell('17.30-21.30', 460, 80),
+];
+const augustParsed = parser.parseShiftCells(augustCells);
+assert(
+  JSON.stringify(augustParsed.dates) === JSON.stringify([
+    '2026-07-27', '2026-07-28', '2026-07-29', '2026-07-30', '2026-07-31', '2026-08-01', '2026-08-02',
+  ]),
+  'mixed US-style and short Italian dates should be converted to ISO in column order',
+);
+const corrado = augustParsed.employees.find(e => e.name === 'PAPUCCI CORRADO');
+assert(corrado, 'the August export should retain the employee name');
+assert(corrado.shifts.length === 2, 'empty layout columns must not be converted into rest days');
+assert(corrado.shifts[0].date === '2026-08-01' && corrado.shifts[0].type === 'work' && corrado.shifts[0].start === '19:30' && corrado.shifts[0].end === '23:30', '01/08/26 should retain its work shift');
+assert(corrado.shifts[1].date === '2026-08-02' && corrado.shifts[1].type === 'work' && corrado.shifts[1].start === '17:30' && corrado.shifts[1].end === '21:30', '02/08/26 should retain its work shift');
+
+const shortYearCells = [
+  cell('03/08/26', 100, 50),
+  cell('04/08/26', 160, 50),
+  cell('PAPUCCI CORRADO', 10, 80),
+  cell('R', 100, 80),
+  cell('08,00-16,00', 160, 80),
+];
+const shortYearParsed = parser.parseShiftCells(shortYearCells);
+assert(JSON.stringify(shortYearParsed.dates) === JSON.stringify(['2026-08-03', '2026-08-04']), 'dd/mm/yy dates should be accepted');
+assert(shortYearParsed.employees[0].shifts[1].type === 'work' && shortYearParsed.employees[0].shifts[1].start === '08:00', 'comma-separated shifts should remain supported with short-year dates');
+
 // ─── parseShiftCells: empty input ────────────────────────────────────────────
 const emptyParsed = parser.parseShiftCells([]);
 assert(emptyParsed.dates.length === 0 && emptyParsed.employees.length === 0, 'parsing an empty cell list should return empty dates and employees');
