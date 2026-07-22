@@ -348,7 +348,9 @@ function AppInner() {
             key={tab.id}
             style={[StyleSheet.absoluteFill, { transform: [{ translateX: Animated.add(offsetX, i * SCREEN_W) }] }]}
           >
-            {renderTabScreen(tab.id)}
+            {tab.id !== 'TravelDoc' || activeTab === 'TravelDoc'
+              ? renderTabScreen(tab.id)
+              : null}
           </Animated.View>
         ))}
       </View>

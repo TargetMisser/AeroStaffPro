@@ -243,6 +243,19 @@ assert(
   /activeTab\s*!==\s*['"]Shifts['"]\)\s*\{\s*goToTab\(0\);\s*return true;\s*\}/.test(appSource),
   'Android back from a secondary tab should navigate home instead of exiting the app',
 );
+assert(
+  /tab\.id\s*!==\s*['"]TravelDoc['"]\s*\|\|\s*activeTab\s*===\s*['"]TravelDoc['"]/.test(appSource),
+  'TravelDoc should mount only while its tab is active so its WebView is released on exit',
+);
+
+const lazyHomeScreenSource = fs.readFileSync(path.join(root, 'src/screens/HomeScreen.tsx'), 'utf8');
+assert(
+  lazyHomeScreenSource.includes('const [ocrEngineActive, setOcrEngineActive] = useState(false)')
+    && /ocrEngineActive\s*&&\s*\(/.test(lazyHomeScreenSource)
+    && lazyHomeScreenSource.includes('onLoadEnd={runPendingOcr}')
+    && lazyHomeScreenSource.includes('setOcrEngineActive(false)'),
+  'the hidden OCR WebView should mount on demand and be released after processing',
+);
 
 const runtimeDiagnosticsSource = fs.readFileSync(
   path.join(root, 'android/app/src/main/java/com/aerostaffpro/app/runtime/RuntimeDiagnostics.kt'),

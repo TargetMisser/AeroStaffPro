@@ -325,6 +325,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [imageList, setImageList] = useState<string[]>([]);
   const [ocrText, setOcrText] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [ocrEngineActive, setOcrEngineActive] = useState(false);
 
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
   const [newShiftType, setNewShiftType] = useState<'Lavoro' | 'Riposo'>('Lavoro');
@@ -341,6 +342,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [secondsTicker, setSecondsTicker] = useState(Date.now());
 
   const webViewRef = useRef<WebView>(null);
+  const pendingOcrPayloadRef = useRef<string | null>(null);
   const hasLoadedShiftRef = useRef(false);
 
   const toLocalIso = (date: Date): string => {
@@ -722,18 +724,31 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
           Alert.alert('Errore OCR', 'Nessuna immagine leggibile selezionata.');
           return;
         }
-        const base64Json = JSON.stringify(base64List);
-        // Use postMessage pattern to avoid script-injection risks with injectJavaScript
-        webViewRef.current?.injectJavaScript(`
-          if(window.runTesseract){
-            window.runTesseract(${JSON.stringify(base64Json)});
-          } else {
-            window.ReactNativeWebView.postMessage(JSON.stringify({success:false,error:'OCR non pronto'}));
-          }
-          true;
-        `);
+        pendingOcrPayloadRef.current = JSON.stringify(base64List);
+        setOcrEngineActive(true);
       }
-    } catch (e) { if (__DEV__) console.error('[imagePicker]', e); setProcessing(false); }
+    } catch (e) {
+      if (__DEV__) console.error('[imagePicker]', e);
+      pendingOcrPayloadRef.current = null;
+      setOcrEngineActive(false);
+      setProcessing(false);
+    }
+  };
+
+  const runPendingOcr = () => {
+    const payload = pendingOcrPayloadRef.current;
+    if (!payload) return;
+    pendingOcrPayloadRef.current = null;
+    // Wait for the on-demand WebView to finish loading Tesseract before
+    // injecting the selected images.
+    webViewRef.current?.injectJavaScript(`
+      if(window.runTesseract){
+        window.runTesseract(${JSON.stringify(payload)});
+      } else {
+        window.ReactNativeWebView.postMessage(JSON.stringify({success:false,error:'OCR non pronto'}));
+      }
+      true;
+    `);
   };
 
   const handleWebViewMessage = (event: any) => {
@@ -741,7 +756,13 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       const r = JSON.parse(event.nativeEvent.data);
       if (r.success) setOcrText(r.text);
       else Alert.alert('Errore riconoscimento testo', r.error || 'Prova con un\'immagine più nitida o meglio illuminata.');
-    } catch (e) { if (__DEV__) console.error('[ocrMessage]', e); } finally { setProcessing(false); }
+    } catch (e) {
+      if (__DEV__) console.error('[ocrMessage]', e);
+    } finally {
+      pendingOcrPayloadRef.current = null;
+      setOcrEngineActive(false);
+      setProcessing(false);
+    }
   };
 
   const parseAndSave = async () => {
@@ -802,10 +823,18 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 96 }}>
-      {/* Hidden OCR WebView */}
-      <View style={s.hiddenWV}>
-        <WebView ref={webViewRef} source={{ html: engineHtml }} onMessage={handleWebViewMessage} javaScriptEnabled />
-      </View>
+      {/* Mount the heavy OCR runtime only while an image scan is active. */}
+      {ocrEngineActive && (
+        <View style={s.hiddenWV}>
+          <WebView
+            ref={webViewRef}
+            source={{ html: engineHtml }}
+            onLoadEnd={runPendingOcr}
+            onMessage={handleWebViewMessage}
+            javaScriptEnabled
+          />
+        </View>
+      )}
 
       {/* Top cards row: Weather + Date */}
       <View style={s.topRow}>

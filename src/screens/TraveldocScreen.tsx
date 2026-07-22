@@ -31,20 +31,15 @@ true;
 export default function TraveldocScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors } = useAppTheme();
   const { t } = useLanguage();
-  const [hasActivated, setHasActivated] = useState(isFocused);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const webViewRef = useRef<WebView>(null);
 
   useEffect(() => {
-    if (isFocused) setHasActivated(true);
-  }, [isFocused]);
-
-  useEffect(() => {
-    if (!isFocused || !hasActivated || !loading) return;
+    if (!isFocused || !loading) return;
     const timer = setTimeout(() => { setLoading(false); setLoadError(true); }, 15_000);
     return () => clearTimeout(timer);
-  }, [hasActivated, isFocused, loading]);
+  }, [isFocused, loading]);
 
   const handleReload = () => {
     setLoading(true);
@@ -59,13 +54,13 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
         <Text style={[styles.sub, { color: colors.textSub }]}>{t('traveldocSub')}</Text>
       </View>
 
-      {hasActivated && loading && (
+      {isFocused && loading && (
         <View style={[styles.loadingWrap, { backgroundColor: colors.bg }]}>
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={[styles.loadingText, { color: colors.textSub }]}>{t('traveldocLoading')}</Text>
         </View>
       )}
-      {hasActivated && loadError && !loading && (
+      {isFocused && loadError && !loading && (
         <View style={[styles.loadingWrap, { backgroundColor: colors.bg }]}>
           <Text style={[styles.loadingText, { color: colors.textSub, marginBottom: SPACING.lg }]}>
             Caricamento lento o errore di rete.
@@ -81,7 +76,7 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
           </TactilePressable>
         </View>
       )}
-      {hasActivated && (
+      {isFocused && (
         <WebView
           ref={webViewRef}
           source={{ uri: 'https://legacy.traveldoc.aero/' }}
