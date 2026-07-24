@@ -820,7 +820,20 @@ async function testWidgetCacheFirstPaint() {
   assert(renders.length === 1, 'widget update should paint cached content before network completion');
   resolveProvider({ allArrivals: [], allDepartures: [] });
   await taskPromise;
-  assert(renders.length === 2, 'widget update should repaint after fresh data replaces the cached state');
+  assert(renders.length === 1, 'an empty provider response should keep the cached flights on screen');
+  const preserved = JSON.parse(store.get('widget_data_cache_v1'));
+  assert(
+    preserved.state === 'work' && preserved.flights[0]?.flightNumber === 'FR1234',
+    'an empty provider response should not erase cached flights for the same shift',
+  );
+  const changedShift = handler.preserveCachedWidgetFlights(
+    { state: 'work_empty', shiftLabel: 'Domani 08:00 – 16:00', updatedAt: '' },
+    preserved,
+  );
+  assert(
+    changedShift.state === 'work_empty',
+    'cached flights must not survive a shift change',
+  );
 }
 
 async function testWidgetOperationalWindowsStayScheduled() {

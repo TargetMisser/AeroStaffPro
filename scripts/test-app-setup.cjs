@@ -517,6 +517,10 @@ assert(!pinnedNotificationsSource.includes("getScheduledFlightTs(item, 'departur
 
 const homeScreenSource = fs.readFileSync(path.join(root, 'src/screens/HomeScreen.tsx'), 'utf8');
 assert(
+  homeScreenSource.includes('storeWidgetDataPreservingFlights(widgetData)'),
+  'Home shift refreshes must preserve cached widget flights for the active shift',
+);
+assert(
   homeScreenSource.includes("const displayTs = tab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);"),
   'the pinned Home flight must show the live departure/arrival time while operations stay scheduled',
 );

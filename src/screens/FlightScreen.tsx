@@ -32,7 +32,7 @@ import {
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
 import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines, reconcileSelectedAirlines } from '../utils/airportSettings';
 import { applyLiveArrivalEtas, applyLiveDepartureStatus, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
-import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
+import { storeWidgetDataPreservingFlights, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { useLanguage } from '../context/LanguageContext';
@@ -1288,9 +1288,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           widgetData = { state: 'no_shift' };
         }
         if (!isCurrentRequest()) return;
-        await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));
+        const dataToRender = await storeWidgetDataPreservingFlights(widgetData);
         if (Platform.OS === 'android') {
-          requestShiftWidgetUpdate(widgetData).catch(() => {});
+          requestShiftWidgetUpdate(dataToRender).catch(() => {});
         }
       } catch {}
 

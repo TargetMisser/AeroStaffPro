@@ -64,6 +64,35 @@ export type WidgetShiftData = {
   nextShift?: WidgetShiftWindow | null;
 };
 
+export function preserveCachedWidgetFlights(
+  nextData: WidgetData,
+  cachedData: WidgetData | null,
+): WidgetData {
+  if (
+    nextData.state === 'work_empty'
+    && cachedData?.state === 'work'
+    && cachedData.shiftLabel === nextData.shiftLabel
+    && cachedData.flights.length > 0
+  ) {
+    return cachedData;
+  }
+  return nextData;
+}
+
+export async function storeWidgetDataPreservingFlights(nextData: WidgetData): Promise<WidgetData> {
+  let cachedData: WidgetData | null = null;
+  if (nextData.state === 'work_empty') {
+    try {
+      const raw = await AsyncStorage.getItem(WIDGET_CACHE_KEY);
+      cachedData = raw ? JSON.parse(raw) as WidgetData : null;
+    } catch {}
+  }
+
+  const dataToStore = preserveCachedWidgetFlights(nextData, cachedData);
+  await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(dataToStore));
+  return dataToStore;
+}
+
 function fmtTs(ts: number): string {
   const d = new Date(ts * 1000);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -349,9 +378,9 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
       ? { state: 'work_empty', shiftLabel, updatedAt: nowHH }
       : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH };
 
-    // Update the cache with fresh data
-    await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(freshData));
-    return freshData;
+    // A temporarily empty provider response must not erase a valid snapshot
+    // for the same shift. Shift changes still replace it because the labels differ.
+    return storeWidgetDataPreservingFlights(freshData);
   } catch {
     return getWidgetData();
   }

@@ -39,7 +39,13 @@ import {
   replaceShiftForDate,
   replaceShiftsForRange,
 } from '../utils/shiftCalendar';
-import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY, type WidgetData, type WidgetShiftData, type WidgetShiftWindow } from '../widgets/widgetTaskHandler';
+import {
+  storeWidgetDataPreservingFlights,
+  WIDGET_SHIFT_KEY,
+  type WidgetData,
+  type WidgetShiftData,
+  type WidgetShiftWindow,
+} from '../widgets/widgetTaskHandler';
 import { ShiftWidget } from '../widgets/ShiftWidget';
 import { parseOcrShiftText } from '../utils/ocrShiftParser';
 import { useLanguage } from '../context/LanguageContext';
@@ -399,9 +405,9 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
         widgetData = { state: 'rest' };
       }
 
-      await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(widgetData));
+      const dataToRender = await storeWidgetDataPreservingFlights(widgetData);
       if (Platform.OS === 'android') {
-        requestWidgetUpdate({ widgetName: 'ShiftFlights', renderWidget: () => (<ShiftWidget data={widgetData} />) as any }).catch(() => {});
+        requestWidgetUpdate({ widgetName: 'ShiftFlights', renderWidget: () => (<ShiftWidget data={dataToRender} />) as any }).catch(() => {});
       }
     } catch {}
   };
