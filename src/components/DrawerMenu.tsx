@@ -34,6 +34,7 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
     { id: 'Passwords', icon: 'lock',       label: t('drawerPasswordTitle'),  sublabel: t('drawerPasswordSub') },
     { id: 'Manuals',   icon: 'menu-book',  label: t('drawerManualsTitle'),   sublabel: 'Easyjet, Wizz, Ryanair…' },
     { id: 'ArionInbox', icon: 'inbox',      label: t('drawerArionTitle'),     sublabel: t('drawerArionSub') },
+    { id: 'PrintableCalendar', icon: 'print', label: t('drawerPrintableCalendarTitle'), sublabel: t('drawerPrintableCalendarSub') },
     { id: 'Settings',  icon: 'settings',   label: t('drawerSettingsTitle'),  sublabel: t('drawerSettingsSub') },
     ...(__DEV__ ? [{ id: 'DesignLab', icon: 'auto-awesome' as const, label: 'Design Lab', sublabel: 'Direzioni visuali dev-only' }] : []),
   ];

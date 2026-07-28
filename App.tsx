@@ -22,6 +22,7 @@ import PhonebookScreen from './src/screens/PhonebookScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import PasswordScreen from './src/screens/PasswordScreen';
 import ArionInboxScreen from './src/screens/ArionInboxScreen';
+import PrintableCalendarScreen from './src/screens/PrintableCalendarScreen';
 import DesignLabScreen from './src/screens/DesignLabScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import DrawerMenu from './src/components/DrawerMenu';
@@ -49,7 +50,7 @@ import { SPACING, RADIUS } from './src/theme/spacing';
 installGlobalCrashHandler();
 
 type Tab = AppTabId;
-type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'Settings' | 'DesignLab' | 'Onboarding' | null;
+type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'PrintableCalendar' | 'Settings' | 'DesignLab' | 'Onboarding' | null;
 type SettingsInitialModal = 'providers' | 'debug' | null;
 
 const TABS: AppTabBarItem[] = [
@@ -70,6 +71,7 @@ const OVERLAY_TITLES: Record<NonNullable<OverlayScreen>, string> = {
   Passwords: 'Password',
   Manuals:   'Manuali DCS',
   ArionInbox: 'Arion Inbox',
+  PrintableCalendar: 'Calendario A4',
   Settings:  'Impostazioni',
   DesignLab: 'Design Lab',
   Onboarding: 'Setup guidato',
@@ -94,7 +96,8 @@ function AppInner() {
   };
   const overlayTitles: Record<NonNullable<OverlayScreen>, string> = {
     Notepad: t('overlayNotepad'), Phonebook: t('overlayPhonebook'),
-    Passwords: t('overlayPasswords'), Manuals: t('overlayManuals'), ArionInbox: t('overlayArionInbox'), Settings: t('overlaySettings'),
+    Passwords: t('overlayPasswords'), Manuals: t('overlayManuals'), ArionInbox: t('overlayArionInbox'),
+    PrintableCalendar: t('overlayPrintableCalendar'), Settings: t('overlaySettings'),
     DesignLab: 'Design Lab',
     Onboarding: 'Setup guidato',
   };
@@ -248,6 +251,7 @@ function AppInner() {
     if (overlay === 'Passwords') return <PasswordScreen />;
     if (overlay === 'Manuals')   return <ManualsScreen />;
     if (overlay === 'ArionInbox') return <ArionInboxScreen />;
+    if (overlay === 'PrintableCalendar') return <PrintableCalendarScreen />;
     if (overlay === 'Settings')  return (
       <SettingsScreen
         initialModal={settingsInitialModal}
