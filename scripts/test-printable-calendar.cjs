@@ -38,9 +38,11 @@ function localDate(year, monthIndex, day, hour, minute) {
   return new Date(year, monthIndex, day, hour, minute, 0, 0);
 }
 
-function main() {
+async function main() {
   const {
+    A4_LANDSCAPE_PDF_SIZE,
     buildPrintableShiftCalendarHtml,
+    printPrintableCalendarWithFallback,
     summarizePrintableShiftMonth,
   } = loadPrintableCalendarModule();
 
@@ -102,12 +104,54 @@ function main() {
   const sundayIndex = html.indexOf('>Dom</div>');
   assert(mondayIndex >= 0 && sundayIndex > mondayIndex, 'weekday header should be Monday-first');
 
+  assert(
+    A4_LANDSCAPE_PDF_SIZE.width === 842 && A4_LANDSCAPE_PDF_SIZE.height === 595,
+    'native PDF generation should use A4 landscape dimensions at 72 PPI',
+  );
+
+  const printCalls = [];
+  const printed = await printPrintableCalendarWithFallback(html, {
+    createPdf: async options => {
+      printCalls.push(['create', options]);
+      return { uri: 'file:///calendar.pdf' };
+    },
+    printPdf: async uri => { printCalls.push(['print', uri]); },
+    canSharePdf: async () => false,
+    sharePdf: async uri => { printCalls.push(['share', uri]); },
+  });
+  assert(printed.mode === 'printed', 'successful native printing should report printed mode');
+  assert(printCalls[0][1].width === 842 && printCalls[0][1].height === 595, 'print action should create an A4 landscape PDF first');
+  assert(printCalls[1][0] === 'print' && printCalls[1][1] === 'file:///calendar.pdf', 'print action should print the generated PDF URI');
+  assert(!printCalls.some(call => call[0] === 'share'), 'successful native printing should not open sharing');
+
+  const nativePrintError = new Error('Print spooler unavailable');
+  const fallbackCalls = [];
+  const shared = await printPrintableCalendarWithFallback(html, {
+    createPdf: async () => ({ uri: 'file:///fallback.pdf' }),
+    printPdf: async () => { throw nativePrintError; },
+    canSharePdf: async () => true,
+    sharePdf: async uri => { fallbackCalls.push(uri); },
+  });
+  assert(shared.mode === 'shared' && shared.printError === nativePrintError, 'failed native printing should report the PDF fallback');
+  assert(fallbackCalls[0] === 'file:///fallback.pdf', 'fallback should share the PDF that failed to print');
+
+  let unavailableError;
+  try {
+    await printPrintableCalendarWithFallback(html, {
+      createPdf: async () => ({ uri: 'file:///unavailable.pdf' }),
+      printPdf: async () => { throw nativePrintError; },
+      canSharePdf: async () => false,
+      sharePdf: async () => {},
+    });
+  } catch (error) {
+    unavailableError = error;
+  }
+  assert(unavailableError === nativePrintError, 'the native print error should surface when PDF sharing is unavailable');
+
   console.log('Printable calendar tests passed');
 }
 
-try {
-  main();
-} catch (error) {
+main().catch(error => {
   console.error(error);
   process.exit(1);
-}
+});

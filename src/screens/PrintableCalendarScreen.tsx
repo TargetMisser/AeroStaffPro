@@ -16,7 +16,9 @@ import * as Sharing from 'expo-sharing';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import {
+  A4_LANDSCAPE_PDF_SIZE,
   buildPrintableShiftCalendarHtml,
+  printPrintableCalendarWithFallback,
   summarizePrintableShiftMonth,
   type PrintableShiftEvent,
 } from '../utils/printableShiftCalendar';
@@ -145,9 +147,27 @@ export default function PrintableCalendarScreen() {
   const printCalendar = async () => {
     setBusyAction('print');
     try {
-      await Print.printAsync({ html });
+      const result = await printPrintableCalendarWithFallback(html, {
+        createPdf: options => Print.printToFileAsync(options),
+        printPdf: uri => Print.printAsync({
+          uri,
+          orientation: Print.Orientation.landscape,
+        }),
+        canSharePdf: Sharing.isAvailableAsync,
+        sharePdf: uri => Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: `${t('printCalTitle')} - ${monthLabel}`,
+        }),
+      });
+      if (result.mode === 'shared') {
+        console.warn(
+          '[printableCalendar.print] Native print unavailable; opened PDF fallback.',
+          result.printError,
+        );
+      }
     } catch (error) {
-      if (__DEV__) console.error('[printableCalendar.print]', error);
+      console.error('[printableCalendar.print]', error);
       Alert.alert(t('error'), t('printCalPrintError'));
     } finally {
       setBusyAction(null);
@@ -162,7 +182,10 @@ export default function PrintableCalendarScreen() {
         Alert.alert(t('error'), t('printCalShareUnavailable'));
         return;
       }
-      const { uri } = await Print.printToFileAsync({ html });
+      const { uri } = await Print.printToFileAsync({
+        html,
+        ...A4_LANDSCAPE_PDF_SIZE,
+      });
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
         UTI: 'com.adobe.pdf',

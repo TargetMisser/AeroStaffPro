@@ -4,6 +4,45 @@ export type PrintableShiftEvent = {
   endDate: string | Date;
 };
 
+export const A4_LANDSCAPE_PDF_SIZE = {
+  width: 842,
+  height: 595,
+} as const;
+
+type PrintableCalendarPrintDependencies = {
+  createPdf: (options: {
+    html: string;
+    width: number;
+    height: number;
+  }) => Promise<{ uri: string }>;
+  printPdf: (uri: string) => Promise<void>;
+  canSharePdf: () => Promise<boolean>;
+  sharePdf: (uri: string) => Promise<void>;
+};
+
+export type PrintableCalendarPrintResult =
+  | { mode: 'printed' }
+  | { mode: 'shared'; printError: unknown };
+
+export async function printPrintableCalendarWithFallback(
+  html: string,
+  dependencies: PrintableCalendarPrintDependencies,
+): Promise<PrintableCalendarPrintResult> {
+  const { uri } = await dependencies.createPdf({
+    html,
+    ...A4_LANDSCAPE_PDF_SIZE,
+  });
+
+  try {
+    await dependencies.printPdf(uri);
+    return { mode: 'printed' };
+  } catch (printError) {
+    if (!(await dependencies.canSharePdf())) throw printError;
+    await dependencies.sharePdf(uri);
+    return { mode: 'shared', printError };
+  }
+}
+
 export type PrintableShiftCalendarCopy = {
   title: string;
   work: string;
