@@ -4,7 +4,7 @@ import {
   ActivityIndicator, Dimensions, LayoutAnimation, Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { TYPE } from '../theme/typography';
 import { useAirport } from '../context/AirportContext';
@@ -26,6 +26,7 @@ type Props = {
   shiftStart: Date;
   shiftEnd: Date;
   inline?: boolean;
+  active?: boolean;
   refreshKey?: number;
 };
 
@@ -61,7 +62,7 @@ function parseFlight(item: any): Flight | null {
   };
 }
 
-export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, inline, refreshKey }: Props) {
+export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, inline, active = true, refreshKey }: Props) {
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const { airportCode, isLoading: airportLoading } = useAirport();
@@ -104,14 +105,14 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
   // Inline: carica subito; Modal: carica quando visibile
   useEffect(() => {
     if (airportLoading) return;
-    if (inline || visible) {
+    if ((inline && active) || visible) {
       fetchFlights();
       setExpandedId(null);
       setNowSec(Date.now() / 1000);
       const interval = setInterval(() => setNowSec(Date.now() / 1000), 60000);
       return () => clearInterval(interval);
     }
-  }, [inline, visible, airportLoading, fetchFlights]);
+  }, [inline, active, visible, airportLoading, fetchFlights]);
 
   const toggleExpand = (id: string) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

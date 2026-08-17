@@ -101,7 +101,7 @@ const departuresHtml = `
 </table>
 </body></html>`;
 
-async function runStaffMonitor(nature, { fetchImpl, store } = {}) {
+async function runStaffMonitor(nature, { fetchImpl, store, signal } = {}) {
   let callCount = 0;
   const wrappedFetch = async (...args) => {
     callCount += 1;
@@ -112,7 +112,7 @@ async function runStaffMonitor(nature, { fetchImpl, store } = {}) {
     '@react-native-async-storage/async-storage': asyncStorage,
     __globals: { fetch: wrappedFetch },
   });
-  const result = await mod.fetchStaffMonitorData(nature);
+  const result = await mod.fetchStaffMonitorData(nature, signal);
   return { mod, result, callCount, asyncStorage };
 }
 
@@ -326,6 +326,126 @@ async function runInFlightDedupTest() {
   ]);
   assert(first.length === 2 && second.length === 2, 'both concurrent calls should resolve with parsed flights');
   assert(fetchCalls === 1, 'concurrent fetchStaffMonitorData calls for the same nature should share a single in-flight request');
+
+  return runAbortPropagationTest();
+}
+
+// ─── Abort propagation must reach the real fetch, not only the caller race ─────
+async function runAbortPropagationTest() {
+  let fetchAbortObserved = false;
+  const mod = loadTsModule('src/utils/staffMonitor.ts', {
+    '@react-native-async-storage/async-storage': makeAsyncStorageMock(),
+    __globals: {
+      fetch: async (_url, options = {}) => new Promise((resolve, reject) => {
+        options.signal?.addEventListener('abort', () => {
+          fetchAbortObserved = true;
+          const error = new Error('mock fetch aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      }),
+    },
+  });
+  const controller = new AbortController();
+  const pending = mod.fetchStaffMonitorData('D', controller.signal);
+  await Promise.resolve();
+  controller.abort();
+  let abortError = '';
+  try {
+    await pending;
+  } catch (error) {
+    abortError = String(error);
+  }
+  assert(fetchAbortObserved, 'aborting the StaffMonitor caller should abort the underlying fetch signal');
+  assert(abortError.includes('STAFF_MONITOR_ABORTED'), 'the aborted subscriber should reject with a stable abort error');
+
+  return runSharedSubscriberAbortTest();
+}
+
+// One timed-out caller must detach without killing work still needed by another caller.
+async function runSharedSubscriberAbortTest() {
+  let finishFetch;
+  let underlyingAbortCount = 0;
+  let fetchCalls = 0;
+  const mod = loadTsModule('src/utils/staffMonitor.ts', {
+    '@react-native-async-storage/async-storage': makeAsyncStorageMock(),
+    __globals: {
+      fetch: async (_url, options = {}) => new Promise((resolve, reject) => {
+        fetchCalls += 1;
+        finishFetch = () => resolve(makeResponse({ body: departuresHtml }));
+        options.signal?.addEventListener('abort', () => {
+          underlyingAbortCount += 1;
+          const error = new Error('mock fetch aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      }),
+    },
+  });
+  const firstController = new AbortController();
+  const secondController = new AbortController();
+  const first = mod.fetchStaffMonitorData('D', firstController.signal);
+  const second = mod.fetchStaffMonitorData('D', secondController.signal);
+  await Promise.resolve();
+  firstController.abort();
+  await first.catch(() => undefined);
+  assert(underlyingAbortCount === 0, 'a remaining subscriber should keep the shared StaffMonitor request alive');
+  finishFetch();
+  const result = await second;
+  assert(result.length === 2, 'the remaining subscriber should receive the shared result');
+  assert(fetchCalls === 1, 'mixed abort lifetimes should still de-duplicate the underlying request');
+
+  return runStagedArrivalRaceTest();
+}
+
+// The normal arrivals path should touch only the primary tier and cancel its loser.
+async function runStagedArrivalRaceTest() {
+  let callCount = 0;
+  let loserAbortCount = 0;
+  const { result } = await runStaffMonitor('A', {
+    fetchImpl: async (url, options = {}) => {
+      callCount += 1;
+      if (!String(url).includes('nature=A')) {
+        return makeResponse({ body: departuresHtml, setCookie: 'JSESSIONID=staged; Path=/; HttpOnly' });
+      }
+      if (callCount === 2) return makeResponse({ body: arrivalsXml });
+      return new Promise((resolve, reject) => {
+        options.signal?.addEventListener('abort', () => {
+          loserAbortCount += 1;
+          const error = new Error('mock loser aborted');
+          error.name = 'AbortError';
+          reject(error);
+        }, { once: true });
+      });
+    },
+  });
+  assert(result.length === 2, 'the winning primary arrivals URL should still parse normally');
+  assert(callCount === 3, 'healthy arrivals should use one session prime plus two primary URLs, not all seven variants');
+  assert(loserAbortCount === 1, 'the primary arrivals race should abort its losing request');
+
+  return runProviderSignalForwardingTest();
+}
+
+async function runProviderSignalForwardingTest() {
+  const forwardedSignals = [];
+  const providerMod = loadTsModule('src/utils/flightProviders/staffMonitorProvider.ts', {
+    '../staffMonitor': {
+      fetchStaffMonitorData: async (_nature, signal) => {
+        forwardedSignals.push(signal);
+        return [];
+      },
+    },
+  });
+  const controller = new AbortController();
+  await providerMod.staffMonitorProvider.fetch({
+    airportCode: 'PSA',
+    airport: { name: 'Pisa', icao: 'LIRP' },
+    signal: controller.signal,
+  });
+  assert(
+    forwardedSignals.length === 2 && forwardedSignals.every(signal => signal === controller.signal),
+    'StaffMonitor provider should forward its timeout signal to both departures and arrivals',
+  );
 
   console.log('StaffMonitor parser test passed.');
 }

@@ -8,7 +8,8 @@ import * as SystemCalendar from 'expo-calendar';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { WebView } from 'react-native-webview';
-import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Calendar as RNCalendar, LocaleConfig, type DateData } from 'react-native-calendars';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
@@ -17,10 +18,11 @@ import { useAirport } from '../context/AirportContext';
 import { getAirportInfo } from '../utils/airportSettings';
 import {
   getWritableCalendarId,
+  isOwnedShiftEvent,
   replaceShiftForDate,
   replaceShiftsForRange,
 } from '../utils/shiftCalendar';
-import { WIDGET_SHIFT_KEY, WIDGET_CACHE_KEY } from '../widgets/widgetTaskHandler';
+import { storeWidgetDataPreservingFlights, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetShiftData, WidgetData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { buildCalendarFlightCountsFromCache } from '../utils/calendarFlightStats';
@@ -31,17 +33,23 @@ import {
   parseShiftCellFiles,
   type ParsedSchedule, type ParsedEmployee,
 } from '../utils/pdfShiftParser';
+import { loadPdfJsRuntimeSources } from '../utils/pdfRuntimeAssets';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE, WEIGHT } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
 
 const STORAGE_KEY = '@shift_import_name';
+const MAX_PDF_FILES = 4;
+const MAX_PDF_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_PDF_TOTAL_BYTES = 12 * 1024 * 1024;
+const PDF_EXTRACTION_TIMEOUT_MS = 30_000;
 
 type ShiftEvent = {
   id: string;
   title: string;
   startDate: string | Date;
   endDate: string | Date;
+  notes?: string | null;
 };
 
 type DayStats = {
@@ -112,6 +120,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
   const [parsedSchedule, setParsedSchedule] = useState<ParsedSchedule | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<ParsedEmployee | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
+  const pdfTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Edit menu + manual entry ───────────────────────────────────────────────
   const [editMenuOpen, setEditMenuOpen] = useState(false);
@@ -178,21 +187,28 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     setManualModalOpen(true);
   };
 
-  // Push the saved shift to the widget so it updates immediately without opening FlightScreen
-  const pushShiftToWidget = async (date: string, type: 'work' | 'rest', startH?: number, startM?: number, endH?: number, endM?: number) => {
+  // Apply all imported changes in one storage transaction to avoid lost updates.
+  const pushShiftsToWidget = async (updates: Array<{
+    date: string;
+    type: 'work' | 'rest';
+    startH?: number;
+    startM?: number;
+    endH?: number;
+    endM?: number;
+  }>) => {
     try {
       const today = new Date();
       const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
       const todayIso = toLocalIso(today);
       const tomorrowIso = toLocalIso(tomorrow);
-      if (date !== todayIso && date !== tomorrowIso) return;
+      const relevantUpdates = updates.filter(({ date }) => date === todayIso || date === tomorrowIso);
+      if (relevantUpdates.length === 0) return;
 
       const existingRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
       const existing: WidgetShiftData | null = existingRaw ? JSON.parse(existingRaw) : null;
       let shiftToday = existing?.date === todayIso ? existing.shiftToday : null;
       let isRestDay = existing?.date === todayIso ? existing.isRestDay : false;
       let nextShift = existing?.date === todayIso ? existing.nextShift ?? null : null;
-      const isRest = type === 'rest';
 
       const buildShiftWindow = (baseDate: Date, sh: number, sm: number, eh: number, em: number) => {
         const startTs = new Date(baseDate); startTs.setHours(sh, sm, 0, 0);
@@ -201,19 +217,23 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         return { start: startTs.getTime() / 1000, end: endTs.getTime() / 1000 };
       };
 
-      if (date === todayIso) {
-        isRestDay = isRest;
-        shiftToday = null;
-        if (!isRest && startH !== undefined && startM !== undefined && endH !== undefined && endM !== undefined) {
-          const base = new Date(today); base.setHours(0, 0, 0, 0);
-          shiftToday = buildShiftWindow(base, startH, startM, endH, endM);
-          isRestDay = false;
-        }
-      } else if (date === tomorrowIso) {
-        nextShift = null;
-        if (!isRest && startH !== undefined && startM !== undefined && endH !== undefined && endM !== undefined) {
-          const base = new Date(tomorrow); base.setHours(0, 0, 0, 0);
-          nextShift = { date: tomorrowIso, ...buildShiftWindow(base, startH, startM, endH, endM) };
+      for (const update of relevantUpdates) {
+        const { date, type, startH, startM, endH, endM } = update;
+        const isRest = type === 'rest';
+        if (date === todayIso) {
+          isRestDay = isRest;
+          shiftToday = null;
+          if (!isRest && startH !== undefined && startM !== undefined && endH !== undefined && endM !== undefined) {
+            const base = new Date(today); base.setHours(0, 0, 0, 0);
+            shiftToday = buildShiftWindow(base, startH, startM, endH, endM);
+            isRestDay = false;
+          }
+        } else if (date === tomorrowIso) {
+          nextShift = null;
+          if (!isRest && startH !== undefined && startM !== undefined && endH !== undefined && endM !== undefined) {
+            const base = new Date(tomorrow); base.setHours(0, 0, 0, 0);
+            nextShift = { date: tomorrowIso, ...buildShiftWindow(base, startH, startM, endH, endM) };
+          }
         }
       }
 
@@ -234,8 +254,8 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         noFlightData = { state: 'no_shift' };
       }
 
-      await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(noFlightData));
-      requestShiftWidgetUpdate(noFlightData as any).catch(() => {});
+      const dataToDisplay = await storeWidgetDataPreservingFlights(noFlightData);
+      requestShiftWidgetUpdate(dataToDisplay as any).catch(() => {});
     } catch {}
   };
 
@@ -269,7 +289,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
       setManualModalOpen(false);
       fetchCalendar(true);
-      pushShiftToWidget(manualDate, shiftType, manualStartH, manualStartM, manualEndH, manualEndM);
+      await pushShiftsToWidget([{ date: manualDate, type: shiftType, startH: manualStartH, startM: manualStartM, endH: manualEndH, endM: manualEndM }]);
       Alert.alert(t('calShiftSaved'));
     } catch (e: any) { Alert.alert('Errore', e.message); }
   };
@@ -344,10 +364,10 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       const events = await SystemCalendar.getEventsAsync([cal.id], rangeStart, rangeEnd);
       const localData: Record<string, ShiftEvent[]> = {};
       events.forEach(e => {
-        if (e.title.includes('Lavoro') || e.title.includes('Riposo')) {
+        if (isOwnedShiftEvent(e)) {
           const iso = toLocalIso(e.startDate);
           if (!localData[iso]) localData[iso] = [];
-          localData[iso].push({ id: e.id, title: e.title, startDate: e.startDate, endDate: e.endDate });
+          localData[iso].push({ id: e.id, title: e.title, startDate: e.startDate, endDate: e.endDate, notes: e.notes });
         }
       });
       setEventsData(prev => {
@@ -399,6 +419,30 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
   };
 
   // ─── Import flow ─────────────────────────────────────────────────────────────
+  const clearPdfExtraction = () => {
+    if (pdfTimeoutRef.current) {
+      clearTimeout(pdfTimeoutRef.current);
+      pdfTimeoutRef.current = null;
+    }
+    setPdfHtml(null);
+  };
+
+  const closePdfImport = () => {
+    clearPdfExtraction();
+    setImportModalVisible(false);
+    setImportStep('idle');
+    setImportFileCount(0);
+  };
+
+  const failPdfExtraction = (message: string) => {
+    closePdfImport();
+    Alert.alert('Errore', message);
+  };
+
+  useEffect(() => () => {
+    if (pdfTimeoutRef.current) clearTimeout(pdfTimeoutRef.current);
+  }, []);
+
   const startImport = async () => {
     let step = 'picker';
     try {
@@ -411,9 +455,14 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
       const assets = result.assets.filter(asset => !!asset.uri);
       if (assets.length === 0) return;
+      if (assets.length > MAX_PDF_FILES) {
+        Alert.alert('Troppi PDF', `Seleziona al massimo ${MAX_PDF_FILES} file per importazione.`);
+        return;
+      }
 
       step = 'read';
       const base64Files: string[] = [];
+      let totalBytes = 0;
       for (const asset of assets) {
         const fileInfo = await FileSystem.getInfoAsync(asset.uri);
         if (!fileInfo.exists) {
@@ -421,27 +470,59 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
           return;
         }
 
+        const rawDeclaredSize = Number(asset.size ?? ('size' in fileInfo ? fileInfo.size : 0));
+        const declaredSize = Number.isFinite(rawDeclaredSize) && rawDeclaredSize > 0 ? rawDeclaredSize : 0;
+        if (declaredSize > MAX_PDF_FILE_BYTES) {
+          Alert.alert('PDF troppo grande', `${asset.name || 'Il file'} supera il limite di 8 MB.`);
+          return;
+        }
+        totalBytes += declaredSize;
+        if (totalBytes > MAX_PDF_TOTAL_BYTES) {
+          Alert.alert('PDF troppo grandi', 'La dimensione complessiva supera il limite di 12 MB.');
+          return;
+        }
+
         step = 'base64';
-        base64Files.push(await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 }));
+        const encoded = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+        if (!declaredSize) {
+          const padding = encoded.endsWith('==') ? 2 : encoded.endsWith('=') ? 1 : 0;
+          const decodedSize = Math.max(0, Math.floor(encoded.length * 0.75) - padding);
+          if (decodedSize > MAX_PDF_FILE_BYTES) {
+            Alert.alert('PDF troppo grande', `${asset.name || 'Il file'} supera il limite di 8 MB.`);
+            return;
+          }
+          totalBytes += decodedSize;
+          if (totalBytes > MAX_PDF_TOTAL_BYTES) {
+            Alert.alert('PDF troppo grandi', 'La dimensione complessiva supera il limite di 12 MB.');
+            return;
+          }
+        }
+        base64Files.push(encoded);
       }
 
       step = 'webview';
+      const runtime = await loadPdfJsRuntimeSources();
       setParsedSchedule(null);
       setSelectedEmployee(null);
       setImportFileCount(base64Files.length);
       setImportStep('extracting');
       setImportModalVisible(true);
-      setPdfHtml(getPdfExtractorHtml(base64Files));
+      setPdfHtml(getPdfExtractorHtml(base64Files, runtime));
+      if (pdfTimeoutRef.current) clearTimeout(pdfTimeoutRef.current);
+      pdfTimeoutRef.current = setTimeout(() => {
+        failPdfExtraction('Estrazione PDF scaduta. Riprova con meno file o file più piccoli.');
+      }, PDF_EXTRACTION_TIMEOUT_MS);
     } catch (e: any) {
+      clearPdfExtraction();
       if (__DEV__) console.error(`Import error at step=${step}:`, e);
       Alert.alert('Errore', `Errore (${step}): ${e?.message || e}`);
     }
   };
 
   const onWebViewMessage = (event: any) => {
+    clearPdfExtraction();
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      setPdfHtml(null); // Remove WebView
 
       if (!data.ok) {
         Alert.alert('Errore', t('calNoPdfText'));
@@ -481,10 +562,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       setImportStep('pickName');
     } catch (e) {
       if (__DEV__) console.error(e);
-      Alert.alert('Errore', 'Errore nel parsing del PDF');
-      setImportModalVisible(false);
-      setImportStep('idle');
-      setImportFileCount(0);
+      failPdfExtraction('Errore nel parsing del PDF');
     }
   };
 
@@ -520,22 +598,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         })),
       });
 
-      // Push today's shift to widget if it's included in the import
+      // Push today/tomorrow together so the shared snapshot cannot lose an update.
       const todayIso = toLocalIso(new Date());
       const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
       const tomorrowIso = toLocalIso(tomorrowDate);
-      const todayShift = selectedEmployee.shifts.find(s => s.date === todayIso);
-      if (todayShift) {
-        const [sh, sm] = (todayShift.start || '00:00').split(':').map(Number);
-        const [eh, em] = (todayShift.end || '00:00').split(':').map(Number);
-        pushShiftToWidget(todayIso, todayShift.type, sh, sm, eh, em);
-      }
-      const tomorrowShift = selectedEmployee.shifts.find(s => s.date === tomorrowIso);
-      if (tomorrowShift) {
-        const [sh, sm] = (tomorrowShift.start || '00:00').split(':').map(Number);
-        const [eh, em] = (tomorrowShift.end || '00:00').split(':').map(Number);
-        pushShiftToWidget(tomorrowIso, tomorrowShift.type, sh, sm, eh, em);
-      }
+      const widgetUpdates = selectedEmployee.shifts
+        .filter(shift => shift.date === todayIso || shift.date === tomorrowIso)
+        .map(shift => {
+          const [startH, startM] = (shift.start || '00:00').split(':').map(Number);
+          const [endH, endM] = (shift.end || '00:00').split(':').map(Number);
+          return { date: shift.date, type: shift.type, startH, startM, endH, endM };
+        });
+      await pushShiftsToWidget(widgetUpdates);
 
       setImportStep('done');
       setTimeout(() => {
@@ -1103,17 +1177,25 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       {/* Hidden WebView for PDF extraction */}
       {pdfHtml && (
         <WebView
-          originWhitelist={['*']}
-          source={{ html: pdfHtml }}
+          originWhitelist={['about:blank']}
+          source={{ html: pdfHtml, baseUrl: 'about:blank' }}
           onMessage={onWebViewMessage}
+          onError={() => failPdfExtraction('Impossibile avviare il parser PDF locale.')}
+          onHttpError={() => failPdfExtraction('Il parser PDF ha ricevuto un errore di rete inatteso.')}
+          onShouldStartLoadWithRequest={request => request.url === 'about:blank'}
           style={{ width: 0, height: 0, position: 'absolute', opacity: 0 }}
           javaScriptEnabled
+          domStorageEnabled={false}
+          allowFileAccess={false}
+          allowUniversalAccessFromFileURLs={false}
+          mixedContentMode="never"
+          javaScriptCanOpenWindowsAutomatically={false}
         />
       )}
 
       {/* ─── Import Modal ─── */}
       <Modal visible={importModalVisible} transparent animationType="slide" onRequestClose={() => {
-        if (importStep !== 'saving') { setImportModalVisible(false); setImportStep('idle'); setImportFileCount(0); }
+        if (importStep !== 'saving') closePdfImport();
       }}>
         <View style={s.modalOverlay}>
           <View style={s.modalBg} />
@@ -1122,7 +1204,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
             <View style={s.modalHeader}>
               <Text style={[s.modalTitle, { color: colors.text }]}>{t('calImportTitle')}</Text>
               {importStep !== 'saving' && (
-                <TouchableOpacity onPress={() => { setImportModalVisible(false); setImportStep('idle'); setImportFileCount(0); }} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
+                <TouchableOpacity onPress={closePdfImport} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
                   <MaterialIcons name="close" size={24} color={colors.textSub} />
                 </TouchableOpacity>
               )}

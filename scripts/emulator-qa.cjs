@@ -5,8 +5,11 @@ const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 
 const PACKAGE_NAME = 'com.aerostaffpro.app';
+const LOCAL_VERSION = require('../package.json').version;
 const DEFAULT_AVD = process.env.AEROSTAFF_AVD || 'Medium_Phone_API_36.1';
 const DEFAULT_OUT_DIR = path.join('tmp', 'emulator-qa');
+let adbSerial = process.env.ANDROID_SERIAL || null;
+let activeOutDir = DEFAULT_OUT_DIR;
 
 function parseArgs(argv) {
   const args = {
@@ -15,6 +18,8 @@ function parseArgs(argv) {
     installRelease: null,
     installApk: null,
     noStart: false,
+    serial: null,
+    allowDebug: false,
     help: false,
   };
 
@@ -26,6 +31,8 @@ function parseArgs(argv) {
     else if (arg === '--install-release') args.installRelease = argv[++i];
     else if (arg === '--install-apk') args.installApk = argv[++i];
     else if (arg === '--no-start') args.noStart = true;
+    else if (arg === '--serial') args.serial = argv[++i];
+    else if (arg === '--allow-debug') args.allowDebug = true;
     else throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -47,6 +54,8 @@ Options:
   --install-apk PATH     Install a local APK before QA.
   --out DIR              Output directory for screenshots, UI dumps and logs.
   --no-start             Do not start an emulator automatically.
+  --serial SERIAL         Use this exact ADB device when multiple are connected.
+  --allow-debug           Allow a debuggable build (Metro must be available).
 `);
 }
 
@@ -67,7 +76,8 @@ function run(command, args = [], options = {}) {
 }
 
 function adb(args, options = {}) {
-  return run('adb', args, { capture: true, ...options });
+  const serialArgs = adbSerial ? ['-s', adbSerial] : [];
+  return run('adb', [...serialArgs, ...args], { capture: true, ...options });
 }
 
 function connectedDevices() {
@@ -111,13 +121,28 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function ensureDevice({ avd, noStart }) {
-  if (connectedDevices().length > 0) return;
+async function ensureDevice({ avd, noStart, serial }) {
+  let devices = connectedDevices();
+  if (serial) {
+    if (!devices.includes(serial)) throw new Error(`ADB device not available: ${serial}`);
+    adbSerial = serial;
+    return;
+  }
+  if (devices.length === 1) {
+    adbSerial = devices[0];
+    return;
+  }
+  if (devices.length > 1) {
+    throw new Error(`Multiple ADB devices connected (${devices.join(', ')}). Pass --serial.`);
+  }
   if (noStart) throw new Error('No connected ADB device and --no-start was passed');
 
   console.log(`No ADB device found. Starting emulator: ${avd}`);
   startEmulator(avd);
   run('adb', ['wait-for-device']);
+  devices = connectedDevices();
+  if (devices.length !== 1) throw new Error(`Expected one emulator after startup, found: ${devices.join(', ')}`);
+  adbSerial = devices[0];
 
   const deadline = Date.now() + 4 * 60 * 1000;
   while (Date.now() < deadline) {
@@ -131,12 +156,33 @@ async function ensureDevice({ avd, noStart }) {
 
 function installRelease(tag) {
   console.log(`Installing GitHub release ${tag}`);
-  run(process.execPath, [path.join('scripts', 'release-verify.cjs'), tag, '--install']);
+  run(process.execPath, [path.join('scripts', 'release-verify.cjs'), tag, '--install'], {
+    env: { ...process.env, ANDROID_SERIAL: adbSerial },
+  });
 }
 
 function installApk(apkPath) {
   console.log(`Installing APK ${apkPath}`);
-  run('adb', ['install', '-r', apkPath]);
+  adb(['install', '-r', apkPath]);
+}
+
+function verifyInstalledPackage({ installRelease, installApk, allowDebug }, outDir) {
+  const info = adb(['shell', 'dumpsys', 'package', PACKAGE_NAME], { allowFailure: true });
+  writeFile(path.join(outDir, 'package-info.txt'), info);
+  const versionName = info.match(/versionName=([^\s]+)/)?.[1];
+  const versionCode = info.match(/versionCode=(\d+)/)?.[1];
+  const debuggable = /pkgFlags=\[[^\]]*\bDEBUGGABLE\b/.test(info)
+    || /flags=\[[^\]]*\bDEBUGGABLE\b/.test(info);
+  if (!versionName) throw new Error(`${PACKAGE_NAME} is not installed on ${adbSerial}`);
+  const expectedVersion = installRelease ? installRelease.replace(/^v/, '') : (installApk ? null : LOCAL_VERSION);
+  if (expectedVersion && versionName !== expectedVersion) {
+    throw new Error(`Installed version ${versionName} does not match expected ${expectedVersion}`);
+  }
+  if (debuggable && !allowDebug) {
+    throw new Error(`Installed ${versionName} (${versionCode || '?'}) is DEBUGGABLE. Install a release APK or pass --allow-debug with Metro running.`);
+  }
+  console.log(`Testing ${PACKAGE_NAME} ${versionName} (${versionCode || '?'}) on ${adbSerial}${debuggable ? ' DEBUG' : ' RELEASE'}`);
+  return { versionName, versionCode, debuggable };
 }
 
 function writeFile(filePath, content) {
@@ -153,7 +199,8 @@ function dumpUi(outDir, name) {
 }
 
 function screenshot(outDir, name) {
-  const result = spawnSync('adb', ['exec-out', 'screencap', '-p'], { encoding: 'buffer' });
+  const serialArgs = adbSerial ? ['-s', adbSerial] : [];
+  const result = spawnSync('adb', [...serialArgs, 'exec-out', 'screencap', '-p'], { encoding: 'buffer' });
   if (result.status !== 0) throw new Error(`adb screencap failed with exit ${result.status}`);
   const filePath = path.join(outDir, `${name}.png`);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -190,15 +237,49 @@ function tap(center) {
   return true;
 }
 
+function isCalendarPermissionPrompt(xml) {
+  return /package="com\.google\.android\.permissioncontroller"/.test(xml)
+    && /(calendar|calendario)/i.test(xml);
+}
+
 async function grantCalendarIfPrompt(outDir) {
-  const xml = dumpUi(outDir, 'permission-check');
-  if (!/access your calendar/i.test(xml)) return false;
-  const allow = findNodeCenter(xml, node =>
-    /permission_allow_button/.test(node) || /text="Allow"/.test(node) || /text="Consenti"/.test(node)
-  );
-  tap(allow);
-  await sleep(5000);
-  return true;
+  let tapped = false;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const xml = dumpUi(outDir, attempt === 0 ? 'permission-check' : `permission-check-${attempt}`);
+    if (!isCalendarPermissionPrompt(xml)) return tapped;
+
+    const allow = findNodeCenter(xml, node =>
+      /permission_allow_button/.test(node)
+      || /text="(Allow|Consenti)(?: [^"]*)?"/i.test(node)
+      || /content-desc="[^"]*(Allow|Consenti)[^"]*"/i.test(node)
+    );
+    if (!allow) throw new Error('Calendar permission prompt is visible but its Allow button was not found');
+    tap(allow);
+    tapped = true;
+    await sleep(1800);
+  }
+
+  const remaining = dumpUi(outDir, 'permission-check-final');
+  if (isCalendarPermissionPrompt(remaining)) {
+    throw new Error('Calendar permission prompt did not dismiss after 4 attempts');
+  }
+  return tapped;
+}
+
+async function dismissOnboardingIfShown(outDir) {
+  let dismissed = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const xml = dumpUi(outDir, `onboarding-${attempt}`);
+    if (!/(Setup guidato|Guided setup|Salta per ora|Skip for now|Completa setup|Complete setup)/i.test(xml)) return dismissed;
+    const action = findNodeCenter(xml, node =>
+      /text="(Salta per ora|Skip for now|Completa setup|Complete setup)"/i.test(node)
+      || /content-desc="[^"]*(Salta per ora|Skip for now|Completa setup|Complete setup)[^"]*"/i.test(node)
+    );
+    if (!tap(action)) throw new Error('Onboarding is visible but its action button was not found');
+    dismissed = true;
+    await sleep(1500);
+  }
+  return dismissed;
 }
 
 async function dismissBlockingOverlays(outDir) {
@@ -246,7 +327,8 @@ function findInvertedTimeRanges(textValues) {
     if (!match) continue;
     const start = Number(match[1]) * 60 + Number(match[2]);
     const end = Number(match[3]) * 60 + Number(match[4]);
-    if (start > end) {
+    const overnightDuration = end + (end < start ? 24 * 60 : 0) - start;
+    if (start > end && overnightDuration > 16 * 60) {
       issues.push(value);
     }
   }
@@ -271,17 +353,24 @@ async function main() {
     return;
   }
 
+  activeOutDir = args.outDir;
   fs.mkdirSync(args.outDir, { recursive: true });
   await ensureDevice(args);
 
   if (args.installRelease) installRelease(args.installRelease);
   if (args.installApk) installApk(args.installApk);
+  verifyInstalledPackage(args, args.outDir);
 
   adb(['logcat', '-c'], { allowFailure: true });
   adb(['shell', 'monkey', '-p', PACKAGE_NAME, '-c', 'android.intent.category.LAUNCHER', '1'], { allowFailure: true });
   await sleep(8000);
   const grantedCalendar = await grantCalendarIfPrompt(args.outDir);
   if (grantedCalendar) console.log('Granted calendar permission prompt');
+  await dismissBlockingOverlays(args.outDir);
+  const dismissedOnboarding = await dismissOnboardingIfShown(args.outDir);
+  if (dismissedOnboarding) console.log('Dismissed guided setup for this QA run');
+  const grantedAfterOnboarding = await grantCalendarIfPrompt(args.outDir);
+  if (grantedAfterOnboarding) console.log('Granted calendar permission after onboarding');
   await dismissBlockingOverlays(args.outDir);
 
   screenshot(args.outDir, 'home');
@@ -297,6 +386,7 @@ async function main() {
   const textValues = extractText(flightsXml);
   const invertedRanges = findInvertedTimeRanges(textValues);
   const log = filteredLogcat(args.outDir);
+  const fatalRuntime = /FATAL EXCEPTION|Process:\s*com\.aerostaffpro\.app|Unable to load script|ReactNativeJS.*(?:TypeError|ReferenceError)/i.test(log.filtered);
 
   console.log(`QA output: ${path.resolve(args.outDir)}`);
   console.log(`Visible text nodes: ${textValues.length}`);
@@ -305,9 +395,23 @@ async function main() {
     console.error(`Inverted time ranges detected: ${invertedRanges.join(', ')}`);
     process.exitCode = 2;
   }
+  if (fatalRuntime) {
+    console.error('Fatal app/runtime error detected in logcat-filtered.txt');
+    process.exitCode = 3;
+  }
 }
 
 main().catch(error => {
-  console.error(error instanceof Error ? error.message : error);
+  const message = error instanceof Error ? error.stack || error.message : String(error);
+  console.error(message);
+  try {
+    fs.mkdirSync(activeOutDir, { recursive: true });
+    writeFile(path.join(activeOutDir, 'qa-error.txt'), message);
+    filteredLogcat(activeOutDir);
+    dumpUi(activeOutDir, 'failure');
+    screenshot(activeOutDir, 'failure');
+  } catch (artifactError) {
+    console.error(`Could not capture all failure artifacts: ${artifactError instanceof Error ? artifactError.message : artifactError}`);
+  }
   process.exitCode = 1;
 });

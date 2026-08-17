@@ -6,9 +6,10 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Calendar from 'expo-calendar';
+import { isOwnedShiftEvent } from '../utils/shiftCalendar';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import BoardReveal from '../components/motion/BoardReveal';
 import CockpitFlightProgress from '../components/motion/CockpitFlightProgress';
 import TactilePressable from '../components/motion/TactilePressable';
@@ -169,13 +170,14 @@ interface FlightRowProps {
   onUnpin: () => void;
   colors: ThemeColors;
   isOperations: boolean;
+  isFocused: boolean;
   s: ReturnType<typeof makeStyles>;
   smPool: StaffMonitorFlight[];
   locale: string;
   t: (key: TranslationKey) => string;
 }
 
-function FlightRowComponent({ item, linkedArrival, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, s, smPool, locale, t }: FlightRowProps) {
+function FlightRowComponent({ item, linkedArrival, index, direction, airportCode, userShift, pinnedFlight, onPin, onUnpin, colors, isOperations, isFocused, s, smPool, locale, t }: FlightRowProps) {
   const [expanded, setExpanded] = useState(false);
   const compactMode = !expanded;
   const flightNumber = item.flight?.identification?.number?.default || 'N/A';
@@ -331,7 +333,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
   })() : false;
 
   useEffect(() => {
-    if (!checkinShouldPulse && !gateShouldPulse && !isPinned) {
+    if (!isFocused || (!checkinShouldPulse && !gateShouldPulse && !isPinned)) {
       pulseAnim.stopAnimation();
       pulseAnim.setValue(0);
       return;
@@ -345,7 +347,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
     );
     loop.start();
     return () => loop.stop();
-  }, [checkinShouldPulse, gateShouldPulse, isPinned, pulseAnim]);
+  }, [checkinShouldPulse, gateShouldPulse, isFocused, isPinned, pulseAnim]);
 
   const checkinPulseStyle = checkinShouldPulse
     ? {
@@ -378,11 +380,13 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
     : null;
 
   useEffect(() => {
+    if (!isFocused) return;
+    setNowTs(Date.now() / 1000);
     const interval = setInterval(() => {
       setNowTs(Date.now() / 1000);
     }, 15000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isFocused]);
 
   const compactArrivalRealTs = isArrival ? item.flight?.time?.real?.arrival : undefined;
   const compactArrivalEstimatedTs = isArrival ? item.flight?.time?.estimated?.arrival : undefined;
@@ -787,11 +791,18 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const notifSettingsRef = useRef<FlightNotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
   const airportCodeRef = useRef(airportCode);
+  const isFocusedRef = useRef(isFocused);
   const fetchInFlightRef = useRef<{ airportCode: string; requestId: number } | null>(null);
   const flightRequestIdRef = useRef(0);
   const freshSnapshotAirportRef = useRef<string | null>(null);
   const lastFlightRefreshAttemptAtRef = useRef(0);
+  const liveEtaAbortRef = useRef<AbortController | null>(null);
   airportCodeRef.current = airportCode;
+  isFocusedRef.current = isFocused;
+
+  useEffect(() => () => {
+    liveEtaAbortRef.current?.abort();
+  }, [airportCode, isFocused]);
 
   useEffect(() => {
     selectedAirlinesRef.current = selectedAirlines;
@@ -897,6 +908,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     const requestId = ++flightRequestIdRef.current;
     const isCurrentRequest = () => (
       airportCodeRef.current === requestAirportCode
+      && isFocusedRef.current
       && flightRequestIdRef.current === requestId
     );
 
@@ -966,6 +978,34 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         TURNAROUND_MATCH_WINDOW_SECONDS * 1000,
       );
 
+      // Publish the provider schedule before starting optional live overlays.
+      // ADS-B is useful enrichment, but its public endpoint must never hold the
+      // first fresh board (or the refresh spinner) behind its network deadline.
+      const isPersistable = (item: any) => item?.flight?._source !== 'airlabs_routes';
+      let sourceState: FlightDataSourceState = {
+        airportCode: requestAirportCode,
+        sourceLabel: sourceLabel ?? 'Sconosciuta',
+        fetchedAt: fetchedAt ?? Date.now(),
+        providerDiagnostics: providerDiagnostics ?? [],
+      };
+      freshSnapshotAirportRef.current = requestAirportCode;
+      setAllArrivalsFull(mergedArrs);
+      setAllDeparturesFull(mergedDeps);
+      setFlightSnapshotAirportCode(requestAirportCode);
+      setFlightDataSource(sourceState);
+      setArrivals(fetchedArrivals);
+      setDepartures(fetchedDepartures);
+      setLoading(false);
+      setRefreshing(false);
+      saveFlightScreenCache({
+        airportCode: requestAirportCode,
+        arrivals: mergedArrs.filter(isPersistable),
+        departures: mergedDeps.filter(isPersistable),
+        sourceLabel: sourceState.sourceLabel,
+        fetchedAt: sourceState.fetchedAt,
+        providerDiagnostics: sourceState.providerDiagnostics,
+      }).catch(() => {});
+
       // Overlay ETA live dai dati ADS-B aperti (stessa fonte grezza di FR24):
       // incrocia gli arrivi per registrazione/callsign con gli aerei in volo
       // e sostituisce la stima con distanza/velocità reali. Best-effort: se
@@ -975,6 +1015,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         const airportInfo = getAirportInfo(requestAirportCode);
         if (airportInfo.latitude != null && airportInfo.longitude != null) {
           const adsbController = new AbortController();
+          liveEtaAbortRef.current?.abort();
+          liveEtaAbortRef.current = adsbController;
           const adsbTimer = setTimeout(() => adsbController.abort(), 8_000);
           const startedAt = Date.now();
           try {
@@ -1013,6 +1055,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             });
           } finally {
             clearTimeout(adsbTimer);
+            if (liveEtaAbortRef.current === adsbController) liveEtaAbortRef.current = null;
           }
         }
       } catch (e) {
@@ -1026,22 +1069,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       }
       if (!isCurrentRequest()) return;
 
-      const sourceState: FlightDataSourceState = {
-        airportCode: requestAirportCode,
-        sourceLabel: sourceLabel ?? 'Sconosciuta',
-        fetchedAt: fetchedAt ?? Date.now(),
+      sourceState = {
+        ...sourceState,
         providerDiagnostics: [...(providerDiagnostics ?? []), ...liveEtaDiagnostics],
       };
-      freshSnapshotAirportRef.current = requestAirportCode;
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);
-      setFlightSnapshotAirportCode(requestAirportCode);
       setFlightDataSource(sourceState);
       // I voli sintetizzati dalla tabella rotte AirLabs sono stime di orario,
       // non voli osservati: mostrali pure come fallback, ma non persisterli
       // in cache, così spariscono al primo fetch buono invece di restare
       // come fantasmi per ore.
-      const isPersistable = (item: any) => item?.flight?._source !== 'airlabs_routes';
       saveFlightScreenCache({
         airportCode: requestAirportCode,
         arrivals: mergedArrs.filter(isPersistable),
@@ -1067,9 +1105,6 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           providerDiagnostics: sourceState.providerDiagnostics,
         }).catch(() => {});
       }).catch(() => {});
-
-      setArrivals(fetchedArrivals);
-      setDepartures(fetchedDepartures);
 
       // Refresh the pinned snapshot from the latest schedule before deciding it
       // has expired. A delayed flight must remain pinned past its original STD.
@@ -1168,6 +1203,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       let isRestDay = false;
       const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
       const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
+      const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
       const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
       const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
       const { status } = await Calendar.requestCalendarPermissionsAsync();
@@ -1175,8 +1211,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
         const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
         if (cal) {
-          const evts = await Calendar.getEventsAsync([cal.id], todayStart, tomorrowEnd);
+          const queryEnd = new Date(tomorrowEnd.getTime() + 24 * 60 * 60 * 1000);
+          const evts = await Calendar.getEventsAsync([cal.id], yesterdayStart, queryEnd);
+          const nowSec = Date.now() / 1000;
           for (const e of evts) {
+            if (!isOwnedShiftEvent(e)) continue;
             if (e.title.includes('Riposo')) {
               const evtDay = new Date(e.startDate);
               if (evtDay >= todayStart && evtDay <= todayEnd) isRestDay = true;
@@ -1186,11 +1225,15 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             const s = new Date(e.startDate).getTime() / 1000;
             const en = new Date(e.endDate).getTime() / 1000;
             const evtDay = new Date(e.startDate);
-            if (evtDay >= todayStart && evtDay <= todayEnd) {
+            if (s <= nowSec && en > nowSec) {
+              shiftToday = { start: s, end: en };
+              isRestDay = false;
+            } else if (!shiftToday && evtDay >= todayStart && evtDay <= todayEnd) {
               shiftToday = { start: s, end: en };
               isRestDay = false; // Lavoro event overrides any stale Riposo marker for the same day
             } else if (evtDay >= tomorrowStart && evtDay <= tomorrowEnd) shiftTomorrow = { start: s, end: en };
           }
+          if (shiftToday) isRestDay = false;
         }
       }
       if (!isCurrentRequest()) return;
@@ -1434,21 +1477,39 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   // staffMonitor: poll stand / gate / belt every 60 s
   useEffect(() => {
     if (!isFocused) return;
+    let active = true;
+    let activeController: AbortController | null = null;
     const load = async () => {
+      // Never overlap polls, and tie the actual requests to this focused tab.
+      if (activeController) return;
+      const controller = new AbortController();
+      activeController = controller;
+      const timeout = setTimeout(() => controller.abort(), 45_000);
       try {
         const [deps, arrs] = await Promise.all([
-          fetchStaffMonitorData('D'),
-          fetchStaffMonitorData('A'),
+          fetchStaffMonitorData('D', controller.signal),
+          fetchStaffMonitorData('A', controller.signal),
         ]);
+        if (!active || controller.signal.aborted) return;
         staffMonitorDepsRef.current = deps;
         staffMonitorArrsRef.current = arrs;
         setStaffMonitorDeps(deps);
         setStaffMonitorArrs(arrs);
-      } catch {}
+      } catch {
+        // Focus changes and the poll deadline intentionally abort this work.
+      } finally {
+        clearTimeout(timeout);
+        if (activeController === controller) activeController = null;
+      }
     };
     load();
     const iv = setInterval(load, 60_000);
-    return () => clearInterval(iv);
+    return () => {
+      active = false;
+      clearInterval(iv);
+      activeController?.abort();
+      activeController = null;
+    };
   }, [isFocused]);
 
   const showNotifDialog = useCallback((title: string, message: string, tone: FlightAlertTone) => {
@@ -1661,12 +1722,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       onUnpin={unpinFlight}
       colors={colors}
       isOperations={isOperations}
+      isFocused={isFocused}
       s={s}
       smPool={visibleStaffMonitorDepartures}
       locale={locale}
       t={t}
     />
-  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, visibleStaffMonitorDepartures, locale, t]);
+  ), [airportCode, userShift, s, pinnedFlight, pinFlight, unpinFlight, colors, isOperations, isFocused, visibleStaffMonitorDepartures, locale, t]);
   const notifSummary = scheduledCount > 0
     ? t('flightNotifMsg1').replace('{count}', String(scheduledCount))
     : t('flightNotifMsg0');

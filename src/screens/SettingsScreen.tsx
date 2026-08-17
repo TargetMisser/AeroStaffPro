@@ -3,7 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator,
   Modal, KeyboardAvoidingView, Platform, TextInput, Linking,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme, ThemeMode } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { useLanguage } from '../context/LanguageContext';

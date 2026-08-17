@@ -1,6 +1,6 @@
 import React from 'react';
 import { Modal, ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { AirlineFilterLogo } from './AirlineLogo';
 import type { ThemeColors } from '../../context/ThemeContext';
 import type { TranslationKey } from '../../i18n/translations';

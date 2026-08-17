@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import FrostedSurface from './FrostedSurface';
 import TactilePressable from './motion/TactilePressable';
 import { SPACING, RADIUS } from '../theme/spacing';

@@ -20,12 +20,17 @@ export type UpdateInfo = {
   releaseUrl: string;
   releaseNotes: string;
   assetName: string | null;
+  assetDigest: string | null;
+  assetSize: number | null;
   checkedAt: number;
 };
 
 type GithubReleaseAsset = {
   name?: string;
   browser_download_url?: string;
+  content_type?: string;
+  digest?: string | null;
+  size?: number;
 };
 
 function selectPhoneApkAsset(assets: unknown[], tag: string): GithubReleaseAsset | undefined {
@@ -36,18 +41,57 @@ function selectPhoneApkAsset(assets: unknown[], tag: string): GithubReleaseAsset
   });
   const expectedName = tag ? `aerostaffpro-${tag}.apk`.toLowerCase() : '';
 
-  return apkAssets.find(asset => asset.name?.toLowerCase() === expectedName)
-    ?? apkAssets.find(asset => {
-      const name = asset.name?.toLowerCase() ?? '';
-      // Historical dual-APK releases may list the retired companion before the phone APK.
-      return !/(?:^|[-_.])(wear|watch)(?:[-_.]|$)/.test(name);
-    });
+  // The updater only accepts the canonical phone artifact. Falling back to an
+  // arbitrary APK in the release would let a renamed companion/debug artifact
+  // reach the package installer.
+  return apkAssets.find(asset => asset.name?.toLowerCase() === expectedName);
+}
+
+function isReleaseTag(value: string): boolean {
+  return /^v?\d+\.\d+\.\d+$/.test(value);
+}
+
+function isOfficialReleaseAssetUrl(value: string, tag: string, assetName: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.hostname.toLowerCase() !== 'github.com' || url.port) return false;
+    if (url.username || url.password || url.search || url.hash) return false;
+    const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    return segments.length === 6
+      && segments[0].toLowerCase() === 'targetmisser'
+      && segments[1].toLowerCase() === 'aerostaffpro'
+      && segments[2] === 'releases'
+      && segments[3] === 'download'
+      && segments[4] === tag
+      && segments[5] === assetName;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeSha256Digest(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  return /^sha256:[a-f0-9]{64}$/.test(normalized) ? normalized : null;
 }
 
 function normalizeUpdateInfo(info: UpdateInfo): UpdateInfo {
+  const assetName = typeof info.assetName === 'string' ? info.assetName : null;
+  const downloadUrl = typeof info.downloadUrl === 'string'
+    && assetName
+    && isReleaseTag(info.latestVersion)
+    && isOfficialReleaseAssetUrl(info.downloadUrl, info.latestVersion, assetName)
+    ? info.downloadUrl
+    : null;
   return {
     ...info,
     available: isNewer(info.latestVersion, APP_VERSION),
+    downloadUrl,
+    assetName,
+    assetDigest: normalizeSha256Digest(info.assetDigest),
+    assetSize: Number.isSafeInteger(info.assetSize) && (info.assetSize ?? 0) > 0
+      ? info.assetSize
+      : null,
   };
 }
 
@@ -94,6 +138,7 @@ export async function checkForUpdate(force = false): Promise<UpdateInfo | null> 
     }
 
     const tag = typeof json.tag_name === 'string' ? json.tag_name : '';
+    if (!isReleaseTag(tag)) return null;
     const assets = Array.isArray(json.assets) ? json.assets : [];
     const apkAsset = selectPhoneApkAsset(assets, tag);
     const releaseUrl = typeof json.html_url === 'string' ? json.html_url : '';
@@ -105,6 +150,10 @@ export async function checkForUpdate(force = false): Promise<UpdateInfo | null> 
       releaseUrl,
       releaseNotes: typeof json.body === 'string' ? json.body : '',
       assetName: typeof apkAsset?.name === 'string' ? apkAsset.name : null,
+      assetDigest: normalizeSha256Digest(apkAsset?.digest),
+      assetSize: Number.isSafeInteger(apkAsset?.size) && (apkAsset?.size ?? 0) > 0
+        ? apkAsset?.size ?? null
+        : null,
       checkedAt: now,
     });
 

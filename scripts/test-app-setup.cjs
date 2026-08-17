@@ -48,6 +48,7 @@ function loadTsModule(relativePath, mocks = {}) {
     JSON,
     Set,
     Map,
+    URL,
     ...(mocks.__globals ?? {}),
   };
   vm.runInNewContext(output, sandbox, { filename: absolutePath });
@@ -239,22 +240,38 @@ assert(
 );
 
 const appSource = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
+const indexSource = fs.readFileSync(path.join(root, 'index.ts'), 'utf8');
+const metroSource = fs.readFileSync(path.join(root, 'metro.config.js'), 'utf8');
+assert(
+  indexSource.includes("from './src/runtimeEntry'")
+    && !indexSource.includes("require('./.storybook')")
+    && metroSource.includes("path.resolve(__dirname, '.storybook/index.ts')")
+    && metroSource.includes("moduleName === './src/runtimeEntry'"),
+  'production and Storybook must use separate Metro dependency graphs',
+);
 assert(
   /activeTab\s*!==\s*['"]Shifts['"]\)\s*\{\s*goToTab\(0\);\s*return true;\s*\}/.test(appSource),
   'Android back from a secondary tab should navigate home instead of exiting the app',
 );
 assert(
-  /tab\.id\s*!==\s*['"]TravelDoc['"]\s*\|\|\s*activeTab\s*===\s*['"]TravelDoc['"]/.test(appSource),
-  'TravelDoc should mount only while its tab is active so its WebView is released on exit',
+  appSource.includes("tab.id === 'TravelDoc'")
+    && appSource.includes("activeTab === 'TravelDoc'")
+    && appSource.includes('Math.abs(i - activeTabIndex) <= 1'),
+  'TravelDoc should unmount on exit and distant tabs should be released from memory',
+);
+assert(!appSource.includes('DesignLabScreen'), 'Design Lab must not be imported into the production app bundle');
+
+const onboardingSource = fs.readFileSync(path.join(root, 'src/screens/OnboardingScreen.tsx'), 'utf8');
+assert(
+  onboardingSource.includes('checklist.requiredComplete ? completeSetup : skipSetupForNow')
+    && !/const skipSetupForNow[\s\S]*AsyncStorage\.setItem\(ONBOARDING_SETUP_STORAGE_KEY/.test(onboardingSource),
+  'skipping incomplete onboarding must dismiss only this run without persisting completion',
 );
 
 const lazyHomeScreenSource = fs.readFileSync(path.join(root, 'src/screens/HomeScreen.tsx'), 'utf8');
 assert(
-  lazyHomeScreenSource.includes('const [ocrEngineActive, setOcrEngineActive] = useState(false)')
-    && /ocrEngineActive\s*&&\s*\(/.test(lazyHomeScreenSource)
-    && lazyHomeScreenSource.includes('onLoadEnd={runPendingOcr}')
-    && lazyHomeScreenSource.includes('setOcrEngineActive(false)'),
-  'the hidden OCR WebView should mount on demand and be released after processing',
+  !/tesseract|ImagePicker|engineHtml|runPendingOcr|ocrEngineActive/.test(lazyHomeScreenSource),
+  'the retired OCR flow and its remote executable runtime must not ship in HomeScreen',
 );
 
 const runtimeDiagnosticsSource = fs.readFileSync(
@@ -387,6 +404,12 @@ assert(
   flightScreenSource.includes('runEffectsForCurrentRequest(isCurrentRequest')
     && flightScreenSource.includes('restoreStorageValueIfUnchanged('),
   'global pin effects must stop between awaits and roll back their storage write when an airport request becomes stale',
+);
+assert(
+  flightScreenSource.includes('const yesterdayStart = new Date(todayStart)')
+    && flightScreenSource.includes('if (!isOwnedShiftEvent(e)) continue;')
+    && flightScreenSource.includes('s <= nowSec && en > nowSec'),
+  'FlightScreen must recognize an owned overnight shift that started yesterday',
 );
 
 const pinnedFlightLifecycle = loadTsModule('src/utils/pinnedFlightLifecycle.ts');
@@ -535,6 +558,21 @@ assert(
     && homeScreenSource.includes('dismissPinnedFlightNotification()'),
   'a pin that Home confirms as expired must clean scheduled and ongoing notification surfaces',
 );
+assert(
+  homeScreenSource.includes('events.filter(isOwnedShiftEvent)')
+    && homeScreenSource.includes('const currentWork = workEvents.find')
+    && homeScreenSource.includes('shiftToday: (currentWork ?? todayWork) ?'),
+  'Home and its widget snapshot must retain an owned overnight shift after midnight',
+);
+
+const calendarScreenSource = fs.readFileSync(path.join(root, 'src/screens/CalendarScreen.tsx'), 'utf8');
+assert(
+  calendarScreenSource.includes('await pushShiftsToWidget(widgetUpdates)')
+    && calendarScreenSource.includes('storeWidgetDataPreservingFlights(noFlightData)')
+    && calendarScreenSource.includes('PDF_EXTRACTION_TIMEOUT_MS')
+    && calendarScreenSource.includes('MAX_PDF_TOTAL_BYTES'),
+  'calendar import must update widget shifts atomically, preserve flights, and bound PDF extraction',
+);
 
 const shiftTimelineSource = fs.readFileSync(path.join(root, 'src/components/ShiftTimeline.tsx'), 'utf8');
 assert(
@@ -617,11 +655,17 @@ assert(
         ok: true,
         json: async () => ({
           tag_name: 'v9.9.9',
-          html_url: 'https://example.test/release',
+          html_url: 'https://github.com/TargetMisser/AeroStaffPro/releases/tag/v9.9.9',
           body: 'test release',
           assets: [
             { name: 'AeroStaffPro-Wear-v9.9.9.apk', browser_download_url: 'https://example.test/wear.apk' },
-            { name: 'AeroStaffPro-v9.9.9.apk', browser_download_url: 'https://example.test/phone.apk' },
+            {
+              name: 'AeroStaffPro-v9.9.9.apk',
+              browser_download_url: 'https://github.com/TargetMisser/AeroStaffPro/releases/download/v9.9.9/AeroStaffPro-v9.9.9.apk',
+              content_type: 'application/vnd.android.package-archive',
+              digest: `sha256:${'a'.repeat(64)}`,
+              size: 123456,
+            },
           ],
         }),
       }),
@@ -630,8 +674,96 @@ assert(
   const legacyCompanionFirstUpdate = await updateCheckerWithLegacyCompanionFirst.checkForUpdate(true);
   assert(
     legacyCompanionFirstUpdate?.assetName === 'AeroStaffPro-v9.9.9.apk'
-      && legacyCompanionFirstUpdate?.downloadUrl === 'https://example.test/phone.apk',
+      && legacyCompanionFirstUpdate?.downloadUrl === 'https://github.com/TargetMisser/AeroStaffPro/releases/download/v9.9.9/AeroStaffPro-v9.9.9.apk'
+      && legacyCompanionFirstUpdate?.assetDigest === `sha256:${'a'.repeat(64)}`
+      && legacyCompanionFirstUpdate?.assetSize === 123456,
     'update checker must select the phone APK when a legacy companion APK is listed first',
+  );
+
+  const updateDownload = loadTsModule('src/utils/updateDownload.ts', {
+    'react-native': {
+      Linking: { openURL: async () => {} },
+      NativeModules: {},
+      Platform: { OS: 'android' },
+    },
+    'expo-application': { applicationId: 'com.aerostaffpro.app' },
+    'expo-file-system/legacy': {
+      documentDirectory: 'file:///private/files/',
+      EncodingType: { UTF8: 'utf8' },
+    },
+    'expo-intent-launcher': {},
+  });
+  const validUpdateInfo = {
+    available: true,
+    latestVersion: 'v9.9.9',
+    downloadUrl: 'https://github.com/TargetMisser/AeroStaffPro/releases/download/v9.9.9/AeroStaffPro-v9.9.9.apk',
+    releaseUrl: 'https://github.com/TargetMisser/AeroStaffPro/releases/tag/v9.9.9',
+    releaseNotes: '',
+    assetName: 'AeroStaffPro-v9.9.9.apk',
+    assetDigest: `sha256:${'a'.repeat(64)}`,
+    assetSize: 123456,
+    checkedAt: Date.now(),
+  };
+  assert(
+    updateDownload.ensureDownloadUrl(validUpdateInfo) === validUpdateInfo.downloadUrl,
+    'the updater must accept only the canonical HTTPS GitHub asset URL',
+  );
+  for (const maliciousUrl of [
+    'http://github.com/TargetMisser/AeroStaffPro/releases/download/v9.9.9/AeroStaffPro-v9.9.9.apk',
+    'https://github.com.evil.test/TargetMisser/AeroStaffPro/releases/download/v9.9.9/AeroStaffPro-v9.9.9.apk',
+    'https://github.com/TargetMisser/AeroStaffPro/releases/download/v9.9.8/AeroStaffPro-v9.9.9.apk',
+  ]) {
+    let rejected = false;
+    try {
+      updateDownload.ensureDownloadUrl({ ...validUpdateInfo, downloadUrl: maliciousUrl });
+    } catch {
+      rejected = true;
+    }
+    assert(rejected, `the updater must reject untrusted asset URL: ${maliciousUrl}`);
+  }
+
+  const passwordScreenSource = fs.readFileSync(path.join(root, 'src/screens/PasswordScreen.tsx'), 'utf8');
+  const pinPolicyRead = passwordScreenSource.indexOf('const enabled = await AsyncStorage.getItem(PIN_ENABLED_KEY)');
+  const passwordRead = passwordScreenSource.indexOf('const loaded = await loadPasswords()', pinPolicyRead);
+  assert(pinPolicyRead >= 0 && passwordRead > pinPolicyRead, 'vault bootstrap must resolve PIN policy before loading passwords');
+  assert(
+    passwordScreenSource.includes("AppState.addEventListener('change', onAppStateChange)")
+      && passwordScreenSource.includes('setEntries([])')
+      && passwordScreenSource.includes('getPinBackoffMs')
+      && passwordScreenSource.includes('setSecureWindow(true)'),
+    'vault must relock and clear secrets in background, throttle PIN retries, and protect Android snapshots',
+  );
+
+  const arionSource = fs.readFileSync(path.join(root, 'src/screens/ArionInboxScreen.tsx'), 'utf8');
+  assert(
+    arionSource.includes('isAllowedArionNavigation(request.url)')
+      && arionSource.includes("'prd-arion-ap.firebaseapp.com'")
+      && !arionSource.includes("originWhitelist={['https://*']}"),
+    'Arion WebView must keep top-level navigation on its explicit host allowlist',
+  );
+  const traveldocSource = fs.readFileSync(path.join(root, 'src/screens/TraveldocScreen.tsx'), 'utf8');
+  assert(
+    traveldocSource.includes('isAllowedTraveldocNavigation(request.url)')
+      && traveldocSource.includes("host.endsWith('.traveldoc.aero')")
+      && traveldocSource.includes('mixedContentMode="never"'),
+    'TravelDoc WebView must externalize non-TravelDoc hosts and reject mixed content',
+  );
+
+  const manifestSource = fs.readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
+  assert(
+    manifestSource.includes('android:allowBackup="false"')
+      && manifestSource.includes('android:dataExtractionRules="@xml/data_extraction_rules"')
+      && !manifestSource.includes('android.permission.CAMERA')
+      && manifestSource.includes('com.reactnativeandroidwidget.RNWidgetImageProvider" tools:node="remove"'),
+    'release manifest must disable backup, remove unused dangerous permissions, and remove the unused exported widget image provider',
+  );
+  const nativeSecuritySource = fs.readFileSync(path.join(root, 'android/app/src/main/java/com/aerostaffpro/app/security/AppSecurityModule.kt'), 'utf8');
+  assert(
+    nativeSecuritySource.includes('APK package name mismatch')
+      && nativeSecuritySource.includes('APK signing certificate does not match')
+      && nativeSecuritySource.includes('APK SHA-256 mismatch')
+      && nativeSecuritySource.includes('FLAG_SECURE'),
+    'native security bridge must validate APK identity/integrity and expose secure-window protection',
   );
 
   const storedEvents = [

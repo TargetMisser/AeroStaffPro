@@ -4,7 +4,7 @@ import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   LayoutAnimation, Platform, TextInput, Modal, Alert, KeyboardAvoidingView,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE } from '../theme/typography';

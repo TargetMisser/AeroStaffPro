@@ -4,7 +4,7 @@ import {
   TextInput, Alert, Modal, Linking, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';

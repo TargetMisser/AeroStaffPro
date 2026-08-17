@@ -555,6 +555,73 @@ async function main() {
     assert(await asyncStorage2.getItem(notifDiag2.PINNED_NOTIF_IDS_KEY) === null, 'PINNED_NOTIF_IDS_KEY should not be written when nothing is scheduled');
   })();
 
+  // ─── startup scheduler: ongoing previous-day night shift ──────────────────
+  await (async () => {
+    const fixedNowMs = new Date(2026, 5, 11, 2, 0, 0, 0).getTime();
+    class FixedDate extends Date {
+      constructor(...args) {
+        if (args.length === 0) super(fixedNowMs);
+        else super(...args);
+      }
+
+      static now() { return fixedNowMs; }
+    }
+
+    const nightStart = new Date(2026, 5, 10, 22, 0, 0, 0);
+    const nightEnd = new Date(2026, 5, 11, 6, 0, 0, 0);
+    const asyncStorage = makeAsyncStorageMock({
+      aerostaff_notif_enabled: 'true',
+      aerostaff_flight_filter_v1: JSON.stringify(['ryanair']),
+    });
+    const notifMock = makeNotificationsMock();
+    notifMock.requestPermissionsAsync = async () => ({ status: 'granted' });
+    const queriedRanges = [];
+    const ongoingCalls = [];
+    const calendarMock = {
+      EntityTypes: { EVENT: 'event' },
+      requestCalendarPermissionsAsync: async () => ({ status: 'granted' }),
+      getCalendarsAsync: async () => [{ id: 'cal1', allowsModifications: true, isPrimary: true }],
+      getEventsAsync: async (_calendarIds, start, end) => {
+        queriedRanges.push({ start: new Date(start), end: new Date(end) });
+        const event = { id: 'night', title: 'Lavoro', startDate: nightStart.toISOString(), endDate: nightEnd.toISOString() };
+        return nightStart >= start && nightEnd <= end ? [event] : [];
+      },
+    };
+    const autoNotifications = loadTsModule('src/utils/autoNotifications.ts', {
+      '@react-native-async-storage/async-storage': asyncStorage,
+      'expo-calendar': calendarMock,
+      'expo-notifications': notifMock,
+      './airlineOps': { getAirlineOps: () => ({ checkInOpen: 150, checkInClose: 40, gateOpen: 30, gateClose: 20 }) },
+      './fr24api': { fetchAirportScheduleRaw: async () => ({ departures: [], arrivals: [] }) },
+      './flightScheduleAdapter': { getFlightAirportLabel: () => '', isFlightAirlineMatch: () => true },
+      './flightTimes': { getBestArrivalTs: () => null, getBestDepartureTs: () => null, getScheduledFlightTs: () => null },
+      './shiftOngoingNotification': {
+        showShiftOngoingNotification: async (...args) => { ongoingCalls.push(args); },
+        dismissShiftOngoingNotification: async () => {},
+        syncShiftOngoingExpiry: async () => {},
+      },
+      './notificationDiagnostics': {
+        LAST_SCHEDULE_KEY: 'last_schedule',
+        NOTIF_ENABLED_KEY: 'aerostaff_notif_enabled',
+        NOTIF_IDS_KEY: 'notification_ids',
+        appendNotificationDebugEvent: async () => {},
+        buildNotificationData: input => input,
+        cancelAeroStaffScheduledNotifications: async () => 0,
+        dedupeAeroStaffScheduledNotifications: async () => 0,
+        runNotificationScheduleExclusive: async (_source, _reason, work) => work(),
+      },
+      __globals: { Date: FixedDate, __DEV__: false },
+    });
+
+    const count = await autoNotifications.autoScheduleNotifications();
+    assert(count === 1, `ongoing night shift should schedule its future shift-end notification, got ${count}`);
+    assert(ongoingCalls.length === 1, 'ongoing previous-day night shift should keep the persistent shift notification active');
+    assert(
+      queriedRanges[0]?.start.getTime() <= nightStart.getTime(),
+      'startup scheduler should query from yesterday so Android returns the contained night shift',
+    );
+  })();
+
   console.log('Notification scheduler test passed.');
 }
 

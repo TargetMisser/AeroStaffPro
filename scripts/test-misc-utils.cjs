@@ -731,6 +731,118 @@ async function testWidgetShiftSelfHeal() {
   assert(typeof denied.state === 'string', 'denied calendar permission should still return a widget state');
 }
 
+async function testShiftCalendarOwnershipAndPartialImport() {
+  const storedEvents = [
+    { id: 'legacy-10', title: 'Lavoro', startDate: new Date(2026, 5, 10, 8, 0).toISOString(), endDate: new Date(2026, 5, 10, 16, 0).toISOString() },
+    { id: 'legacy-11', title: 'Lavoro', startDate: new Date(2026, 5, 11, 8, 0).toISOString(), endDate: new Date(2026, 5, 11, 16, 0).toISOString() },
+    { id: 'legacy-12', title: 'Riposo', startDate: new Date(2026, 5, 12, 0, 0).toISOString(), endDate: new Date(2026, 5, 12, 23, 59).toISOString() },
+    { id: 'marked-custom-10', title: 'Turno notte personalizzato', notes: 'AEROSTAFF_PRO_SHIFT_V1', startDate: new Date(2026, 5, 10, 20, 0).toISOString(), endDate: new Date(2026, 5, 11, 4, 0).toISOString() },
+    { id: 'personal-work-10', title: 'Lavoro da casa', startDate: new Date(2026, 5, 10, 12, 0).toISOString(), endDate: new Date(2026, 5, 10, 13, 0).toISOString() },
+    { id: 'personal-rest-12', title: 'Riposo medico', startDate: new Date(2026, 5, 12, 12, 0).toISOString(), endDate: new Date(2026, 5, 12, 13, 0).toISOString() },
+  ];
+  const deletedIds = [];
+  const createdEvents = [];
+  const calendarMock = {
+    getEventsAsync: async (_calendarIds, start, end) => storedEvents.filter(event =>
+      new Date(event.startDate).getTime() >= new Date(start).getTime()
+      && new Date(event.endDate).getTime() <= new Date(end).getTime(),
+    ),
+    deleteEventAsync: async id => { deletedIds.push(id); },
+    createEventAsync: async (_calendarId, eventData) => {
+      createdEvents.push(eventData);
+      return `created-${createdEvents.length}`;
+    },
+  };
+  const shiftCalendar = loadTsModule('src/utils/shiftCalendar.ts', {
+    'expo-calendar': calendarMock,
+    'react-native': { Platform: { OS: 'android' } },
+  });
+
+  await shiftCalendar.replaceShiftsForRange({
+    calendarId: '1',
+    shifts: [
+      { date: '2026-06-10', type: 'work', startTime: '09:00', endTime: '17:00' },
+      { date: '2026-06-12', type: 'rest' },
+    ],
+  });
+
+  assert(
+    deletedIds.includes('legacy-10') && deletedIds.includes('legacy-12') && deletedIds.includes('marked-custom-10'),
+    'partial imports should replace legacy AeroStaff shifts on dates explicitly present in the import',
+  );
+  assert(
+    !deletedIds.includes('legacy-11'),
+    'partial imports must preserve AeroStaff shifts on dates absent from the import',
+  );
+  assert(
+    !deletedIds.includes('personal-work-10') && !deletedIds.includes('personal-rest-12'),
+    'events whose titles merely contain Lavoro or Riposo must remain untouched',
+  );
+  assert(
+    createdEvents.length === 2 && createdEvents.every(event => event.notes === shiftCalendar.AEROSTAFF_SHIFT_EVENT_MARKER),
+    'new shift events should carry an explicit AeroStaff ownership marker',
+  );
+}
+
+async function testWidgetKeepsPreviousDayNightShiftAfterMidnight() {
+  const fixedNowMs = new Date(2026, 5, 11, 2, 0, 0, 0).getTime();
+  class FixedDate extends Date {
+    constructor(...args) {
+      if (args.length === 0) super(fixedNowMs);
+      else super(...args);
+    }
+
+    static now() { return fixedNowMs; }
+  }
+
+  const nightStart = new Date(2026, 5, 10, 22, 0, 0, 0);
+  const nightEnd = new Date(2026, 5, 11, 6, 0, 0, 0);
+  const store = new Map([['widget_shift_v1', JSON.stringify({
+    date: '2026-06-10',
+    shiftToday: null,
+    isRestDay: false,
+    nextShift: null,
+  })]]);
+  const queriedRanges = [];
+  const asyncStorageMock = {
+    getItem: async key => (store.has(key) ? store.get(key) : null),
+    setItem: async (key, value) => { store.set(key, value); },
+  };
+  const calendarMock = {
+    EntityTypes: { EVENT: 'event' },
+    getCalendarPermissionsAsync: async () => ({ status: 'granted' }),
+    getCalendarsAsync: async () => [{ id: 'cal1', allowsModifications: true, isPrimary: true }],
+    getEventsAsync: async (_calendarIds, start, end) => {
+      queriedRanges.push({ start: new Date(start), end: new Date(end) });
+      const event = { id: 'night', title: 'Lavoro', startDate: nightStart.toISOString(), endDate: nightEnd.toISOString() };
+      return nightStart >= start && nightEnd <= end ? [event] : [];
+    },
+  };
+  const handler = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+    '@react-native-async-storage/async-storage': asyncStorageMock,
+    'expo-calendar': calendarMock,
+    'react-native-android-widget': {},
+    './ShiftWidget': { ShiftWidget: () => null },
+    './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light', themeSnapshot: undefined }) },
+    '../utils/liveArrivalEta': { applyLiveDepartureStatus: deps => deps, fetchAdsbAircraft: async () => [] },
+    '../utils/flightProviders/staffMonitorProvider': { staffMonitorProvider: { supports: () => false, fetch: async () => ({ allDepartures: [] }) } },
+    react: require('react'),
+    __globals: { Date: FixedDate },
+  });
+
+  const data = await handler.getWidgetData();
+  assert(data.state === 'work_empty', `an ongoing previous-day night shift should remain active after midnight, got ${data.state}`);
+  assert(
+    queriedRanges[0]?.start.getTime() <= nightStart.getTime(),
+    'widget calendar self-heal should query from yesterday so Android returns the contained night shift',
+  );
+  const rewritten = JSON.parse(store.get('widget_shift_v1'));
+  assert(
+    rewritten.shiftToday?.start === nightStart.getTime() / 1000 && rewritten.shiftToday?.end === nightEnd.getTime() / 1000,
+    'widget shiftToday should contain the ongoing previous-day night shift after self-heal',
+  );
+}
+
 async function testWidgetCacheFirstPaint() {
   const toIso = date => {
     const y = date.getFullYear();
@@ -890,7 +1002,9 @@ async function testWidgetOperationalWindowsStayScheduled() {
 
 async function main() {
   await testDateFormat();
+  await testShiftCalendarOwnershipAndPartialImport();
   await testWidgetShiftSelfHeal();
+  await testWidgetKeepsPreviousDayNightShiftAfterMidnight();
   await testWidgetCacheFirstPaint();
   await testWidgetOperationalWindowsStayScheduled();
   await testThemeMode();

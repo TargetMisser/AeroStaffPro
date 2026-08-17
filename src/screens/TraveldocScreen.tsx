@@ -1,6 +1,6 @@
 // src/screens/TraveldocScreen.tsx
 import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, ActivityIndicator } from 'react-native';
+import { StyleSheet, View, Text, ActivityIndicator, Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -28,12 +28,34 @@ const DARK_CSS_JS = `
 true;
 `;
 
+export function isAllowedTraveldocNavigation(value: string): boolean {
+  if (value === 'about:blank') return true;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === 'https:'
+      && (host === 'traveldoc.aero' || host.endsWith('.traveldoc.aero'));
+  } catch {
+    return false;
+  }
+}
+
+function openExternalNavigation(value: string): void {
+  try {
+    const url = new URL(value);
+    if (['https:', 'http:', 'mailto:', 'tel:'].includes(url.protocol.toLowerCase())) {
+      Linking.openURL(value).catch(() => {});
+    }
+  } catch {}
+}
+
 export default function TraveldocScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const webViewRef = useRef<WebView>(null);
+  const loadFailedRef = useRef(false);
 
   useEffect(() => {
     if (!isFocused || !loading) return;
@@ -81,10 +103,25 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
           ref={webViewRef}
           source={{ uri: 'https://legacy.traveldoc.aero/' }}
           style={{ flex: 1, backgroundColor: colors.isDark ? '#111111' : '#ffffff' }}
-          onLoadEnd={() => { setLoading(false); setLoadError(false); }}
-          onError={() => { setLoading(false); setLoadError(true); }}
+          onLoadStart={() => { loadFailedRef.current = false; setLoading(true); setLoadError(false); }}
+          onLoadEnd={() => {
+            setLoading(false);
+            if (!loadFailedRef.current) setLoadError(false);
+          }}
+          onError={() => { loadFailedRef.current = true; setLoading(false); setLoadError(true); }}
+          onHttpError={() => { loadFailedRef.current = true; setLoading(false); setLoadError(true); }}
+          originWhitelist={['https://traveldoc.aero', 'https://*.traveldoc.aero']}
           javaScriptEnabled
           domStorageEnabled
+          setSupportMultipleWindows={false}
+          mixedContentMode="never"
+          allowFileAccess={false}
+          allowUniversalAccessFromFileURLs={false}
+          onShouldStartLoadWithRequest={request => {
+            if (isAllowedTraveldocNavigation(request.url)) return true;
+            openExternalNavigation(request.url);
+            return false;
+          }}
           injectedJavaScriptBeforeContentLoaded={colors.isDark ? DARK_CSS_JS : undefined}
           injectedJavaScript={colors.isDark ? DARK_CSS_JS : undefined}
         />

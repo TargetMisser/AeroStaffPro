@@ -17,6 +17,7 @@ import expo.modules.ApplicationLifecycleDispatcher
 import expo.modules.ReactNativeHostWrapper
 import com.aerostaffpro.app.runtime.RuntimeDiagnostics
 import com.aerostaffpro.app.runtime.RuntimeDiagnosticsPackage
+import com.aerostaffpro.app.security.AppSecurityPackage
 
 class MainApplication : Application(), ReactApplication {
   private val startupState by lazy { RuntimeDiagnostics.prepareStartup(this) }
@@ -27,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
         override fun getPackages(): List<ReactPackage> =
             PackageList(this).packages.apply {
             add(RuntimeDiagnosticsPackage())
+            add(AppSecurityPackage())
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
             }

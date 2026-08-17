@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { motionDurations, motionEasing, useReducedMotionPreference } from '../../utils/motion';
 import { SPACING, RADIUS } from '../../theme/spacing';
 

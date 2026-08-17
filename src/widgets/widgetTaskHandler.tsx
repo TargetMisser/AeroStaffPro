@@ -162,32 +162,54 @@ async function refreshShiftSnapshotFromCalendar(): Promise<WidgetShiftData | nul
     const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
     if (!cal) return null;
 
-    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const now = new Date();
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+    const yesterdayStart = addDays(todayStart, -1);
     const todayEnd = new Date(todayStart); todayEnd.setHours(23, 59, 59, 999);
     const tomorrowStart = addDays(todayStart, 1);
     const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
+    // Android only returns events fully contained in the query window. Start
+    // yesterday for an ongoing 22:00-06:00 shift and extend one day past
+    // tomorrow so tomorrow's night shift is contained as well.
+    const queryEnd = addDays(tomorrowEnd, 1);
 
     let shiftToday: { start: number; end: number } | null = null;
     let shiftTomorrow: { start: number; end: number } | null = null;
-    let isRestDay = false;
-    const events = await Calendar.getEventsAsync([cal.id], todayStart, tomorrowEnd);
-    for (const e of events) {
-      if (e.title.includes('Riposo')) {
-        const evtDay = new Date(e.startDate);
-        if (evtDay >= todayStart && evtDay <= todayEnd) isRestDay = true;
-        continue;
-      }
-      if (!e.title.includes('Lavoro')) continue;
-      const start = new Date(e.startDate).getTime() / 1000;
-      const end = new Date(e.endDate).getTime() / 1000;
-      const evtDay = new Date(e.startDate);
-      if (evtDay >= todayStart && evtDay <= todayEnd) {
-        shiftToday = { start, end };
-        isRestDay = false;
-      } else if (evtDay >= tomorrowStart && evtDay <= tomorrowEnd) {
-        shiftTomorrow = { start, end };
-      }
+    const events = await Calendar.getEventsAsync([cal.id], yesterdayStart, queryEnd);
+    const workEvents = events
+      .filter(event => event.title.trim() === 'Lavoro')
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    const currentWork = workEvents.find(event => (
+      new Date(event.startDate).getTime() <= now.getTime()
+      && new Date(event.endDate).getTime() > now.getTime()
+    ));
+    const todayWork = workEvents.find(event => {
+      const start = new Date(event.startDate);
+      return start >= todayStart && start <= todayEnd;
+    });
+    const tomorrowWork = workEvents.find(event => {
+      const start = new Date(event.startDate);
+      return start >= tomorrowStart && start <= tomorrowEnd;
+    });
+    const activeOrTodayWork = currentWork ?? todayWork;
+
+    if (activeOrTodayWork) {
+      shiftToday = {
+        start: new Date(activeOrTodayWork.startDate).getTime() / 1000,
+        end: new Date(activeOrTodayWork.endDate).getTime() / 1000,
+      };
     }
+    if (tomorrowWork) {
+      shiftTomorrow = {
+        start: new Date(tomorrowWork.startDate).getTime() / 1000,
+        end: new Date(tomorrowWork.endDate).getTime() / 1000,
+      };
+    }
+    const isRestDay = !shiftToday && events.some(event => {
+      if (event.title.trim() !== 'Riposo') return false;
+      const start = new Date(event.startDate);
+      return start >= todayStart && start <= todayEnd;
+    });
 
     const snapshot: WidgetShiftData = {
       date: toLocalIso(todayStart),

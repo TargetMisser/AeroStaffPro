@@ -270,41 +270,60 @@ export function parseShiftCellFiles(files: PdfExtractedFile[]): ParsedSchedule {
   return mergeParsedSchedules(files.map(file => parseShiftCells(file.cells)));
 }
 
-/** HTML to inject into a hidden WebView for PDF text extraction */
-export function getPdfExtractorHtml(base64Data: string | string[]): string {
-  const pdfInputs = JSON.stringify(Array.isArray(base64Data) ? base64Data : [base64Data]);
+export type PdfJsRuntimeSources = {
+  library: string;
+  worker: string;
+};
+
+function scriptSafeJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+/** Offline-only HTML injected into a hidden WebView for PDF text extraction. */
+export function getPdfExtractorHtml(
+  base64Data: string | string[],
+  runtime: PdfJsRuntimeSources,
+): string {
+  const pdfInputs = scriptSafeJson(Array.isArray(base64Data) ? base64Data : [base64Data]);
+  const librarySource = scriptSafeJson(runtime.library);
+  const workerSource = scriptSafeJson(runtime.worker);
 
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs" type="module"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:">
 </head><body><script type="module">
-import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.min.mjs';
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.9.155/pdf.worker.min.mjs';
-
+const libraryUrl = URL.createObjectURL(new Blob([${librarySource}], { type: 'text/javascript' }));
+const workerUrl = URL.createObjectURL(new Blob([${workerSource}], { type: 'text/javascript' }));
 const pdfInputs = ${pdfInputs};
 
-async function extractPdf(base64Data, fileIndex) {
+async function extractPdf(pdfjsLib, base64Data, fileIndex) {
     const raw = atob(base64Data);
     const uint8 = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) uint8[i] = raw.charCodeAt(i);
 
-    const pdf = await pdfjsLib.getDocument({ data: uint8 }).promise;
+    const loadingTask = pdfjsLib.getDocument({ data: uint8 });
+    const pdf = await loadingTask.promise;
     const cells = [];
 
-    for (let p = 0; p < pdf.numPages; p++) {
-      const page = await pdf.getPage(p + 1);
-      const content = await page.getTextContent();
-      for (const item of content.items) {
-        const text = item.str.trim();
-        if (!text) continue;
-        cells.push({
-          text,
-          x: Math.round(item.transform[4] * 10) / 10,
-          y: Math.round((page.view[3] - item.transform[5]) * 10) / 10,
-          page: p,
-          fileIndex
-        });
+    try {
+      for (let p = 0; p < pdf.numPages; p++) {
+        const page = await pdf.getPage(p + 1);
+        const content = await page.getTextContent();
+        for (const item of content.items) {
+          const text = item.str.trim();
+          if (!text) continue;
+          cells.push({
+            text,
+            x: Math.round(item.transform[4] * 10) / 10,
+            y: Math.round((page.view[3] - item.transform[5]) * 10) / 10,
+            page: p,
+            fileIndex
+          });
+        }
+        page.cleanup();
       }
+    } finally {
+      await pdf.destroy();
     }
 
     return cells;
@@ -312,9 +331,11 @@ async function extractPdf(base64Data, fileIndex) {
 
 async function extract() {
   try {
+    const pdfjsLib = await import(libraryUrl);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
     const files = [];
     for (let i = 0; i < pdfInputs.length; i++) {
-      files.push({ cells: await extractPdf(pdfInputs[i], i) });
+      files.push({ cells: await extractPdf(pdfjsLib, pdfInputs[i], i) });
     }
 
     const cells = [];
@@ -322,6 +343,9 @@ async function extract() {
     window.ReactNativeWebView.postMessage(JSON.stringify({ ok: true, cells, files }));
   } catch (e) {
     window.ReactNativeWebView.postMessage(JSON.stringify({ ok: false, error: e.message }));
+  } finally {
+    URL.revokeObjectURL(libraryUrl);
+    URL.revokeObjectURL(workerUrl);
   }
 }
 extract();

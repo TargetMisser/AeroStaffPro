@@ -56,6 +56,14 @@ runHelp('release-quick.cjs');
 assert(emulatorQaSource.includes('dismissBlockingOverlays'), 'emulator QA should dismiss blocking update/system overlays');
 assert(emulatorQaSource.includes('Viewing full screen'), 'emulator QA should handle Android immersive-mode education overlay');
 assert(emulatorQaSource.includes('Aggiornamento disponibile'), 'emulator QA should handle in-app update modal before navigation');
+assert(emulatorQaSource.includes('dismissOnboardingIfShown'), 'emulator QA should handle clean-install guided setup');
+assert(
+  emulatorQaSource.includes("Calendar permission prompt did not dismiss after 4 attempts"),
+  'emulator QA should retry and verify calendar permission dismissal',
+);
+assert(emulatorQaSource.includes('verifyInstalledPackage'), 'emulator QA should verify the installed version and debug flag');
+assert(emulatorQaSource.includes("path.join(activeOutDir, 'qa-error.txt')"), 'emulator QA should retain artifacts for early failures');
+assert(emulatorQaSource.includes('Multiple ADB devices connected'), 'emulator QA should require an explicit serial when device selection is ambiguous');
 
 assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');

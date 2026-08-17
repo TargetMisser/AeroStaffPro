@@ -2,6 +2,7 @@ export type PrintableShiftEvent = {
   title: string;
   startDate: string | Date;
   endDate: string | Date;
+  notes?: string | null;
 };
 
 export const A4_LANDSCAPE_PDF_SIZE = {

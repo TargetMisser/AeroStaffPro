@@ -9,12 +9,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as SystemCalendar from 'expo-calendar';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { isOwnedShiftEvent } from '../utils/shiftCalendar';
 import {
   A4_LANDSCAPE_PDF_SIZE,
   buildPrintableShiftCalendarHtml,
@@ -77,13 +78,14 @@ export default function PrintableCalendarScreen() {
       const events = await SystemCalendar.getEventsAsync([calendar.id], rangeStart, rangeEnd);
       const next: Record<string, PrintableShiftEvent[]> = {};
       for (const event of events) {
-        if (!event.title.includes('Lavoro') && !event.title.includes('Riposo')) continue;
+        if (!isOwnedShiftEvent(event)) continue;
         const iso = toLocalIso(new Date(event.startDate));
         next[iso] ??= [];
         next[iso].push({
           title: event.title,
           startDate: event.startDate,
           endDate: event.endDate,
+          notes: event.notes,
         });
       }
       setEventsByDate(next);

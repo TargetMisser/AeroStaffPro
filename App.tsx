@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemeProvider, useAppTheme } from './src/context/ThemeContext';
@@ -23,7 +23,6 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import PasswordScreen from './src/screens/PasswordScreen';
 import ArionInboxScreen from './src/screens/ArionInboxScreen';
 import PrintableCalendarScreen from './src/screens/PrintableCalendarScreen';
-import DesignLabScreen from './src/screens/DesignLabScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import AppTabBar, { type AppTabBarItem, type AppTabId } from './src/components/AppTabBar';
@@ -50,7 +49,7 @@ import { SPACING, RADIUS } from './src/theme/spacing';
 installGlobalCrashHandler();
 
 type Tab = AppTabId;
-type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'PrintableCalendar' | 'Settings' | 'DesignLab' | 'Onboarding' | null;
+type OverlayScreen = 'Notepad' | 'Phonebook' | 'Passwords' | 'Manuals' | 'ArionInbox' | 'PrintableCalendar' | 'Settings' | 'Onboarding' | null;
 type SettingsInitialModal = 'providers' | 'debug' | null;
 
 const TABS: AppTabBarItem[] = [
@@ -64,18 +63,6 @@ const FOOTER_SWIPE_START_DISTANCE = 12;
 const FOOTER_SWIPE_DIRECTION_BIAS = 1.25;
 const FOOTER_SWIPE_SWITCH_DISTANCE_RATIO = 0.14;
 const FOOTER_SWIPE_SWITCH_VELOCITY = 0.5;
-
-const OVERLAY_TITLES: Record<NonNullable<OverlayScreen>, string> = {
-  Notepad:   'Blocco Note',
-  Phonebook: 'Rubrica',
-  Passwords: 'Password',
-  Manuals:   'Manuali DCS',
-  ArionInbox: 'Arion Inbox',
-  PrintableCalendar: 'Calendario A4',
-  Settings:  'Impostazioni',
-  DesignLab: 'Design Lab',
-  Onboarding: 'Setup guidato',
-};
 
 // ─── Inner app (inside ThemeProvider) ────────────────────────────────────────
 function AppInner() {
@@ -98,7 +85,6 @@ function AppInner() {
     Notepad: t('overlayNotepad'), Phonebook: t('overlayPhonebook'),
     Passwords: t('overlayPasswords'), Manuals: t('overlayManuals'), ArionInbox: t('overlayArionInbox'),
     PrintableCalendar: t('overlayPrintableCalendar'), Settings: t('overlaySettings'),
-    DesignLab: 'Design Lab',
     Onboarding: 'Setup guidato',
   };
 
@@ -259,7 +245,6 @@ function AppInner() {
         onOpenOnboarding={() => setOverlay('Onboarding')}
       />
     );
-    if (overlay === 'DesignLab' && __DEV__) return <DesignLabScreen />;
     if (overlay === 'Onboarding') return (
       <OnboardingScreen
         onComplete={() => setOverlay(null)}
@@ -287,6 +272,7 @@ function AppInner() {
   const appBarTitle = overlay ? overlayTitles[overlay] : 'AeroStaff Pro';
   const surfaceVariant = colors.isDark ? 'operations' : 'solid';
   const isOperations = colors.isDark;
+  const activeTabIndex = TABS.findIndex(tab => tab.id === activeTab);
   const tabInactiveColor = colors.tabIconInactive;
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
 
@@ -352,7 +338,9 @@ function AppInner() {
             key={tab.id}
             style={[StyleSheet.absoluteFill, { transform: [{ translateX: Animated.add(offsetX, i * SCREEN_W) }] }]}
           >
-            {tab.id !== 'TravelDoc' || activeTab === 'TravelDoc'
+            {(tab.id === 'TravelDoc'
+              ? activeTab === 'TravelDoc'
+              : Math.abs(i - activeTabIndex) <= 1)
               ? renderTabScreen(tab.id)
               : null}
           </Animated.View>

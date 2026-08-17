@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Modal, TextInput, Alert, KeyboardAvoidingView, Platform, ScrollView,
+  ActivityIndicator, AppState, NativeModules, type AppStateStatus,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
@@ -15,6 +16,19 @@ import { SPACING, RADIUS } from '../theme/spacing';
 const PASSWORDS_KEY   = 'aerostaff_passwords_v1';
 const PIN_KEY         = 'aerostaff_pin_v1';
 const PIN_ENABLED_KEY = 'aerostaff_pin_enabled_v1';
+const PIN_FAILED_ATTEMPTS_KEY = 'aerostaff_pin_failed_attempts_v1';
+const PIN_LOCKED_UNTIL_KEY = 'aerostaff_pin_locked_until_v1';
+
+type AppSecurityNativeModule = {
+  setSecureWindow?: (enabled: boolean) => Promise<boolean>;
+};
+
+const appSecurity = NativeModules.AppSecurity as AppSecurityNativeModule | undefined;
+
+export function getPinBackoffMs(failedAttempts: number): number {
+  if (failedAttempts < 3) return 0;
+  return Math.min(5_000 * (2 ** (failedAttempts - 3)), 60_000);
+}
 
 // ── Secure helpers — all sensitive data goes through the OS keychain ──────────
 async function getSecurePin(): Promise<string | null> {
@@ -88,13 +102,20 @@ const EMPTY_MODAL: ModalState = {
 };
 
 // ─── PIN Overlay ─────────────────────────────────────────────────────────────
-function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => void; onCancel?: () => void; title: string }) {
+function PinOverlay({ onUnlock, onCancel, title, disabled = false, message }: {
+  onUnlock: (pin: string) => void;
+  onCancel?: () => void;
+  title: string;
+  disabled?: boolean;
+  message?: string;
+}) {
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const s = useMemo(() => makePinStyles(colors), [colors]);
   const [digits, setDigits] = useState('');
 
   const press = (d: string) => {
+    if (disabled) return;
     const next = (digits + d).slice(0, 4);
     setDigits(next);
     if (next.length === 4) {
@@ -115,15 +136,16 @@ function PinOverlay({ onUnlock, onCancel, title }: { onUnlock: (pin: string) => 
             <View key={i} style={[s.dot, digits.length > i && s.dotFilled]} />
           ))}
         </View>
+        {message ? <Text style={s.message}>{message}</Text> : null}
         <View style={s.grid}>
           {keys.map((k, i) => (
             k === '' ? <View key={i} style={s.keyEmpty} /> :
             k === '⌫' ? (
-              <TouchableOpacity key={i} style={s.key} onPress={del} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('a11yBackspace')}>
+              <TouchableOpacity key={i} style={[s.key, disabled && s.keyDisabled]} disabled={disabled} onPress={del} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={t('a11yBackspace')}>
                 <MaterialIcons name="backspace" size={20} color={colors.text} />
               </TouchableOpacity>
             ) : (
-              <TouchableOpacity key={i} style={s.key} onPress={() => press(k)} activeOpacity={0.7}>
+              <TouchableOpacity key={i} style={[s.key, disabled && s.keyDisabled]} disabled={disabled} onPress={() => press(k)} activeOpacity={0.7}>
                 <Text style={s.keyText}>{k}</Text>
               </TouchableOpacity>
             )
@@ -184,19 +206,85 @@ export default function PasswordScreen() {
   const [modal, setModal]           = useState<ModalState>(EMPTY_MODAL);
   const [showPw, setShowPw]         = useState(false);
   const [pinEnabled, setPinEnabled] = useState(false);
-  const [pinMode, setPinMode]       = useState<'unlock' | 'setup' | null>(null);
+  const [pinMode, setPinMode]       = useState<'loading' | 'unlock' | 'setup' | null>('loading');
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockedUntil, setLockedUntil] = useState(0);
+  const [unlocking, setUnlocking] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
+  const loadGeneration = useRef(0);
 
-  // Load on mount
+  const clearSensitiveState = useCallback(() => {
+    loadGeneration.current += 1;
+    setEntries([]);
+    setModal(EMPTY_MODAL);
+    setShowPw(false);
+    setUnlocking(false);
+  }, []);
+
+  const lockVault = useCallback(() => {
+    clearSensitiveState();
+    setPinMode('unlock');
+  }, [clearSensitiveState]);
+
+  // Prevent screenshots and recent-app task snapshots only while the vault is mounted.
   useEffect(() => {
+    if (Platform.OS !== 'android' || !appSecurity?.setSecureWindow) return;
+    appSecurity.setSecureWindow(true).catch(() => {});
+    return () => { appSecurity.setSecureWindow?.(false).catch(() => {}); };
+  }, []);
+
+  // Resolve the PIN policy before touching password storage. With PIN enabled,
+  // passwords are loaded only after a successful verification.
+  useEffect(() => {
+    let active = true;
+    const generation = ++loadGeneration.current;
     (async () => {
-      const loaded = await loadPasswords();
-      setEntries(loaded);
       const enabled = await AsyncStorage.getItem(PIN_ENABLED_KEY);
       const isEnabled = enabled === 'true';
+      if (!active || generation !== loadGeneration.current) return;
       setPinEnabled(isEnabled);
-      if (isEnabled) setPinMode('unlock');
+      if (isEnabled) {
+        const [attemptsRaw, lockedUntilRaw] = await Promise.all([
+          AsyncStorage.getItem(PIN_FAILED_ATTEMPTS_KEY),
+          AsyncStorage.getItem(PIN_LOCKED_UNTIL_KEY),
+        ]);
+        if (!active || generation !== loadGeneration.current) return;
+        setFailedAttempts(Math.max(0, Number.parseInt(attemptsRaw ?? '0', 10) || 0));
+        setLockedUntil(Math.max(0, Number.parseInt(lockedUntilRaw ?? '0', 10) || 0));
+        setPinMode('unlock');
+        return;
+      }
+      const loaded = await loadPasswords();
+      if (!active || generation !== loadGeneration.current) return;
+      setEntries(loaded);
+      setPinMode(null);
     })();
+    return () => {
+      active = false;
+      loadGeneration.current += 1;
+    };
   }, []);
+
+  useEffect(() => {
+    if (lockedUntil <= Date.now()) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const tick = () => {
+      const nextNow = Date.now();
+      setNowMs(nextNow);
+      if (nextNow < lockedUntil) timer = setTimeout(tick, 500);
+    };
+    tick();
+    return () => { if (timer) clearTimeout(timer); };
+  }, [lockedUntil]);
+
+  useEffect(() => {
+    if (!pinEnabled) return;
+    const onAppStateChange = (state: AppStateStatus) => {
+      if (state !== 'active') lockVault();
+    };
+    const subscription = AppState.addEventListener('change', onAppStateChange);
+    return () => subscription.remove();
+  }, [lockVault, pinEnabled]);
 
   const persist = useCallback(async (next: PasswordEntry[]) => {
     setEntries(next);
@@ -212,6 +300,9 @@ export default function PasswordScreen() {
           try {
             setPinEnabled(false);
             await AsyncStorage.setItem(PIN_ENABLED_KEY, 'false');
+            await AsyncStorage.multiRemove([PIN_FAILED_ATTEMPTS_KEY, PIN_LOCKED_UNTIL_KEY]);
+            setFailedAttempts(0);
+            setLockedUntil(0);
             await deleteSecurePin();
           } catch (e) { if (__DEV__) console.error('[pin] disable error', e); }
         }},
@@ -225,7 +316,10 @@ export default function PasswordScreen() {
     try {
       await setSecurePin(pin);
       await AsyncStorage.setItem(PIN_ENABLED_KEY, 'true');
+      await AsyncStorage.multiRemove([PIN_FAILED_ATTEMPTS_KEY, PIN_LOCKED_UNTIL_KEY]);
       setPinEnabled(true);
+      setFailedAttempts(0);
+      setLockedUntil(0);
       setPinMode(null);
       Alert.alert(t('pinSetTitle'), t('pinSetMsg'));
     } catch (e) {
@@ -235,18 +329,41 @@ export default function PasswordScreen() {
   }, []);
 
   const handlePinUnlock = useCallback(async (pin: string) => {
+    const requestStartedAt = Date.now();
+    if (unlocking || requestStartedAt < lockedUntil) return;
+    const generation = ++loadGeneration.current;
+    setUnlocking(true);
     try {
       const stored = await getSecurePin();
       if (pin === stored) {
+        await AsyncStorage.multiRemove([PIN_FAILED_ATTEMPTS_KEY, PIN_LOCKED_UNTIL_KEY]);
+        const loaded = await loadPasswords();
+        if (generation !== loadGeneration.current || AppState.currentState !== 'active') return;
+        setEntries(loaded);
+        setFailedAttempts(0);
+        setLockedUntil(0);
         setPinMode(null);
       } else {
-        Alert.alert(t('pinWrong'), t('pinWrongMsg'));
+        const nextAttempts = failedAttempts + 1;
+        const nextLockedUntil = Date.now() + getPinBackoffMs(nextAttempts);
+        await AsyncStorage.multiSet([
+          [PIN_FAILED_ATTEMPTS_KEY, String(nextAttempts)],
+          [PIN_LOCKED_UNTIL_KEY, String(nextLockedUntil)],
+        ]);
+        // Throttle state is non-sensitive and must survive a simultaneous
+        // background relock; otherwise toggling app state could bypass backoff.
+        setFailedAttempts(nextAttempts);
+        setLockedUntil(nextLockedUntil);
+        setNowMs(Date.now());
+        if (AppState.currentState === 'active') Alert.alert(t('pinWrong'), t('pinWrongMsg'));
       }
     } catch (e) {
       if (__DEV__) console.error('[pin] unlock error', e);
       Alert.alert('Errore', t('pinVerifyErr'));
+    } finally {
+      if (generation === loadGeneration.current) setUnlocking(false);
     }
-  }, []);
+  }, [failedAttempts, lockedUntil, t, unlocking]);
 
   // CRUD
   const openAdd = () => setModal({ ...EMPTY_MODAL, visible: true });
@@ -288,8 +405,23 @@ export default function PasswordScreen() {
   }, [entries, persist]);
 
   // PIN overlays (setup and unlock)
+  if (pinMode === 'loading') {
+    return (
+      <View style={[s.root, { alignItems: 'center', justifyContent: 'center' }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
   if (pinMode === 'unlock') {
-    return <PinOverlay title="Inserisci PIN" onUnlock={handlePinUnlock} />;
+    const remainingSeconds = Math.max(0, Math.ceil((lockedUntil - nowMs) / 1000));
+    return (
+      <PinOverlay
+        title="Inserisci PIN"
+        onUnlock={handlePinUnlock}
+        disabled={unlocking || remainingSeconds > 0}
+        message={remainingSeconds > 0 ? `Troppi tentativi. Riprova tra ${remainingSeconds}s.` : undefined}
+      />
+    );
   }
   if (pinMode === 'setup') {
     return <PinOverlay title="Imposta PIN (4 cifre)" onUnlock={handlePinSetup} onCancel={() => setPinMode(null)} />;
@@ -403,8 +535,10 @@ function makePinStyles(c: ThemeColors) {
     dots:    { flexDirection: 'row', gap: SPACING.lg, marginBottom: SPACING.xxxl },
     dot:     { width: 16, height: 16, borderRadius: RADIUS.sm, borderWidth: 2, borderColor: c.primary, backgroundColor: 'transparent' },
     dotFilled: { backgroundColor: c.primary },
+    message: { color: c.textSub, fontSize: 13, textAlign: 'center', minHeight: 20, marginTop: -SPACING.lg, marginBottom: SPACING.lg },
     grid:    { flexDirection: 'row', flexWrap: 'wrap', width: 240, justifyContent: 'center', gap: SPACING.md },
     key:     { width: 64, height: 64, borderRadius: 32, backgroundColor: c.card, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center' },
+    keyDisabled: { opacity: 0.45 },
     keyEmpty:{ width: 64, height: 64 },
     keyText: { fontSize: 22, fontWeight: '600', color: c.text },
   });

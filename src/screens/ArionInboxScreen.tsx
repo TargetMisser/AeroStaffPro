@@ -1,12 +1,35 @@
 import React, { useRef, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { SPACING, RADIUS } from '../theme/spacing';
 
 const ARION_INBOX_URL = 'https://prd-arion-ap.firebaseapp.com/messages/inbox';
+const ARION_ALLOWED_HOSTS = new Set([
+  'prd-arion-ap.firebaseapp.com',
+  'arion.aviapartner.aero',
+]);
+
+export function isAllowedArionNavigation(value: string): boolean {
+  if (value === 'about:blank') return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && ARION_ALLOWED_HOSTS.has(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+function openExternalNavigation(value: string): void {
+  try {
+    const url = new URL(value);
+    if (['https:', 'http:', 'mailto:', 'tel:'].includes(url.protocol.toLowerCase())) {
+      Linking.openURL(value).catch(() => {});
+    }
+  } catch {}
+}
 
 type WebLoadError = {
   code?: number;
@@ -127,12 +150,18 @@ export default function ArionInboxScreen() {
               ref={webViewRef}
               source={{ uri: ARION_INBOX_URL }}
               style={styles.webView}
-              originWhitelist={['https://*']}
+              originWhitelist={[
+                'https://prd-arion-ap.firebaseapp.com',
+                'https://arion.aviapartner.aero',
+              ]}
               javaScriptEnabled
               domStorageEnabled
               sharedCookiesEnabled
               thirdPartyCookiesEnabled
               setSupportMultipleWindows={false}
+              mixedContentMode="never"
+              allowFileAccess={false}
+              allowUniversalAccessFromFileURLs={false}
               startInLoadingState
               onLoadProgress={({ nativeEvent }) => setProgress(nativeEvent.progress)}
               onNavigationStateChange={(event: WebViewNavigation) => {
@@ -148,10 +177,8 @@ export default function ArionInboxScreen() {
                 }
               }}
               onShouldStartLoadWithRequest={request => {
-                if (request.url.startsWith('http://') || request.url.startsWith('https://')) {
-                  return true;
-                }
-                Linking.openURL(request.url).catch(() => {});
+                if (isAllowedArionNavigation(request.url)) return true;
+                openExternalNavigation(request.url);
                 return false;
               }}
               renderLoading={() => (

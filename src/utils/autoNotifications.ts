@@ -50,6 +50,13 @@ function parseSelectedAirlines(raw: string | null): string[] {
   }
 }
 
+function toLocalDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 /**
  * Auto-schedule notifications for today's shift departures.
  * For each departure during the shift, notifies at check-in open time.
@@ -72,7 +79,7 @@ export async function autoScheduleNotifications(): Promise<number> {
     }
 
     // Skip if already scheduled today
-    const todayKey = new Date().toISOString().split('T')[0];
+    const todayKey = toLocalDateKey(new Date());
     const lastSchedule = await AsyncStorage.getItem(LAST_SCHEDULE_KEY);
     if (lastSchedule === todayKey) {
       await appendNotificationDebugEvent({
@@ -119,10 +126,27 @@ export async function autoScheduleNotifications(): Promise<number> {
       return 0;
     }
 
-    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const nowDate = new Date();
+    const today = new Date(nowDate); today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
     const endOfDay = new Date(today); endOfDay.setHours(23, 59, 59, 999);
-    const events = await Calendar.getEventsAsync([cal.id], today, endOfDay);
-    const shiftEvent = events.find(e => e.title.includes('Lavoro'));
+    // Android calendar queries require an event to be fully contained in the
+    // requested interval. Include yesterday for a currently active 22:00-06:00
+    // shift and tomorrow so a night shift beginning today is returned too.
+    const queryEnd = new Date(endOfDay); queryEnd.setDate(queryEnd.getDate() + 1);
+    const events = await Calendar.getEventsAsync([cal.id], yesterday, queryEnd);
+    const workEvents = events
+      .filter(event => event.title.trim() === 'Lavoro')
+      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    const currentWork = workEvents.find(event => (
+      new Date(event.startDate).getTime() <= nowDate.getTime()
+      && new Date(event.endDate).getTime() > nowDate.getTime()
+    ));
+    const todayWork = workEvents.find(event => {
+      const start = new Date(event.startDate);
+      return start >= today && start <= endOfDay;
+    });
+    const shiftEvent = currentWork ?? todayWork;
     if (!shiftEvent) {
       await dismissShiftOngoingNotification();
       await appendNotificationDebugEvent({

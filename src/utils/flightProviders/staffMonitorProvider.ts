@@ -176,10 +176,10 @@ export const staffMonitorProvider: FlightScheduleProvider = {
   id: 'staffMonitor',
   label: 'StaffMonitor PSA',
   supports: ({ airportCode }) => airportCode === STAFF_MONITOR_AIRPORT,
-  fetch: async ({ airportCode, airport, now = new Date() }) => {
+  fetch: async ({ airportCode, airport, now = new Date(), signal }) => {
     const [departures, arrivals] = await Promise.all([
-      fetchStaffMonitorData('D'),
-      fetchStaffMonitorData('A'),
+      fetchStaffMonitorData('D', signal),
+      fetchStaffMonitorData('A', signal),
     ]);
 
     return {

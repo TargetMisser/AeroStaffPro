@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator, Alert,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { TYPE } from '../theme/typography';
 import { type UpdateInfo, APP_VERSION } from '../utils/updateChecker';

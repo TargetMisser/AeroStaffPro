@@ -1,10 +1,10 @@
-import { version } from '../../package.json';
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Animated, Modal, StyleSheet, TouchableOpacity, View,
 } from 'react-native';
 import { useAppTheme } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
+import { APP_VERSION } from '../utils/updateChecker';
 import {
   motionDurations,
   motionEasing,
@@ -36,7 +36,6 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
     { id: 'ArionInbox', icon: 'inbox',      label: t('drawerArionTitle'),     sublabel: t('drawerArionSub') },
     { id: 'PrintableCalendar', icon: 'print', label: t('drawerPrintableCalendarTitle'), sublabel: t('drawerPrintableCalendarSub') },
     { id: 'Settings',  icon: 'settings',   label: t('drawerSettingsTitle'),  sublabel: t('drawerSettingsSub') },
-    ...(__DEV__ ? [{ id: 'DesignLab', icon: 'auto-awesome' as const, label: 'Design Lab', sublabel: 'Direzioni visuali dev-only' }] : []),
   ];
   const styles = useMemo(() => makeStyles(surfaceVariant), [surfaceVariant]);
   const reducedMotion = useReducedMotionPreference();
@@ -104,7 +103,7 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
           <DrawerMenuPanel
             colors={colors}
             items={ITEMS}
-            versionLabel={`AeroStaff Pro · v${version}`}
+            versionLabel={`AeroStaff Pro · v${APP_VERSION}`}
             surfaceVariant={surfaceVariant}
             onClose={onClose}
             onSelect={onSelect}

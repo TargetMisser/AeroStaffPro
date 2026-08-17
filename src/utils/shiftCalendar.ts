@@ -47,6 +47,8 @@ const DEFAULT_REST_TIMING: RestEventTiming = {
   allDay: false,
 };
 
+export const AEROSTAFF_SHIFT_EVENT_MARKER = 'AEROSTAFF_PRO_SHIFT_V1';
+
 function parseIsoDate(date: string): { year: number; month: number; day: number } {
   const [year, month, day] = date.split('-').map(Number);
   return { year, month, day };
@@ -57,8 +59,22 @@ function parseTime(time: string): { hour: number; minute: number } {
   return { hour, minute };
 }
 
-function isShiftEventTitle(title?: string | null) {
-  return (title || '').includes('Lavoro') || (title || '').includes('Riposo');
+export function isOwnedShiftEvent(event: { title?: string | null; notes?: string | null }): boolean {
+  if ((event.notes || '').trim() === AEROSTAFF_SHIFT_EVENT_MARKER) return true;
+
+  // Releases before the ownership marker used only these exact titles. Keep
+  // those legacy events editable, but never claim personal entries such as
+  // "Lavoro da casa" or "Riposo medico" from the user's primary calendar.
+  const title = (event.title || '').trim();
+  return title === DEFAULT_TITLES.work || title === DEFAULT_TITLES.rest;
+}
+
+function toLocalDateKey(value: string | Date): string {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 async function createShiftEvent(
@@ -83,6 +99,7 @@ async function createShiftEvent(
       startDate,
       endDate,
       timeZone: 'Europe/Rome',
+      notes: AEROSTAFF_SHIFT_EVENT_MARKER,
     });
   }
 
@@ -96,6 +113,7 @@ async function createShiftEvent(
     endDate,
     allDay: restTiming.allDay,
     timeZone: 'Europe/Rome',
+    notes: AEROSTAFF_SHIFT_EVENT_MARKER,
   });
 }
 
@@ -135,6 +153,7 @@ async function findShiftEventIdsInRange(
   calendarId: string,
   start: Date,
   end: Date,
+  includedDates?: ReadonlySet<string>,
 ): Promise<string[]> {
   /* expo-calendar's Android query only returns events fully contained in the
      window (Instances.BEGIN >= start AND Instances.END <= end), so a night
@@ -147,9 +166,10 @@ async function findShiftEventIdsInRange(
   const events = await Calendar.getEventsAsync([calendarId], start, queryEnd);
   return events
     .filter(event => {
-      if (!isShiftEventTitle(event.title)) return false;
+      if (!isOwnedShiftEvent(event)) return false;
       const startsAt = new Date(event.startDate).getTime();
-      return startsAt >= start.getTime() && startsAt <= end.getTime();
+      if (startsAt < start.getTime() || startsAt > end.getTime()) return false;
+      return !includedDates || includedDates.has(toLocalDateKey(event.startDate));
     })
     .map(event => event.id);
 }
@@ -206,11 +226,12 @@ export async function replaceShiftsForRange({
   const lastDate = parseIsoDate(sorted[sorted.length - 1].date);
   const rangeStart = new Date(firstDate.year, firstDate.month - 1, firstDate.day, 0, 0, 0, 0);
   const rangeEnd = new Date(lastDate.year, lastDate.month - 1, lastDate.day, 23, 59, 59, 999);
+  const includedDates = new Set(sorted.map(shift => shift.date));
 
   // Capture the existing shift events BEFORE creating anything, so we can
   // remove exactly those at the end. (Deleting by range instead would also
   // wipe the new events, which share the same 'Lavoro'/'Riposo' titles.)
-  const oldEventIds = await findShiftEventIdsInRange(calendarId, rangeStart, rangeEnd);
+  const oldEventIds = await findShiftEventIdsInRange(calendarId, rangeStart, rangeEnd, includedDates);
 
   // Create the new events FIRST. If any creation fails, roll back the events
   // we already created and leave the user's existing roster untouched: a

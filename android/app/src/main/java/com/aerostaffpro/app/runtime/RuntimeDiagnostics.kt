@@ -9,6 +9,7 @@ import android.content.ContentValues
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.annotation.RequiresApi
 import com.aerostaffpro.app.BuildConfig
 import org.json.JSONObject
 import java.io.File
@@ -331,6 +332,7 @@ object RuntimeDiagnostics {
         Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             ?.let { directory -> File(directory, PUBLIC_LOG_FILE_NAME) }
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun findOrCreatePublicLogUri(context: Context) =
         findPublicLogUri(context) ?: context.contentResolver.insert(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
@@ -341,6 +343,7 @@ object RuntimeDiagnostics {
             },
         )
 
+    @RequiresApi(Build.VERSION_CODES.Q)
     private fun findPublicLogUri(context: Context) =
         context.contentResolver.query(
             MediaStore.Downloads.EXTERNAL_CONTENT_URI,
@@ -394,6 +397,7 @@ object RuntimeDiagnostics {
         }.getOrNull()
     }
 
+    @RequiresApi(Build.VERSION_CODES.R)
     private fun ApplicationExitInfo.toSnapshot(): ExitInfoSnapshot =
         readTraceSnapshot().let { trace ->
             ExitInfoSnapshot(

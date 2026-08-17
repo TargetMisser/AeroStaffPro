@@ -223,4 +223,15 @@ const filesResult = parser.parseShiftCellFiles([{ cells }, { cells: garbledCells
 assert(filesResult.employees.find(e => e.name === 'Mario Rossi'), 'parseShiftCellFiles should merge employees found across multiple files');
 assert(filesResult.dates.includes('2026-06-01') && filesResult.dates.includes('2026-06-03'), 'parseShiftCellFiles should union dates found across multiple files');
 
+// ─── local/offline PDF.js runtime ───────────────────────────────────────────
+const extractorHtml = parser.getPdfExtractorHtml('AA==', {
+  library: 'export const getDocument = () => {}; // </script>',
+  worker: 'self.onmessage = () => {};',
+});
+assert(!/https?:\/\//.test(extractorHtml), 'PDF extraction HTML must not load executable code or data from the network');
+assert(extractorHtml.includes('Content-Security-Policy'), 'PDF extraction HTML should enforce a restrictive CSP');
+assert(extractorHtml.includes("default-src 'none'"), 'PDF extraction CSP should deny all unspecified sources');
+assert(extractorHtml.includes('URL.createObjectURL'), 'PDF.js library and worker should execute from verified bundled blobs');
+assert(!extractorHtml.includes('// </script>'), 'embedded runtime source must escape closing script tags');
+
 console.log('PDF shift parser test passed.');

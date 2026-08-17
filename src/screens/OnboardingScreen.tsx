@@ -3,7 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Calendar from 'expo-calendar';
 import * as Notifications from 'expo-notifications';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { formatAirportSettingLabel } from '../utils/airportSettings';
@@ -121,6 +121,12 @@ export default function OnboardingScreen({
     onComplete();
   };
 
+  const skipSetupForNow = () => {
+    // Dismiss only for the current process. The next cold start offers setup
+    // again until all required steps are completed explicitly.
+    onComplete();
+  };
+
   const requestCalendar = async () => {
     const result = await Calendar.requestCalendarPermissionsAsync();
     setCalendarPermission(normalizePermission(result.status));
@@ -233,7 +239,7 @@ export default function OnboardingScreen({
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.primaryBtn, { backgroundColor: colors.primary }]}
-          onPress={completeSetup}
+          onPress={checklist.requiredComplete ? completeSetup : skipSetupForNow}
           activeOpacity={0.88}
         >
           <Text style={styles.primaryText}>

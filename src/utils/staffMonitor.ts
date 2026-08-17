@@ -336,7 +336,13 @@ const FETCH_HEADERS = {
 // Tomcat JSESSIONID captured from D responses and forwarded to A requests.
 // The arrivals servlet likely requires an active session; departures may not.
 let _sessionCookie: string | null = null;
-const _inFlightByNature: Partial<Record<'D' | 'A', Promise<StaffMonitorFlight[]>>> = {};
+type InFlightStaffMonitorRequest = {
+  controller: AbortController;
+  consumers: Set<symbol>;
+  settled: boolean;
+  promise: Promise<StaffMonitorFlight[]>;
+};
+const _inFlightByNature: Partial<Record<'D' | 'A', InFlightStaffMonitorRequest>> = {};
 
 function captureSessionCookie(resp: Response): void {
   const raw = resp.headers.get('set-cookie') ?? '';
@@ -347,55 +353,100 @@ function captureSessionCookie(resp: Response): void {
   }
 }
 
-async function tryFetch(url: string, timeoutMs: number): Promise<string> {
+function staffMonitorAbortError(): Error {
+  const error = new Error('STAFF_MONITOR_ABORTED');
+  error.name = 'AbortError';
+  return error;
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw staffMonitorAbortError();
+}
+
+async function tryFetch(url: string, timeoutMs: number, signal?: AbortSignal): Promise<string> {
+  throwIfAborted(signal);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const abortFromParent = () => controller.abort();
+  signal?.addEventListener('abort', abortFromParent, { once: true });
   try {
     const headers: Record<string, string> = { ...FETCH_HEADERS };
     if (_sessionCookie) headers['Cookie'] = _sessionCookie;
 
     const resp = await fetch(url, { signal: controller.signal, headers });
-    clearTimeout(timer);
     captureSessionCookie(resp);
     const body = await resp.text();
     if (!resp.ok || body.length < 200) throw new Error(`${resp.status} len=${body.length}`);
     return body;
   } catch (e) {
-    clearTimeout(timer);
+    if (signal?.aborted) throw staffMonitorAbortError();
+    if (timedOut) throw new Error(`STAFF_MONITOR_TIMEOUT_${timeoutMs}`);
     throw e;
-  }
-}
-
-function isAbortLikeError(error: unknown): boolean {
-  const msg = String(error ?? '').toLowerCase();
-  return msg.includes('abort');
-}
-
-async function tryFetchWithRetry(url: string, timeoutMs: number): Promise<string> {
-  try {
-    return await tryFetch(url, timeoutMs);
-  } catch (e) {
-    // Mobile networks can intermittently abort long requests even when the endpoint is healthy.
-    // Retry once with a longer timeout before considering this URL failed.
-    if (!isAbortLikeError(e)) throw e;
-    return tryFetch(url, Math.max(timeoutMs + 12_000, Math.round(timeoutMs * 1.5)));
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abortFromParent);
   }
 }
 
 /**
- * Fire all URLs simultaneously and resolve with the first successful HTML.
- * Returns null only if every URL fails or times out.
+ * Race one fallback tier and cancel every losing request as soon as one URL wins.
+ * The caller stages tiers so the common path does not hit every servlet variant.
  */
-function raceUrls(urls: string[], timeoutMs: number): Promise<string | null> {
+function raceUrls(urls: string[], timeoutMs: number, signal?: AbortSignal): Promise<string | null> {
+  if (urls.length === 0) return Promise.resolve(null);
   return new Promise(resolve => {
+    const controller = new AbortController();
     let done = false;
     let pending = urls.length;
+    const finish = (html: string | null) => {
+      if (done) return;
+      done = true;
+      controller.abort();
+      signal?.removeEventListener('abort', abortFromParent);
+      resolve(html);
+    };
+    const abortFromParent = () => finish(null);
+    if (signal?.aborted) {
+      finish(null);
+      return;
+    }
+    signal?.addEventListener('abort', abortFromParent, { once: true });
     for (const url of urls) {
-      tryFetchWithRetry(url, timeoutMs)
-        .then(html => { if (!done) { done = true; resolve(html); } })
-        .catch(() => { pending--; if (pending === 0 && !done) { done = true; resolve(null); } });
+      tryFetch(url, timeoutMs, controller.signal)
+        .then(html => finish(html))
+        .catch(() => {
+          pending--;
+          if (pending === 0) finish(null);
+        });
     }
   });
+}
+
+async function waitForExistingDeparturePrime(
+  request: InFlightStaffMonitorRequest,
+  signal?: AbortSignal,
+): Promise<void> {
+  throwIfAborted(signal);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let abortFromParent: (() => void) | undefined;
+  try {
+    await Promise.race([
+      request.promise.then(() => undefined, () => undefined),
+      new Promise<void>((resolve, reject) => {
+        timer = setTimeout(resolve, 2_500);
+        abortFromParent = () => reject(staffMonitorAbortError());
+        signal?.addEventListener('abort', abortFromParent, { once: true });
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (abortFromParent) signal?.removeEventListener('abort', abortFromParent);
+  }
+  throwIfAborted(signal);
 }
 
 /**
@@ -437,11 +488,10 @@ export function getStaffMonitorDebugFlights(): string {
   return `D:\n${_lastDebugFlightsD}\n\nA:\n${_lastDebugFlightsA}`;
 }
 
-export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMonitorFlight[]> {
-  const running = _inFlightByNature[nature];
-  if (running) return running;
-
-  const run = (async () => {
+async function runStaffMonitorFetch(
+  nature: 'D' | 'A',
+  signal: AbortSignal,
+): Promise<StaffMonitorFlight[]> {
   const base = 'https://servizi.pisa-airport.com/staffMonitor/staffMonitor';
 
   // Primary URLs for the requested nature
@@ -464,36 +514,51 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
     let html = '';
 
     if (nature === 'D') {
-      // Departures: sequential — server is slow, use 25s to avoid false timeouts
-      for (const url of primaryUrls) {
-        try {
-          html = await tryFetchWithRetry(url, 25_000);
-          _lastDebugStatus = `D:200 len=${html.length}`;
-          _lastDebugHtmlD = html.replace(/\s+/g, ' ').slice(0, 4000);
-          break;
-        } catch (e: any) {
-          _lastDebugStatus = `D:ERR ${String(e).slice(0, 60)}`;
-          devLog(`[staffMonitor] D fetch error: ${_lastDebugStatus}`);
-        }
+      // Keep the slow canonical servlet sequential. Only if it fails, race the
+      // two compatibility variants and abort the loser instead of retrying all
+      // three URLs independently.
+      try {
+        html = await tryFetch(primaryUrls[0], 25_000, signal);
+      } catch (e: any) {
+        throwIfAborted(signal);
+        _lastDebugStatus = `D:ERR ${String(e).slice(0, 60)}`;
+        devLog(`[staffMonitor] D canonical fetch error: ${_lastDebugStatus}`);
+        html = await raceUrls(primaryUrls.slice(1), 25_000, signal) ?? '';
+        throwIfAborted(signal);
+      }
+      if (html) {
+        _lastDebugStatus = `D:200 len=${html.length}`;
+        _lastDebugHtmlD = html.replace(/\s+/g, ' ').slice(0, 4000);
       }
     } else {
-      // Prime session cookie via a quick D request if we don't have one yet.
-      // The Tomcat arrivals servlet likely requires an active JSESSIONID.
+      // Reuse a D fetch that the provider started in the same Promise.all. Wait
+      // only briefly so a slow departures servlet cannot hold arrivals hostage.
       if (!_sessionCookie) {
-        try {
-          await tryFetchWithRetry(`${base}?trans=true&nature=D`, 12_000);
-          devLog('[staffMonitor] session primed for A:', _sessionCookie ?? 'none');
-        } catch {
-          devLog('[staffMonitor] session prime failed, proceeding anyway');
+        const departureRequest = _inFlightByNature.D;
+        if (departureRequest) {
+          await waitForExistingDeparturePrime(departureRequest, signal);
+        } else {
+          try {
+            await tryFetch(`${base}?trans=true&nature=D`, 8_000, signal);
+          } catch {
+            throwIfAborted(signal);
+          }
         }
+        devLog('[staffMonitor] session primed for A:', _sessionCookie ?? 'none');
       }
 
-      // Race all nature=A variants in parallel — fastest wins
-      html = await raceUrls([...primaryUrls, ...arrivalExtras], 40_000) ?? '';
+      // Two-stage fallback retains every known working URL but normally issues
+      // only the two canonical variants. Each tier cancels its losing requests.
+      html = await raceUrls(primaryUrls.slice(0, 2), 15_000, signal) ?? '';
+      throwIfAborted(signal);
+      if (!html) {
+        html = await raceUrls([primaryUrls[2], ...arrivalExtras], 20_000, signal) ?? '';
+        throwIfAborted(signal);
+      }
       if (html) {
         _lastDebugStatus = `A:200 len=${html.length} cookie=${_sessionCookie ? 'yes' : 'no'}`;
         _lastDebugHtmlA = html.replace(/\s+/g, ' ').slice(0, 4000);
-        devLog(`[staffMonitor] A parallel race succeeded len=${html.length}`);
+        devLog(`[staffMonitor] A staged race succeeded len=${html.length}`);
       } else {
         _lastDebugStatus = `A:ERR all ${primaryUrls.length + arrivalExtras.length} URLs failed cookie=${_sessionCookie ? 'yes' : 'no'}`;
         devLog(`[staffMonitor] ${_lastDebugStatus}`);
@@ -534,17 +599,93 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
     }
     return results;
   } catch (e) {
+    if (signal.aborted) throw staffMonitorAbortError();
     console.error(`[staffMonitor] error for nature=${nature}:`, e);
     const cached = await loadCached(nature);
     if (cached) _lastDebugStatus = `${nature}:ERR->CACHE(${cached.length})`;
     return cached ?? [];
   }
-  })();
+}
 
-  _inFlightByNature[nature] = run;
-  try {
-    return await run;
-  } finally {
-    delete _inFlightByNature[nature];
+function subscribeToStaffMonitorRequest(
+  request: InFlightStaffMonitorRequest,
+  signal?: AbortSignal,
+): Promise<StaffMonitorFlight[]> {
+  const consumer = Symbol('staffMonitorConsumer');
+  request.consumers.add(consumer);
+
+  return new Promise((resolve, reject) => {
+    let finished = false;
+    const cleanup = () => {
+      request.consumers.delete(consumer);
+      signal?.removeEventListener('abort', abortSubscriber);
+    };
+    const abortSubscriber = () => {
+      if (finished) return;
+      finished = true;
+      cleanup();
+      if (!request.settled && request.consumers.size === 0) request.controller.abort();
+      reject(staffMonitorAbortError());
+    };
+
+    if (signal?.aborted) {
+      abortSubscriber();
+      return;
+    }
+    signal?.addEventListener('abort', abortSubscriber, { once: true });
+    request.promise.then(
+      value => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        resolve(value);
+      },
+      error => {
+        if (finished) return;
+        finished = true;
+        cleanup();
+        reject(error);
+      },
+    );
+  });
+}
+
+export function fetchStaffMonitorData(
+  nature: 'D' | 'A',
+  signal?: AbortSignal,
+): Promise<StaffMonitorFlight[]> {
+  if (signal?.aborted) return Promise.reject(staffMonitorAbortError());
+
+  let request = _inFlightByNature[nature];
+  if (request?.controller.signal.aborted && !request.settled) {
+    // A rapid blur/refocus should not subscribe the new screen lifecycle to an
+    // already-cancelled request while its rejection is still being delivered.
+    if (_inFlightByNature[nature] === request) delete _inFlightByNature[nature];
+    request = undefined;
   }
+  if (!request) {
+    const controller = new AbortController();
+    request = {
+      controller,
+      consumers: new Set(),
+      settled: false,
+      promise: Promise.resolve([]),
+    };
+    const currentRequest = request;
+    request.promise = runStaffMonitorFetch(nature, controller.signal).then(
+      value => {
+        currentRequest.settled = true;
+        if (_inFlightByNature[nature] === currentRequest) delete _inFlightByNature[nature];
+        return value;
+      },
+      error => {
+        currentRequest.settled = true;
+        if (_inFlightByNature[nature] === currentRequest) delete _inFlightByNature[nature];
+        throw error;
+      },
+    );
+    _inFlightByNature[nature] = request;
+  }
+
+  return subscribeToStaffMonitorRequest(request, signal);
 }

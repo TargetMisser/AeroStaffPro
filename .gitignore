@@ -32,7 +32,13 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
+.env.*
+!.env.example
 .env*.local
+
+# generated, pinned PDF.js runtime copied from the lockfile dependency
+/assets/vendor/*.pdfjs
 
 # typescript
 *.tsbuildinfo

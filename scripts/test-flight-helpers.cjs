@@ -12,6 +12,24 @@ function assert(condition, message) {
   }
 }
 
+const flightScreenPerformanceSource = fs.readFileSync(
+  path.join(root, 'src/screens/FlightScreen.tsx'),
+  'utf8',
+);
+const firstFreshSchedulePublish = flightScreenPerformanceSource.indexOf('setAllArrivalsFull(mergedArrs);');
+const adsbOverlayAwait = flightScreenPerformanceSource.indexOf('const aircraft = await fetchAdsbAircraft(');
+assert(
+  firstFreshSchedulePublish >= 0 && adsbOverlayAwait >= 0 && firstFreshSchedulePublish < adsbOverlayAwait,
+  'FlightScreen should publish the provider schedule before awaiting the optional ADS-B overlay',
+);
+assert(
+  flightScreenPerformanceSource.includes('isFocused={isFocused}')
+    && flightScreenPerformanceSource.includes('if (!isFocused || (!checkinShouldPulse')
+    && flightScreenPerformanceSource.includes("fetchStaffMonitorData('D', controller.signal)")
+    && flightScreenPerformanceSource.includes('activeController?.abort()'),
+  'hidden FlightScreen rows and StaffMonitor polling should stop work through focus-aware cancellation',
+);
+
 function loadTsModule(relativePath, mocks = {}) {
   const absolutePath = path.join(root, relativePath);
   const source = fs.readFileSync(absolutePath, 'utf8');
@@ -2027,6 +2045,7 @@ async function runProviderLayerTests() {
   assert(airLabsStatus?.mode === 'routesOnly', 'provider diagnostics should expose AirLabs routes-only mode');
 
   const timeoutCalls = [];
+  let timeoutAbortObserved = false;
   const timeoutPayload = await providerLayer.fetchFlightScheduleFromProviders({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
@@ -2037,9 +2056,14 @@ async function runProviderLayerTests() {
       id: 'staffMonitor',
       label: 'Slow provider',
       supports: () => true,
-      fetch: async () => {
+      fetch: async ({ signal }) => {
         timeoutCalls.push('slow');
-        return new Promise(() => {});
+        return new Promise((resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            timeoutAbortObserved = true;
+            reject(new Error('slow provider aborted'));
+          }, { once: true });
+        });
       },
     },
     makeProvider('fr24Api', 'Fast provider', {
@@ -2055,6 +2079,7 @@ async function runProviderLayerTests() {
   const timeoutStatus = timeoutPayload.diagnostics.find(item => item.provider === 'staffMonitor');
   assert(timeoutStatus?.status === 'failed' && /PROVIDER_TIMEOUT/.test(timeoutStatus.message ?? ''), 'provider diagnostics should expose provider timeouts');
   assert(timeoutStatus?.errorCode === 'provider_timeout', 'provider diagnostics should expose normalized timeout error codes');
+  assert(timeoutAbortObserved, 'provider timeout should abort the underlying provider signal');
 
   const parentAbortController = new AbortController();
   const parentAbortStartedAt = Date.now();

@@ -289,8 +289,8 @@ async function fetchProviderWithTimeout(
 
   const timeoutPromise = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
-      controller.abort();
       reject(new Error(`PROVIDER_TIMEOUT_MS_${timeoutMs}`));
+      controller.abort();
     }, timeoutMs);
   });
 
@@ -306,8 +306,8 @@ async function fetchProviderWithTimeout(
 
   if (context.signal) {
     parentAbortHandler = () => {
-      controller.abort();
       rejectParentAbort?.(new Error('PROVIDER_PARENT_ABORTED'));
+      controller.abort();
     };
     context.signal.addEventListener('abort', parentAbortHandler, { once: true });
   }
@@ -319,6 +319,9 @@ async function fetchProviderWithTimeout(
       parentAbortPromise,
     ]);
   } finally {
+    // A timeout/parent abort must also stop the provider's underlying fetches,
+    // not just let Promise.race return while network work continues detached.
+    controller.abort();
     if (timer) clearTimeout(timer);
     if (context.signal && parentAbortHandler) {
       context.signal.removeEventListener('abort', parentAbortHandler);

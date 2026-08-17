@@ -5,9 +5,8 @@ import {
   Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { MaterialCommunityIcons, MaterialIcons } from '@expo/vector-icons';
-import { WebView } from 'react-native-webview';
-import * as ImagePicker from 'expo-image-picker';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Calendar from 'expo-calendar';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
@@ -36,8 +35,8 @@ import {
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import {
   getWritableCalendarId,
+  isOwnedShiftEvent,
   replaceShiftForDate,
-  replaceShiftsForRange,
 } from '../utils/shiftCalendar';
 import {
   storeWidgetDataPreservingFlights,
@@ -47,7 +46,6 @@ import {
   type WidgetShiftWindow,
 } from '../widgets/widgetTaskHandler';
 import { ShiftWidget } from '../widgets/ShiftWidget';
-import { parseOcrShiftText } from '../utils/ocrShiftParser';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
@@ -81,24 +79,6 @@ function healthIcon(id: HomeHealthChip['id']): keyof typeof MaterialIcons.glyphM
 }
 
 // months comes from useLanguage() context
-
-const engineHtml = `<!DOCTYPE html><html lang="it"><head>
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script></head>
-<body style="background-color:transparent;"><script>
-window.runTesseract = async function(base64JsonStr) {
-  try {
-    const images = JSON.parse(base64JsonStr);
-    let combinedText = '';
-    for (let i = 0; i < images.length; i++) {
-      const ret = await Tesseract.recognize(images[i], 'ita+eng');
-      combinedText += ret.data.text + '\\n\\n';
-    }
-    window.ReactNativeWebView.postMessage(JSON.stringify({ success: true, text: combinedText }));
-  } catch (e) {
-    window.ReactNativeWebView.postMessage(JSON.stringify({ success: false, error: e.message || e.toString() }));
-  }
-};
-</script></body></html>`;
 
 function PinnedFlightCardComponent({ item, colors, isOperations = false }: { item: any; colors: ThemeColors; isOperations?: boolean }) {
   const { t, locale } = useLanguage();
@@ -314,7 +294,7 @@ function EasyJetOverlapMonitor({ overlappingFlights, tickerMs, colors, t, locale
   );
 }
 
-export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
+export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors, mode } = useAppTheme();
   const { airportCode } = useAirport();
   const { t, months, locale, weatherMap } = useLanguage();
@@ -327,19 +307,12 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [shiftKind, setShiftKind] = useState<HomeShiftKind>('none');
   const [weather, setWeather] = useState<{ text: string; iconName: string; temp: number | null } | null>(null);
   const [loadingShift, setLoadingShift] = useState(true);
-  const [uploadOpen, setUploadOpen] = useState(false);
-  const [imageList, setImageList] = useState<string[]>([]);
-  const [ocrText, setOcrText] = useState('');
-  const [processing, setProcessing] = useState(false);
-  const [ocrEngineActive, setOcrEngineActive] = useState(false);
-
   const [shiftModalOpen, setShiftModalOpen] = useState(false);
   const [newShiftType, setNewShiftType] = useState<'Lavoro' | 'Riposo'>('Lavoro');
   const [newStartH, setNewStartH] = useState('08');
   const [newStartM, setNewStartM] = useState('00');
   const [newEndH, setNewEndH] = useState('16');
   const [newEndM, setNewEndM] = useState('00');
-  const [uploadMode, setUploadMode] = useState<'image' | 'manual' | null>(null);
   const [pinnedFlight, setPinnedFlight] = useState<any>(null);
   const [flightProviderStatus, setFlightProviderStatus] = useState<FlightProviderDiagnosticsSnapshot | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<NotificationDebugSnapshot | null>(null);
@@ -347,8 +320,6 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
   const [easyJetOverlap, setEasyJetOverlap] = useState<{ isActive: boolean; overlappingFlights: any[] }>({ isActive: false, overlappingFlights: [] });
   const [secondsTicker, setSecondsTicker] = useState(Date.now());
 
-  const webViewRef = useRef<WebView>(null);
-  const pendingOcrPayloadRef = useRef<string | null>(null);
   const hasLoadedShiftRef = useRef(false);
 
   const toLocalIso = (date: Date): string => {
@@ -423,9 +394,10 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
     const interval = setInterval(() => { fetchShift(true); }, 60_000);
     return () => clearInterval(interval);
   }, [isFocused]);
-  useEffect(() => { fetchWeather(); }, [airportCode, weatherMap]);
+  useEffect(() => { if (isFocused) fetchWeather(); }, [airportCode, weatherMap, isFocused]);
 
   useEffect(() => {
+    if (!isFocused) return;
     let mounted = true;
     const refreshHomeStatus = async () => {
       const [provider, notifications, cache] = await Promise.all([
@@ -452,19 +424,20 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       mounted = false;
       clearInterval(interval);
     };
-  }, [airportCode]);
+  }, [airportCode, isFocused]);
 
   useEffect(() => {
-    if (!easyJetOverlap.isActive) return;
+    if (!isFocused || !easyJetOverlap.isActive) return;
 
     const tickerInterval = setInterval(() => {
       setSecondsTicker(Date.now());
     }, 1000);
 
     return () => clearInterval(tickerInterval);
-  }, [easyJetOverlap.isActive]);
+  }, [easyJetOverlap.isActive, isFocused]);
 
   useEffect(() => {
+    if (!isFocused) return;
     let active = true;
     let checking = false;
 
@@ -564,7 +537,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
       active = false;
       clearInterval(interval);
     };
-  }, [airportCode]);
+  }, [airportCode, isFocused]);
 
   const openModifyModal = () => {
     if (shiftEvent) {
@@ -633,10 +606,11 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
          already filters by start date. */
       const queryEnd = new Date(tomorrowEnd.getTime() + 24 * 60 * 60 * 1000);
       const events = await Calendar.getEventsAsync([cal.id], yesterdayStart, queryEnd);
-      const workEvents = events
+      const ownedEvents = events.filter(isOwnedShiftEvent);
+      const workEvents = ownedEvents
         .filter(e => e.title.includes('Lavoro'))
         .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
-      const restEvents = events.filter(e => e.title.includes('Riposo'));
+      const restEvents = ownedEvents.filter(e => e.title.includes('Riposo'));
       const startsInRange = (event: any, start: Date, end: Date) => {
         const ts = new Date(event.startDate).getTime();
         return ts >= start.getTime() && ts <= end.getTime();
@@ -672,11 +646,11 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
 
       await pushHomeShiftToWidget({
         todayIso: toLocalIso(todayStart),
-        shiftToday: todayWork ? {
-          start: new Date(todayWork.startDate).getTime() / 1000,
-          end: new Date(todayWork.endDate).getTime() / 1000,
+        shiftToday: (currentWork ?? todayWork) ? {
+          start: new Date((currentWork ?? todayWork)!.startDate).getTime() / 1000,
+          end: new Date((currentWork ?? todayWork)!.endDate).getTime() / 1000,
         } : null,
-        isRestDay: !!todayRest && !todayWork,
+        isRestDay: !!todayRest && !currentWork && !todayWork,
         nextShift: tomorrowWork ? toWidgetShiftWindow(tomorrowWork, toLocalIso(tomorrowStart)) : null,
       });
     } catch (e) { if (__DEV__) console.error('[shift]', e); } finally {
@@ -709,100 +683,6 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
     }
   };
 
-  const pickImage = async () => {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: 0,
-        orderedSelection: true,
-        quality: 1,
-        base64: true,
-      });
-      if (!result.canceled && result.assets?.length > 0) {
-        setImageList(result.assets.map(a => a.uri));
-        setProcessing(true); setOcrText('');
-        const base64List = result.assets
-          .map(a => a.base64 ? `data:${a.mimeType || 'image/jpeg'};base64,${a.base64}` : null)
-          .filter((item): item is string => !!item);
-        if (base64List.length === 0) {
-          setProcessing(false);
-          Alert.alert('Errore OCR', 'Nessuna immagine leggibile selezionata.');
-          return;
-        }
-        pendingOcrPayloadRef.current = JSON.stringify(base64List);
-        setOcrEngineActive(true);
-      }
-    } catch (e) {
-      if (__DEV__) console.error('[imagePicker]', e);
-      pendingOcrPayloadRef.current = null;
-      setOcrEngineActive(false);
-      setProcessing(false);
-    }
-  };
-
-  const runPendingOcr = () => {
-    const payload = pendingOcrPayloadRef.current;
-    if (!payload) return;
-    pendingOcrPayloadRef.current = null;
-    // Wait for the on-demand WebView to finish loading Tesseract before
-    // injecting the selected images.
-    webViewRef.current?.injectJavaScript(`
-      if(window.runTesseract){
-        window.runTesseract(${JSON.stringify(payload)});
-      } else {
-        window.ReactNativeWebView.postMessage(JSON.stringify({success:false,error:'OCR non pronto'}));
-      }
-      true;
-    `);
-  };
-
-  const handleWebViewMessage = (event: any) => {
-    try {
-      const r = JSON.parse(event.nativeEvent.data);
-      if (r.success) setOcrText(r.text);
-      else Alert.alert('Errore riconoscimento testo', r.error || 'Prova con un\'immagine più nitida o meglio illuminata.');
-    } catch (e) {
-      if (__DEV__) console.error('[ocrMessage]', e);
-    } finally {
-      pendingOcrPayloadRef.current = null;
-      setOcrEngineActive(false);
-      setProcessing(false);
-    }
-  };
-
-  const parseAndSave = async () => {
-    const { status } = await Calendar.requestCalendarPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permesso negato', 'Autorizza il calendario.'); return; }
-    try {
-      const calendarId = await getWritableCalendarId();
-      if (!calendarId) { Alert.alert('Errore', 'Nessun calendario scrivibile.'); return; }
-      const result = parseOcrShiftText(ocrText);
-      if (result.shifts.length === 0) {
-        Alert.alert(
-          t('homeNoSchedule'),
-          result.warning ?? `Date: ${result.datesFound}, Orari: ${result.shiftsFound}`,
-        );
-        return;
-      }
-
-      const saved = await replaceShiftsForRange({
-        calendarId,
-        shifts: result.shifts,
-        titles: HOME_SHIFT_TITLES,
-        restTiming: HOME_REST_TIMING,
-      });
-
-      Alert.alert(
-        saved > 0 ? t('homeShiftSynced') : t('homeNoSchedule'),
-        saved > 0
-          ? `${saved} turni salvati.`
-          : `Date: ${result.datesFound}, Orari: ${result.shiftsFound}`,
-      );
-      if (saved > 0) fetchShift(true);
-    } catch (e: any) { Alert.alert(t('homeCalErr'), e.message); }
-  };
-
   const isRest = shiftEvent?.title?.includes('Riposo');
   const isWork = shiftEvent?.title?.includes('Lavoro');
   const isNextShift = isWork && shiftKind === 'next';
@@ -829,19 +709,6 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 96 }}>
-      {/* Mount the heavy OCR runtime only while an image scan is active. */}
-      {ocrEngineActive && (
-        <View style={s.hiddenWV}>
-          <WebView
-            ref={webViewRef}
-            source={{ html: engineHtml }}
-            onLoadEnd={runPendingOcr}
-            onMessage={handleWebViewMessage}
-            javaScriptEnabled
-          />
-        </View>
-      )}
-
       {/* Top cards row: Weather + Date */}
       <View style={s.topRow}>
         <BoardReveal index={0} enabled={isOperations} style={{ flex: 1 }}>
@@ -985,6 +852,7 @@ export default function HomeScreen({ isFocused }: { isFocused?: boolean }) {
             shiftStart={new Date(shiftEvent.startDate)}
             shiftEnd={new Date(shiftEvent.endDate)}
             inline
+            active={isFocused}
             refreshKey={timelineKey}
           />
         </View>
@@ -998,7 +866,6 @@ function makeStyles(c: ThemeColors, isOperations = false) {
   const operationBorder = isOperations ? 'rgba(45,212,191,0.30)' : c.glassBorder;
   const operationShadow = isOperations ? 0 : undefined;
   return StyleSheet.create({
-    hiddenWV: { height: 1, width: 1, opacity: 0, position: 'absolute', top: -100 },
     topRow: { flexDirection: 'row', gap: SPACING.md, padding: SPACING.lg, paddingBottom: SPACING.sm },
     weatherCard: { flex: 1, backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, padding: SPACING.lg, alignItems: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: operationShadow ?? 0.12, shadowRadius: 12, elevation: isOperations ? 0 : 4, borderWidth: 1, borderColor: operationBorder },
     weatherIcon: { marginBottom: SPACING.xs },
@@ -1039,19 +906,6 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     restIconWrap: { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: c.success + '22', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
     restText: { fontSize: 18, fontWeight: '700', color: c.success },
     emptyShift: { ...TYPE.body, color: c.textSub, textAlign: 'center', flex: 1 },
-    uploadToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: SPACING.lg, marginTop: SPACING.lg, backgroundColor: c.card, borderRadius: 18, paddingHorizontal: SPACING.lg, paddingVertical: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, borderWidth: 1, borderColor: c.glassBorder },
-    uploadToggleText: { flex: 1, fontSize: 15, fontWeight: '600', color: c.primaryDark },
-    uploadSection: { marginHorizontal: SPACING.lg, backgroundColor: c.card, borderRadius: 18, padding: SPACING.lg, marginTop: 2, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2, borderWidth: 1, borderColor: c.glassBorder },
-    uploadDesc: { fontSize: 13, color: c.textSub, lineHeight: 19, marginBottom: 14 },
-    scanBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryDark, borderRadius: RADIUS.md, paddingVertical: 13, paddingHorizontal: SPACING.xl },
-    scanBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-    imagesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.md },
-    thumb: { width: '47%', height: 120, borderRadius: 10, resizeMode: 'cover' },
-    ocrResult: { backgroundColor: c.cardSecondary, borderRadius: RADIUS.md, padding: SPACING.md, marginTop: SPACING.md },
-    ocrTitle: { fontSize: 12, fontWeight: '700', color: c.textSub, marginBottom: 6 },
-    ocrText: { fontSize: 12, color: c.text, lineHeight: 18 },
-    syncBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.primary, borderRadius: RADIUS.md, paddingVertical: 13, marginTop: SPACING.md },
-    syncBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
     modalContent: { backgroundColor: c.isDark ? c.bg : c.card, width: '100%', borderRadius: RADIUS.xl, padding: SPACING.xl, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 14, elevation: 8, borderWidth: 1, borderColor: c.glassBorder },
     modalTitle: { fontSize: 17, fontWeight: '700', color: c.primaryDark, marginBottom: 14 },

@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAirport, type AirportProfile } from '../context/AirportContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
