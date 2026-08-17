@@ -21,7 +21,8 @@
     "test:misc-utils": "node scripts/test-misc-utils.cjs",
     "test:printable-calendar": "node scripts/test-printable-calendar.cjs",
     "test:security-hardening": "node scripts/test-security-hardening.cjs",
-    "test": "npm run test:flight-helpers && npm run test:app-setup && npm run test:smoke && npm run test:tab-bar-layout && npm run test:release-tooling && npm run test:staffmonitor && npm run test:pdf-shift-parser && npm run test:notification-scheduler && npm run test:misc-utils && npm run test:printable-calendar && npm run test:security-hardening",
+    "test:qa-tooling": "node scripts/test-qa-tooling.cjs",
+    "test": "npm run test:flight-helpers && npm run test:app-setup && npm run test:smoke && npm run test:tab-bar-layout && npm run test:release-tooling && npm run test:qa-tooling && npm run test:staffmonitor && npm run test:pdf-shift-parser && npm run test:notification-scheduler && npm run test:misc-utils && npm run test:printable-calendar && npm run test:security-hardening",
     "check:env": "bash ./scripts/check-env.sh",
     "release:check": "node scripts/release-check.cjs",
     "release:quick": "node scripts/release-quick.cjs",
@@ -32,6 +33,11 @@
     "runner:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-local-runner.ps1",
     "runner:optimize": "powershell -ExecutionPolicy Bypass -File scripts/optimize-windows-defender.ps1",
     "qa:emulator": "node scripts/emulator-qa.cjs",
+    "qa:bundle": "node scripts/verify-production-bundle.cjs",
+    "qa:dependencies": "node scripts/dependency-policy.cjs",
+    "qa:android": "node scripts/android-qa.cjs",
+    "qa:release": "node scripts/qa-release.cjs",
+    "qa:full": "node scripts/qa-release.cjs --with-android",
     "github:branches:audit": "node scripts/github-branch-audit.cjs"
   },
   "dependencies": {

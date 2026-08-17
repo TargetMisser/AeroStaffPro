@@ -18,7 +18,7 @@ function printHelp() {
 Runs the usual AeroStaff Pro release flow:
   1. Require a clean worktree
   2. Bump version
-  3. Run release checks, full tests, and typecheck
+  3. Run release checks, tests, typecheck, bundle and dependency policy
   4. Commit and push the version bump
   5. Trigger the GitHub APK release workflow
   6. Wait for the workflow and verify the published APK
@@ -100,9 +100,7 @@ run('node', ['scripts/bump-version.cjs', bumpMode]);
 const meta = readProjectMeta();
 const tag = normalizeTag(meta.packageVersion);
 
-run('npm', ['run', 'release:check']);
-run('npm', ['run', 'test']);
-run('npm', ['run', 'typecheck']);
+run('npm', ['run', 'qa:release']);
 
 run('git', ['add', 'package.json', 'package-lock.json', 'app.json', 'android/app/build.gradle', 'README.md', 'src/utils/updateChecker.ts']);
 run('git', ['commit', '-m', `chore: release ${meta.packageVersion}`]);

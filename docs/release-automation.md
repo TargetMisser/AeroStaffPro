@@ -10,6 +10,22 @@ npm run dev:doctor
 
 Prints the current branch, dirty files, app version metadata, GitHub auth state, Android build-tools paths, and connected ADB devices. It does not modify files.
 
+## Repeatable QA
+
+```bash
+npm run qa:bundle
+npm run qa:dependencies
+npm run qa:android
+npm run qa:release
+npm run qa:full
+```
+
+- `qa:bundle` exports Android to an isolated temporary directory and rejects Storybook/Design Lab, remote OCR/PDF runtimes, unexpected font growth, missing bundled PDF.js assets, or an oversized JS bundle.
+- `qa:dependencies` turns `npm audit` into a stable policy: critical advisories fail the command; existing high/moderate toolchain advisories are reported. Add `-- --strict` to also block high advisories.
+- `qa:android` runs Android lint and validates the fully merged release manifest against the permission, backup, cleartext, and exported-component policy.
+- `qa:release` is the portable release preflight used by `release:quick`: metadata, all tests, TypeScript, production bundle, and dependency policy.
+- `qa:full` adds native Android lint/manifest checks to the release preflight.
+
 ## Verify An Existing Release
 
 ```bash
@@ -30,7 +46,7 @@ npm run release:verify -- v2.6.63 --install
 npm run release:quick
 ```
 
-By default this bumps the patch version. It updates the README stable version, requires a clean worktree, runs release checks, runs the full test suite, runs TypeScript, commits the version bump, pushes the branch, triggers the GitHub APK release workflow, waits for it, then verifies the published Android APK.
+By default this bumps the patch version. It updates the README stable version, requires a clean worktree, runs `qa:release`, commits the version bump, pushes the branch, triggers the GitHub APK release workflow, waits for it, then verifies the published Android APK.
 
 Each release publishes one signed Android asset:
 

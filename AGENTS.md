@@ -130,6 +130,8 @@ When fixing emulator-discovered UI issues, capture the failing evidence first, a
 
 ```bash
 npm run dev:doctor
+npm run qa:release
+npm run qa:full
 npm run test:flight-helpers
 npm test
 npm run typecheck

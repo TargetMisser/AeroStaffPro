@@ -65,7 +65,7 @@ assert(emulatorQaSource.includes('verifyInstalledPackage'), 'emulator QA should 
 assert(emulatorQaSource.includes("path.join(activeOutDir, 'qa-error.txt')"), 'emulator QA should retain artifacts for early failures');
 assert(emulatorQaSource.includes('Multiple ADB devices connected'), 'emulator QA should require an explicit serial when device selection is ambiguous');
 
-assert(releaseQuickSource.includes("['run', 'test']"), 'release:quick should run the full npm test suite');
+assert(releaseQuickSource.includes("['run', 'qa:release']"), 'release:quick should run the release QA preflight');
 assert(releaseQuickSource.includes("'README.md'"), 'release:quick should commit README stable-version updates');
 assert(releaseQuickSource.includes("'android/app/build.gradle'"), 'release:quick should commit phone version updates');
 assert(releaseQuickSource.includes("'--ref'"), 'release:quick should dispatch the GitHub workflow from the current branch');
