@@ -1,7 +1,7 @@
 import React from 'react';
 import { FlexWidget, TextWidget, ListWidget } from 'react-native-android-widget';
 import type { ThemeMode, ThemeSnapshotColors } from '../utils/themeMode';
-import type { WidgetData, WidgetFlight } from './widgetTaskHandler';
+import type { WidgetData, WidgetFlight, WidgetPresentation } from './widgetTaskHandler';
 import { getWidgetThemePalette, type WidgetThemePalette } from './widgetTheme';
 import { WEIGHT } from '../theme/typography';
 
@@ -159,7 +159,7 @@ function FlightRow({
   );
 }
 
-function Header({ label, theme }: { label?: string; theme: WidgetThemePalette }) {
+function Header({ label, presentation, theme }: { label?: string; presentation?: WidgetPresentation; theme: WidgetThemePalette }) {
   return (
     <FlexWidget
       style={{
@@ -192,7 +192,7 @@ function Header({ label, theme }: { label?: string; theme: WidgetThemePalette })
           style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.accent, marginRight: 8 }}
         />
         <TextWidget
-          text={label ? `Turno  ${label}` : 'AeroStaff Pro'}
+          text={label ? `${presentation?.modeLabel ?? 'Turno'}  ${label}` : 'AeroStaff Pro'}
           style={{ fontSize: 14, fontWeight: WEIGHT.semibold, color: theme.text }}
         />
       </FlexWidget>
@@ -200,7 +200,16 @@ function Header({ label, theme }: { label?: string; theme: WidgetThemePalette })
   );
 }
 
-function Footer({ updatedAt, theme }: { updatedAt: string; theme: WidgetThemePalette }) {
+function Footer({ updatedAt, presentation, theme }: { updatedAt: string; presentation?: WidgetPresentation; theme: WidgetThemePalette }) {
+  const freshnessLabel = presentation?.freshness === 'offline'
+    ? 'OFFLINE'
+    : presentation?.freshness === 'stale'
+      ? 'DATI VECCHI'
+      : 'LIVE';
+  const workloadLabel = presentation?.mode === 'load'
+    ? ` · ${presentation.workloadCount} voli/${presentation.workloadWindowMinutes}m`
+    : '';
+  const statusColor = presentation?.freshness === 'fresh' ? theme.accent : theme.errorAccent;
   return (
     <FlexWidget
       style={{
@@ -216,10 +225,10 @@ function Footer({ updatedAt, theme }: { updatedAt: string; theme: WidgetThemePal
       clickAction="OPEN_APP"
     >
       <FlexWidget
-        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.accent, marginRight: 6 }}
+        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor, marginRight: 6 }}
       />
       <TextWidget
-        text={`Aggiornato: ${updatedAt}`}
+        text={`${presentation?.showDataAge === false ? '' : `${freshnessLabel} · `}Aggiornato: ${updatedAt || '--:--'}${workloadLabel}`}
         style={{ fontSize: 10, color: theme.muted }}
       />
     </FlexWidget>
@@ -312,26 +321,26 @@ export function ShiftWidget({ data, themeMode = 'light', themeSnapshot }: ShiftW
   if (data.state === 'work_empty') {
     return (
       <FlexWidget style={rootStyle} clickAction="OPEN_APP">
-        <Header label={data.shiftLabel} theme={theme} />
+        <Header label={data.shiftLabel} presentation={data.presentation} theme={theme} />
         <FlexWidget
           style={{ flex: 1, width: 'match_parent', justifyContent: 'center', alignItems: 'center' }}
         >
           <TextWidget text="Nessuna partenza" style={{ fontSize: 14, color: theme.muted }} />
         </FlexWidget>
-        <Footer updatedAt={data.updatedAt} theme={theme} />
+        <Footer updatedAt={data.updatedAt} presentation={data.presentation} theme={theme} />
       </FlexWidget>
     );
   }
 
   return (
     <FlexWidget style={rootStyle}>
-      <Header label={data.shiftLabel} theme={theme} />
+      <Header label={data.shiftLabel} presentation={data.presentation} theme={theme} />
       <ListWidget style={{ height: 'match_parent', width: 'match_parent' }}>
         {data.flights.map((flight, i) => (
           <FlightRow key={`${flight.flightNumber}-${i}`} flight={flight} index={i} theme={theme} />
         ))}
       </ListWidget>
-      <Footer updatedAt={data.updatedAt} theme={theme} />
+      <Footer updatedAt={data.updatedAt} presentation={data.presentation} theme={theme} />
     </FlexWidget>
   );
 }

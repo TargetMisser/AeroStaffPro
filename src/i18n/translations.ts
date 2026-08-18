@@ -6,7 +6,7 @@ const it = {
   tabHome: 'Home', tabShifts: 'Turni', tabFlights: 'Voli', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Blocco Note', overlayPhonebook: 'Rubrica', overlayPasswords: 'Password',
   overlayManuals: 'Manuali DCS', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Impostazioni',
-  overlayPrintableCalendar: 'Calendario A4',
+  overlayPrintableCalendar: 'Report turni',
   // Common
   // Accessibilità (label per screen reader)
   a11yClose: 'Chiudi', a11yBack: 'Indietro', a11yForward: 'Avanti',
@@ -276,8 +276,8 @@ const it = {
   pinVerifyErr: 'Impossibile verificare il PIN. Riprova.',
   pinAccessEnable: 'Attiva protezione PIN', pinAccessDisable: 'Disattiva protezione PIN',
   // DrawerMenu
-  drawerNotepadTitle: 'Blocco Note',
-  drawerNotepadSub: 'Note personali',
+  drawerNotepadTitle: 'Note e consegne',
+  drawerNotepadSub: 'Appunti e passaggio turno',
   drawerPhonebookTitle: 'Rubrica',
   drawerPhonebookSub: 'Numeri utili',
   drawerPasswordTitle: 'Password',
@@ -286,8 +286,8 @@ const it = {
   drawerManualsSub: 'Libreria documenti',
   drawerArionTitle: 'Arion Inbox',
   drawerArionSub: 'Messaggi operativi',
-  drawerPrintableCalendarTitle: 'Calendario A4',
-  drawerPrintableCalendarSub: 'Stampa o salva i turni del mese',
+  drawerPrintableCalendarTitle: 'Report turni',
+  drawerPrintableCalendarSub: 'Calendario, ore, PDF e CSV',
   drawerSettingsTitle: 'Impostazioni',
   drawerSettingsSub: 'Preferenze app',
   // Printable calendar
@@ -333,7 +333,7 @@ const en: typeof it = {
   tabHome: 'Home', tabShifts: 'Shifts', tabFlights: 'Flights', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Notepad', overlayPhonebook: 'Phonebook', overlayPasswords: 'Password',
   overlayManuals: 'DCS Manuals', overlayArionInbox: 'Arion Inbox', overlaySettings: 'Settings',
-  overlayPrintableCalendar: 'A4 Calendar',
+  overlayPrintableCalendar: 'Shift reports',
   // Common
   // Accessibility (screen reader labels)
   a11yClose: 'Close', a11yBack: 'Back', a11yForward: 'Forward',
@@ -603,8 +603,8 @@ const en: typeof it = {
   pinVerifyErr: 'Could not verify PIN. Try again.',
   pinAccessEnable: 'Enable PIN protection', pinAccessDisable: 'Disable PIN protection',
   // DrawerMenu
-  drawerNotepadTitle: 'Notepad',
-  drawerNotepadSub: 'Personal notes',
+  drawerNotepadTitle: 'Notes and handover',
+  drawerNotepadSub: 'Personal notes and shift handover',
   drawerPhonebookTitle: 'Phonebook',
   drawerPhonebookSub: 'Useful numbers',
   drawerPasswordTitle: 'Passwords',
@@ -613,8 +613,8 @@ const en: typeof it = {
   drawerManualsSub: 'Document library',
   drawerArionTitle: 'Arion Inbox',
   drawerArionSub: 'Operational messages',
-  drawerPrintableCalendarTitle: 'A4 Calendar',
-  drawerPrintableCalendarSub: 'Print or save your monthly shifts',
+  drawerPrintableCalendarTitle: 'Shift reports',
+  drawerPrintableCalendarSub: 'Calendar, hours, PDF and CSV',
   drawerSettingsTitle: 'Settings',
   drawerSettingsSub: 'App preferences',
   // Printable calendar

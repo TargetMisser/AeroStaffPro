@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, ActivityIndicator,
   Modal, KeyboardAvoidingView, Platform, TextInput, Linking,
@@ -59,6 +60,15 @@ import {
   type NotificationDebugEvent,
   type NotificationDebugSnapshot,
 } from '../utils/notificationDiagnostics';
+import {
+  DEFAULT_WIDGET_PREFERENCES,
+  WIDGET_PREFERENCES_KEY,
+  parseWidgetPreferences,
+  type WidgetDisplayMode,
+  type WidgetPreferences,
+} from '../utils/widgetPreferences';
+import { getWidgetData } from '../widgets/widgetTaskHandler';
+import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 
 const STAFF_MONITOR_LINKS = {
   main: 'https://servizi.pisa-airport.com/staffMonitor/staffMonitor.html',
@@ -278,9 +288,11 @@ export default function SettingsScreen({
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [exportingBackup, setExportingBackup] = useState(false);
   const [importingBackup, setImportingBackup] = useState(false);
+  const [widgetPreferences, setWidgetPreferences] = useState<WidgetPreferences>(DEFAULT_WIDGET_PREFERENCES);
   const consumedInitialModal = useRef<string | null>(null);
   useEffect(() => {
     getCachedUpdateInfo().then(setUpdateInfo);
+    AsyncStorage.getItem(WIDGET_PREFERENCES_KEY).then(raw => setWidgetPreferences(parseWidgetPreferences(raw)));
   }, []);
 
   const profileSummary = useMemo(() => {
@@ -658,6 +670,26 @@ export default function SettingsScreen({
     }
   };
 
+  const updateWidgetPreferences = async (patch: Partial<WidgetPreferences>) => {
+    const next = { ...widgetPreferences, ...patch };
+    setWidgetPreferences(next);
+    await AsyncStorage.setItem(WIDGET_PREFERENCES_KEY, JSON.stringify(next));
+    try {
+      const data = await getWidgetData();
+      await requestShiftWidgetUpdate(data as any);
+    } catch {}
+  };
+  const widgetModeOptions: Array<{
+    id: WidgetDisplayMode;
+    label: string;
+    icon: keyof typeof MaterialIcons.glyphMap;
+  }> = [
+    { id: 'auto', label: 'Auto', icon: 'auto-awesome' },
+    { id: 'shift', label: 'Turno', icon: 'schedule' },
+    { id: 'pinned', label: 'Pinnato', icon: 'push-pin' },
+    { id: 'load', label: 'Carico', icon: 'speed' },
+  ];
+
   return (
     <>
       <ScrollView
@@ -745,6 +777,64 @@ export default function SettingsScreen({
           type="arrow"
           onPress={() => { openDebugModal().catch(() => {}); }}
         />
+      </View>
+
+      {/* ── Widget 2.0 ── */}
+      <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>WIDGET 2.0</Text>
+      <View style={[styles.widgetCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <Text style={[styles.widgetTitle, { color: colors.text }]}>Contenuto principale</Text>
+        <Text style={[styles.widgetSubtitle, { color: colors.textSub }]}>Scegli cosa privilegiare nel widget della Home Android.</Text>
+        <View style={styles.widgetModeGrid}>
+          {widgetModeOptions.map(option => {
+            const active = widgetPreferences.mode === option.id;
+            return (
+              <TouchableOpacity
+                key={option.id}
+                style={[
+                  styles.widgetModeButton,
+                  { borderColor: active ? colors.primary : colors.border, backgroundColor: active ? colors.primaryLight : colors.cardSecondary },
+                ]}
+                onPress={() => { updateWidgetPreferences({ mode: option.id }); }}
+              >
+                <MaterialIcons name={option.icon} size={20} color={active ? colors.primary : colors.textMuted} />
+                <Text style={[styles.widgetModeLabel, { color: active ? colors.primaryText : colors.textSub }]}>{option.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        {widgetPreferences.mode === 'load' && (
+          <View style={styles.widgetWindowRow}>
+            <Text style={[styles.widgetWindowLabel, { color: colors.textSub }]}>Finestra carico</Text>
+            <View style={styles.widgetWindowButtons}>
+              {([60, 90, 120] as const).map(minutes => {
+                const active = widgetPreferences.workloadWindowMinutes === minutes;
+                return (
+                  <TouchableOpacity
+                    key={minutes}
+                    style={[styles.widgetWindowButton, { backgroundColor: active ? colors.primary : colors.cardSecondary, borderColor: active ? colors.primary : colors.border }]}
+                    onPress={() => { updateWidgetPreferences({ workloadWindowMinutes: minutes }); }}
+                  >
+                    <Text style={[styles.widgetWindowText, { color: active ? '#fff' : colors.textSub }]}>{minutes} min</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        <View style={[styles.widgetSwitchRow, { borderTopColor: colors.border }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.widgetSwitchTitle, { color: colors.text }]}>Stato aggiornamento</Text>
+            <Text style={[styles.widgetSwitchSub, { color: colors.textMuted }]}>Mostra dati live, vecchi o offline</Text>
+          </View>
+          <Switch
+            value={widgetPreferences.showDataAge}
+            onValueChange={value => { updateWidgetPreferences({ showDataAge: value }); }}
+            trackColor={{ false: colors.border, true: colors.primaryLight }}
+            thumbColor={widgetPreferences.showDataAge ? colors.primary : colors.textMuted}
+          />
+        </View>
       </View>
 
       {/* ── Info app ── */}
@@ -1869,6 +1959,21 @@ const styles = StyleSheet.create({
   bannerSub:   { fontSize: 12, marginTop: 2 },
 
   sectionTitle: { ...TYPE.overline, marginBottom: SPACING.sm, paddingLeft: SPACING.xs, marginTop: SPACING.xs },
+
+  widgetCard: { borderRadius: RADIUS.lg, borderWidth: 1, padding: SPACING.md, marginBottom: SPACING.xl },
+  widgetTitle: { ...TYPE.subhead },
+  widgetSubtitle: { ...TYPE.caption, marginTop: 3 },
+  widgetModeGrid: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md },
+  widgetModeButton: { flex: 1, minHeight: 64, alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: RADIUS.md, borderWidth: 1 },
+  widgetModeLabel: { ...TYPE.micro, fontWeight: '800' },
+  widgetWindowRow: { marginTop: SPACING.md },
+  widgetWindowLabel: { ...TYPE.caption, fontWeight: '700' },
+  widgetWindowButtons: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+  widgetWindowButton: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, borderWidth: 1 },
+  widgetWindowText: { ...TYPE.caption, fontWeight: '800' },
+  widgetSwitchRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginTop: SPACING.md, paddingTop: SPACING.md, borderTopWidth: 1 },
+  widgetSwitchTitle: { ...TYPE.callout, fontWeight: '700' },
+  widgetSwitchSub: { ...TYPE.micro, marginTop: 2 },
 
   // Theme grid
   themeGrid: { flexDirection: 'row', gap: 10, marginBottom: SPACING.xl, flexWrap: 'wrap' },

@@ -34,6 +34,19 @@ type ReplaceShiftsForRangeArgs = {
   restTiming?: RestEventTiming;
 };
 
+export type ShiftImportRollback = {
+  calendarId: string;
+  dates: string[];
+  previousShifts: ShiftReplacement[];
+  importedShifts: ShiftReplacement[];
+  importedAt: number;
+};
+
+export type SafeShiftImportResult = {
+  createdCount: number;
+  rollback: ShiftImportRollback;
+};
+
 const DEFAULT_TITLES: ShiftEventTitles = {
   work: 'Lavoro',
   rest: 'Riposo',
@@ -149,12 +162,12 @@ export async function getWritableCalendarId(): Promise<string | null> {
   }
 }
 
-async function findShiftEventIdsInRange(
+async function findShiftEventsInRange(
   calendarId: string,
   start: Date,
   end: Date,
   includedDates?: ReadonlySet<string>,
-): Promise<string[]> {
+) {
   /* expo-calendar's Android query only returns events fully contained in the
      window (Instances.BEGIN >= start AND Instances.END <= end), so a night
      shift running past midnight - or an all-day rest stored in UTC - is
@@ -170,8 +183,17 @@ async function findShiftEventIdsInRange(
       const startsAt = new Date(event.startDate).getTime();
       if (startsAt < start.getTime() || startsAt > end.getTime()) return false;
       return !includedDates || includedDates.has(toLocalDateKey(event.startDate));
-    })
-    .map(event => event.id);
+    });
+}
+
+async function findShiftEventIdsInRange(
+  calendarId: string,
+  start: Date,
+  end: Date,
+  includedDates?: ReadonlySet<string>,
+): Promise<string[]> {
+  const events = await findShiftEventsInRange(calendarId, start, end, includedDates);
+  return events.map(event => event.id);
 }
 
 async function deleteEventsByIds(ids: string[]): Promise<void> {
@@ -250,5 +272,97 @@ export async function replaceShiftsForRange({
   // New events are all in place; now it is safe to remove the old ones.
   await deleteEventsByIds(oldEventIds);
 
+  return createdIds.length;
+}
+
+function formatEventTime(value: string | Date): string {
+  const date = new Date(value);
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+export async function getShiftReplacementsForDates(
+  calendarId: string,
+  dates: string[],
+): Promise<ShiftReplacement[]> {
+  const uniqueDates = [...new Set(dates)].sort();
+  if (uniqueDates.length === 0) return [];
+  const first = parseIsoDate(uniqueDates[0]);
+  const last = parseIsoDate(uniqueDates[uniqueDates.length - 1]);
+  const rangeStart = new Date(first.year, first.month - 1, first.day, 0, 0, 0, 0);
+  const rangeEnd = new Date(last.year, last.month - 1, last.day, 23, 59, 59, 999);
+  const includedDates = new Set(uniqueDates);
+  const events = await findShiftEventsInRange(calendarId, rangeStart, rangeEnd, includedDates);
+
+  return events.map(event => {
+    const date = toLocalDateKey(event.startDate);
+    const type: 'work' | 'rest' = event.title.trim() === DEFAULT_TITLES.rest ? 'rest' : 'work';
+    return type === 'rest'
+      ? { date, type }
+      : {
+          date,
+          type,
+          startTime: formatEventTime(event.startDate),
+          endTime: formatEventTime(event.endDate),
+        };
+  });
+}
+
+export async function replaceShiftsForRangeSafely(
+  args: ReplaceShiftsForRangeArgs,
+): Promise<SafeShiftImportResult> {
+  const dates = [...new Set(args.shifts.map(shift => shift.date))].sort();
+  const previousShifts = await getShiftReplacementsForDates(args.calendarId, dates);
+  const createdCount = await replaceShiftsForRange(args);
+  return {
+    createdCount,
+    rollback: {
+      calendarId: args.calendarId,
+      dates,
+      previousShifts,
+      importedShifts: args.shifts,
+      importedAt: Date.now(),
+    },
+  };
+}
+
+export async function restoreShiftImport(
+  rollback: ShiftImportRollback,
+  calendarId = rollback.calendarId,
+): Promise<number> {
+  const uniqueDates = [...new Set(rollback.dates)].sort();
+  if (uniqueDates.length === 0) return 0;
+  const first = parseIsoDate(uniqueDates[0]);
+  const last = parseIsoDate(uniqueDates[uniqueDates.length - 1]);
+  const rangeStart = new Date(first.year, first.month - 1, first.day, 0, 0, 0, 0);
+  const rangeEnd = new Date(last.year, last.month - 1, last.day, 23, 59, 59, 999);
+  const includedDates = new Set(uniqueDates);
+  if (Array.isArray(rollback.importedShifts)) {
+    const currentShifts = await getShiftReplacementsForDates(calendarId, uniqueDates);
+    const normalize = (shifts: ShiftReplacement[]) => shifts
+      .map(shift => ({
+        date: shift.date,
+        type: shift.type,
+        startTime: shift.startTime ?? '',
+        endTime: shift.endTime ?? '',
+      }))
+      .sort((left, right) => `${left.date}-${left.type}`.localeCompare(`${right.date}-${right.type}`));
+    if (JSON.stringify(normalize(currentShifts)) !== JSON.stringify(normalize(rollback.importedShifts))) {
+      throw new Error('SHIFT_IMPORT_CHANGED_SINCE_IMPORT');
+    }
+  }
+  const currentEventIds = await findShiftEventIdsInRange(calendarId, rangeStart, rangeEnd, includedDates);
+  const createdIds: string[] = [];
+
+  try {
+    for (const shift of rollback.previousShifts) {
+      const id = await createShiftEvent(calendarId, shift, DEFAULT_TITLES, DEFAULT_REST_TIMING);
+      if (id) createdIds.push(id);
+    }
+  } catch (error) {
+    await deleteEventsByIds(createdIds);
+    throw error;
+  }
+
+  await deleteEventsByIds(currentEventIds);
   return createdIds.length;
 }

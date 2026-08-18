@@ -16,6 +16,14 @@ import { staffMonitorProvider } from '../utils/flightProviders/staffMonitorProvi
 import { applyLiveDepartureStatus, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { ShiftWidget } from './ShiftWidget';
 import { getStoredWidgetThemeProps } from './widgetTheme';
+import {
+  WIDGET_PREFERENCES_KEY,
+  getWidgetFreshness,
+  parseWidgetPreferences,
+  selectWidgetFlights,
+  type WidgetDisplayMode,
+  type WidgetPreferences,
+} from '../utils/widgetPreferences';
 
 /** Key used by the main app (FlightScreen) to push pre-built widget data */
 export const WIDGET_CACHE_KEY = 'widget_data_cache_v1';
@@ -44,9 +52,19 @@ export type WidgetFlight = {
   gate?: string;
 };
 
+export type WidgetPresentation = {
+  mode: WidgetDisplayMode;
+  modeLabel: string;
+  freshness: 'fresh' | 'stale' | 'offline';
+  showDataAge: boolean;
+  workloadCount: number;
+  workloadWindowMinutes: number;
+  workloadLevel: 'calm' | 'busy' | 'peak';
+};
+
 export type WidgetData =
-  | { state: 'work'; shiftLabel: string; flights: WidgetFlight[]; updatedAt: string }
-  | { state: 'work_empty'; shiftLabel: string; updatedAt: string }
+  | { state: 'work'; shiftLabel: string; flights: WidgetFlight[]; updatedAt: string; updatedAtTs?: number; presentation?: WidgetPresentation }
+  | { state: 'work_empty'; shiftLabel: string; updatedAt: string; updatedAtTs?: number; presentation?: WidgetPresentation }
   | { state: 'rest' }
   | { state: 'no_shift' }
   | { state: 'error' };
@@ -63,6 +81,42 @@ export type WidgetShiftData = {
   isRestDay: boolean;
   nextShift?: WidgetShiftWindow | null;
 };
+
+async function readWidgetPreferences(): Promise<WidgetPreferences> {
+  try {
+    return parseWidgetPreferences(await AsyncStorage.getItem(WIDGET_PREFERENCES_KEY));
+  } catch {
+    return parseWidgetPreferences(null);
+  }
+}
+
+function presentWidgetData(
+  data: WidgetData,
+  preferences: WidgetPreferences,
+  offline = false,
+): WidgetData {
+  if (data.state !== 'work' && data.state !== 'work_empty') return data;
+  const selection = selectWidgetFlights(data.state === 'work' ? data.flights : [], preferences);
+  const presentation: WidgetPresentation = {
+    mode: preferences.mode,
+    modeLabel: selection.modeLabel,
+    freshness: getWidgetFreshness(data.updatedAtTs, Date.now(), offline),
+    showDataAge: preferences.showDataAge,
+    workloadCount: selection.workloadCount,
+    workloadWindowMinutes: preferences.workloadWindowMinutes,
+    workloadLevel: selection.workloadLevel,
+  };
+  return data.state === 'work'
+    ? { ...data, flights: selection.flights, presentation }
+    : { ...data, presentation };
+}
+
+function markWidgetOffline(data: WidgetData): WidgetData {
+  if (data.state !== 'work' && data.state !== 'work_empty') return data;
+  return data.presentation
+    ? { ...data, presentation: { ...data.presentation, freshness: 'offline' } }
+    : data;
+}
 
 export function preserveCachedWidgetFlights(
   nextData: WidgetData,
@@ -236,6 +290,7 @@ async function readShiftSnapshot(): Promise<WidgetShiftData | null> {
 // ─── Read cached data written by the main app ──────────────────────────────────
 export async function getWidgetData(): Promise<WidgetData> {
   try {
+    const preferences = await readWidgetPreferences();
     const shiftData = await readShiftSnapshot();
 
     if (shiftData) {
@@ -249,10 +304,12 @@ export async function getWidgetData(): Promise<WidgetData> {
         const cached = await AsyncStorage.getItem(WIDGET_CACHE_KEY);
         if (cached) {
           const data: WidgetData = JSON.parse(cached);
-          if ((data.state === 'work' || data.state === 'work_empty') && data.shiftLabel === shiftLabel) return data;
+          if ((data.state === 'work' || data.state === 'work_empty') && data.shiftLabel === shiftLabel) {
+            return presentWidgetData(data, preferences);
+          }
         }
         // Cache is stale or missing — show work_empty until periodic update runs.
-        return { state: 'work_empty', shiftLabel, updatedAt: '' };
+        return presentWidgetData({ state: 'work_empty', shiftLabel, updatedAt: '' }, preferences);
       }
     }
 
@@ -262,7 +319,7 @@ export async function getWidgetData(): Promise<WidgetData> {
     const data: WidgetData = JSON.parse(cached);
     // Rest/no_shift cached but shift key is stale → treat as no_shift.
     if (data.state === 'rest' || data.state === 'no_shift') return { state: 'no_shift' };
-    return data;
+    return presentWidgetData(data, preferences);
   } catch {}
   return { state: 'error' };
 }
@@ -293,6 +350,7 @@ async function withWidgetRefreshTimeout<T>(operation: Promise<T>): Promise<T> {
 // ─── Fetch fresh widget data from the live provider + cached shift key ────────
 export async function fetchFreshWidgetData(): Promise<WidgetData> {
   try {
+    const preferences = await readWidgetPreferences();
     const shiftData = await readShiftSnapshot();
     if (!shiftData) return getWidgetData();
 
@@ -396,15 +454,17 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
       })
       .sort((a, b) => a.departureTs - b.departureTs);
 
+    const updatedAtTs = Date.now();
     const freshData: WidgetData = wFlights.length === 0
-      ? { state: 'work_empty', shiftLabel, updatedAt: nowHH }
-      : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH };
+      ? { state: 'work_empty', shiftLabel, updatedAt: nowHH, updatedAtTs }
+      : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH, updatedAtTs };
 
     // A temporarily empty provider response must not erase a valid snapshot
     // for the same shift. Shift changes still replace it because the labels differ.
-    return storeWidgetDataPreservingFlights(freshData);
+    const stored = await storeWidgetDataPreservingFlights(freshData);
+    return presentWidgetData(stored, preferences);
   } catch {
-    return getWidgetData();
+    return markWidgetOffline(await getWidgetData());
   }
 }
 

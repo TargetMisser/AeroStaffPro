@@ -2,11 +2,12 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity,
   Modal, Alert, FlatList, TextInput,
-  Linking, InteractionManager,
+  Linking, InteractionManager, Share,
 } from 'react-native';
 import * as SystemCalendar from 'expo-calendar';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { WebView } from 'react-native-webview';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -20,9 +21,12 @@ import {
   getWritableCalendarId,
   isOwnedShiftEvent,
   replaceShiftForDate,
-  replaceShiftsForRange,
+  getShiftReplacementsForDates,
+  replaceShiftsForRangeSafely,
+  restoreShiftImport,
+  type ShiftImportRollback,
 } from '../utils/shiftCalendar';
-import { storeWidgetDataPreservingFlights, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
+import { getWidgetData, storeWidgetDataPreservingFlights, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetShiftData, WidgetData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { buildCalendarFlightCountsFromCache } from '../utils/calendarFlightStats';
@@ -39,8 +43,15 @@ import { TYPE, WEIGHT } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
 import { devError, devLog } from '../utils/devLog';
 import { getErrorMessage } from '../utils/errorUtils';
+import {
+  analyzeShiftImport,
+  formatComparableShift,
+  type ShiftImportPreview,
+} from '../utils/shiftImportSafety';
+import { buildShiftIcs, buildShiftShareText } from '../utils/shiftSharing';
 
 const STORAGE_KEY = '@shift_import_name';
+const LAST_SHIFT_IMPORT_KEY = 'aerostaff_last_shift_import_v1';
 const MAX_PDF_FILES = 4;
 const MAX_PDF_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_PDF_TOTAL_BYTES = 12 * 1024 * 1024;
@@ -121,7 +132,9 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
   const [importFileCount, setImportFileCount] = useState(0);
   const [parsedSchedule, setParsedSchedule] = useState<ParsedSchedule | null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<ParsedEmployee | null>(null);
+  const [importPreview, setImportPreview] = useState<ShiftImportPreview | null>(null);
   const [savedName, setSavedName] = useState<string | null>(null);
+  const [lastImportRollback, setLastImportRollback] = useState<ShiftImportRollback | null>(null);
   const pdfTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Edit menu + manual entry ───────────────────────────────────────────────
@@ -289,6 +302,11 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         endTime: manualType === 'Lavoro' ? `${String(manualEndH).padStart(2, '0')}:${String(manualEndM).padStart(2, '0')}` : undefined,
       });
 
+      // A manual edit changes the post-import state, so an older transaction
+      // must no longer be offered as a safe one-tap rollback.
+      await AsyncStorage.removeItem(LAST_SHIFT_IMPORT_KEY);
+      setLastImportRollback(null);
+
       setManualModalOpen(false);
       fetchCalendar(true);
       await pushShiftsToWidget([{ date: manualDate, type: shiftType, startH: manualStartH, startM: manualStartM, endH: manualEndH, endM: manualEndM }]);
@@ -296,9 +314,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     } catch (e) { Alert.alert('Errore', getErrorMessage(e, 'Errore sconosciuto')); }
   };
 
-  // Load saved name
+  // Load saved name and the only reversible import transaction.
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(n => { if (n) setSavedName(n); });
+    AsyncStorage.getItem(LAST_SHIFT_IMPORT_KEY).then(raw => {
+      if (!raw) return;
+      try {
+        const parsed = JSON.parse(raw) as ShiftImportRollback;
+        if (Array.isArray(parsed.dates) && Array.isArray(parsed.previousShifts) && Array.isArray(parsed.importedShifts)) {
+          setLastImportRollback(parsed);
+        }
+      } catch {}
+    });
   }, []);
 
   useEffect(() => {
@@ -434,6 +461,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     setImportModalVisible(false);
     setImportStep('idle');
     setImportFileCount(0);
+    setImportPreview(null);
   };
 
   const failPdfExtraction = (message: string) => {
@@ -506,6 +534,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       const runtime = await loadPdfJsRuntimeSources();
       setParsedSchedule(null);
       setSelectedEmployee(null);
+      setImportPreview(null);
       setImportFileCount(base64Files.length);
       setImportStep('extracting');
       setImportModalVisible(true);
@@ -555,8 +584,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
           e.name.toLowerCase().includes(savedName.toLowerCase())
         );
         if (match) {
-          setSelectedEmployee(match);
-          setImportStep('preview');
+          selectEmployee(match);
           return;
         }
       }
@@ -568,12 +596,32 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     }
   };
 
-  const selectEmployee = (emp: ParsedEmployee) => {
+  const selectEmployee = async (emp: ParsedEmployee) => {
     setSelectedEmployee(emp);
+    setImportPreview(null);
+    setImportStep('preview');
     // Save name for next time
     AsyncStorage.setItem(STORAGE_KEY, emp.name);
     setSavedName(emp.name);
-    setImportStep('preview');
+    const imported = emp.shifts.map(shift => ({
+      date: shift.date,
+      type: shift.type,
+      startTime: shift.start,
+      endTime: shift.end,
+    }));
+    try {
+      const calendarId = calId ?? await getWritableCalendarId();
+      if (!calendarId) {
+        setImportPreview(analyzeShiftImport(imported, []));
+        return;
+      }
+      if (!calId) setCalId(calendarId);
+      const existing = await getShiftReplacementsForDates(calendarId, imported.map(shift => shift.date));
+      setImportPreview(analyzeShiftImport(imported, existing));
+    } catch (error) {
+      devLog('[shiftImport.preview]', error);
+      setImportPreview(analyzeShiftImport(imported, []));
+    }
   };
 
   const confirmImport = async () => {
@@ -590,7 +638,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       }
       if (!calId) setCalId(calendarId);
 
-      const saved = await replaceShiftsForRange({
+      const result = await replaceShiftsForRangeSafely({
         calendarId,
         shifts: selectedEmployee.shifts.map(shift => ({
           date: shift.date,
@@ -599,6 +647,8 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
           endTime: shift.end,
         })),
       });
+      await AsyncStorage.setItem(LAST_SHIFT_IMPORT_KEY, JSON.stringify(result.rollback));
+      setLastImportRollback(result.rollback);
 
       // Push today/tomorrow together so the shared snapshot cannot lose an update.
       const todayIso = toLocalIso(new Date());
@@ -619,7 +669,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         setImportStep('idle');
         setImportFileCount(0);
         fetchCalendar(true);
-        Alert.alert(t('calImportComplete'), `${saved} turni salvati nel calendario`);
+        Alert.alert(t('calImportComplete'), `${result.createdCount} turni salvati. Puoi annullare l'importazione da Modifica Turni.`);
       }, 800);
     } catch (e) {
       devError(e);
@@ -627,6 +677,90 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       setImportStep('idle');
       setImportFileCount(0);
     }
+  };
+
+  const undoLastImport = () => {
+    if (!lastImportRollback) return;
+    Alert.alert(
+      'Annulla ultima importazione',
+      `Ripristino dei turni precedenti su ${lastImportRollback.dates.length} giorni. Continuare?`,
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: 'Ripristina',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { status } = await SystemCalendar.requestCalendarPermissionsAsync();
+              if (status !== 'granted') {
+                Alert.alert(t('calPermDenied'), t('calPermSettingsHint'));
+                return;
+              }
+              const calendarId = calId ?? await getWritableCalendarId();
+              if (!calendarId) {
+                Alert.alert(t('error'), t('calNoWritableCalendar'));
+                return;
+              }
+              const restored = await restoreShiftImport(lastImportRollback, calendarId);
+              await AsyncStorage.removeItem(LAST_SHIFT_IMPORT_KEY);
+              setLastImportRollback(null);
+              setEditMenuOpen(false);
+              await fetchCalendar(true);
+              const widgetData = await getWidgetData();
+              requestShiftWidgetUpdate(widgetData as any).catch(() => {});
+              Alert.alert('Importazione annullata', `${restored} turni precedenti ripristinati.`);
+            } catch (error) {
+              devError('[shiftImport.undo]', error);
+              Alert.alert(
+                t('error'),
+                getErrorMessage(error) === 'SHIFT_IMPORT_CHANGED_SINCE_IMPORT'
+                  ? 'I turni sono stati modificati dopo l’importazione. Per sicurezza il ripristino automatico è stato bloccato.'
+                  : 'Non sono riuscito a ripristinare i turni precedenti.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const shareShiftRange = async (startIso: string, endIso: string, title: string, mode: 'text' | 'ics') => {
+    try {
+      if (mode === 'text') {
+        await Share.share({
+          title,
+          message: buildShiftShareText({ eventsByDate: eventsData, startIso, endIso, locale, title }),
+        });
+        return;
+      }
+
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert(t('error'), 'La condivisione file non è disponibile su questo dispositivo.');
+        return;
+      }
+      const cacheDirectory = FileSystem.cacheDirectory;
+      if (!cacheDirectory) throw new Error('CACHE_DIRECTORY_UNAVAILABLE');
+      const filename = `AeroStaffPro-turni-${startIso}-${endIso}.ics`;
+      const uri = `${cacheDirectory}${filename}`;
+      const ics = buildShiftIcs({ eventsByDate: eventsData, startIso, endIso, locale, title });
+      await FileSystem.writeAsStringAsync(uri, ics, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'text/calendar',
+        UTI: 'public.calendar-event',
+        dialogTitle: title,
+      });
+    } catch (error) {
+      devError('[shiftShare]', error);
+      Alert.alert(t('error'), 'Non sono riuscito a condividere i turni.');
+    }
+  };
+
+  const openShiftShare = (startIso: string, endIso: string, title: string) => {
+    Alert.alert('Condividi turni', title, [
+      { text: t('cancel'), style: 'cancel' },
+      { text: 'Testo', onPress: () => { shareShiftRange(startIso, endIso, title, 'text'); } },
+      { text: 'Calendario .ics', onPress: () => { shareShiftRange(startIso, endIso, title, 'ics'); } },
+    ]);
   };
 
   const monthLabel = visibleMonth.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
@@ -894,6 +1028,15 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
               ) : (
                 <Text style={s.emptyText}>{t('calNoShift')}{'\n'}{selectedDay.split('-').reverse().join('/')}</Text>
               )}
+              {(workEvent || restEvent) && (
+                <TouchableOpacity
+                  style={s.quickShareBtn}
+                  onPress={() => openShiftShare(selectedDay, selectedDay, `Turno ${selectedDay.split('-').reverse().join('/')}`)}
+                >
+                  <MaterialIcons name="share" size={17} color={colors.primaryText} />
+                  <Text style={s.quickShareText}>Condividi turno</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View style={s.calendarCard}>
@@ -964,11 +1107,23 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                   <View>
                     <Text style={s.weekTitle}>{t('calModeWeek')}</Text>
                   </View>
-                  <View style={s.weekTotalPill}>
-                    <Text style={s.weekTotalValue}>{weekHoursSummary.totalHours.toFixed(1)} h</Text>
-                    <Text style={s.weekTotalLabel}>
-                      {t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}
-                    </Text>
+                  <View style={s.weekHeaderActions}>
+                    <TouchableOpacity
+                      style={s.weekShareBtn}
+                      onPress={() => openShiftShare(
+                        selectedStatsRange.startIso,
+                        selectedStatsRange.endIso,
+                        `Turni ${selectedStatsRange.startIso.split('-').reverse().join('/')} - ${selectedStatsRange.endIso.split('-').reverse().join('/')}`,
+                      )}
+                    >
+                      <MaterialIcons name="share" size={18} color={colors.primaryText} />
+                    </TouchableOpacity>
+                    <View style={s.weekTotalPill}>
+                      <Text style={s.weekTotalValue}>{weekHoursSummary.totalHours.toFixed(1)} h</Text>
+                      <Text style={s.weekTotalLabel}>
+                        {t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
@@ -1076,6 +1231,18 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
               </View>
               <MaterialIcons name="chevron-right" size={20} color={colors.textSub} />
             </TouchableOpacity>
+            {lastImportRollback && (
+              <TouchableOpacity style={[s.editMenuOption, { backgroundColor: colors.dangerSoft }]} onPress={undoLastImport}>
+                <MaterialIcons name="restore" size={24} color={colors.danger} />
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.editMenuLabel, { color: colors.text }]}>Annulla ultima importazione</Text>
+                  <Text style={[s.editMenuSub, { color: colors.textSub }]}>
+                    Ripristina {lastImportRollback.dates.length} giorni modificati
+                  </Text>
+                </View>
+                <MaterialIcons name="chevron-right" size={20} color={colors.textSub} />
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </Modal>
@@ -1252,24 +1419,53 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 <Text style={[s.stepLabel, { color: colors.textSub }]}>
                   {t('calShiftsOf')} {selectedEmployee.name}
                 </Text>
-                <ScrollView style={{ maxHeight: 350 }}>
-                  {selectedEmployee.shifts.map((shift, i) => (
-                    <View key={i} style={[s.previewRow, { borderColor: colors.border }]}>
-                      <Text style={[s.previewDate, { color: colors.text }]}>{fmtDate(shift.date)}</Text>
-                      {shift.type === 'work' ? (
-                        <View style={[s.previewPill, { backgroundColor: colors.primaryLight }]}>
-                          <Text style={[s.previewPillText, { color: colors.primaryText }]}>
-                            {shift.start} - {shift.end}
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={[s.previewPill, { backgroundColor: colors.successSoft }]}>
-                          <Text style={[s.previewPillText, { color: colors.success }]}>{t('calRestPill')}</Text>
-                        </View>
-                      )}
+                {importPreview ? (
+                  <>
+                    <View style={s.importSummaryRow}>
+                      <View style={[s.importSummaryChip, { backgroundColor: colors.successSoft }]}>
+                        <Text style={[s.importSummaryValue, { color: colors.success }]}>{importPreview.newCount}</Text>
+                        <Text style={s.importSummaryLabel}>NUOVI</Text>
+                      </View>
+                      <View style={[s.importSummaryChip, { backgroundColor: colors.primaryLight }]}>
+                        <Text style={[s.importSummaryValue, { color: colors.primaryText }]}>{importPreview.replaceCount}</Text>
+                        <Text style={s.importSummaryLabel}>DA SOSTITUIRE</Text>
+                      </View>
+                      <View style={[s.importSummaryChip, { backgroundColor: colors.cardSecondary }]}>
+                        <Text style={[s.importSummaryValue, { color: colors.textSub }]}>{importPreview.unchangedCount}</Text>
+                        <Text style={s.importSummaryLabel}>UGUALI</Text>
+                      </View>
                     </View>
-                  ))}
-                </ScrollView>
+                    <ScrollView style={{ maxHeight: 320 }}>
+                      {importPreview.rows.map((row, i) => (
+                        <View key={`${row.shift.date}-${i}`} style={[s.previewRow, { borderColor: colors.border }]}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[s.previewDate, { color: colors.text }]}>{fmtDate(row.shift.date)}</Text>
+                            {row.kind === 'replace' && (
+                              <Text style={s.previewExisting}>Prima: {formatComparableShift(row.existing)}</Text>
+                            )}
+                          </View>
+                          <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                            <View style={[s.previewPill, { backgroundColor: row.shift.type === 'work' ? colors.primaryLight : colors.successSoft }]}>
+                              <Text style={[s.previewPillText, { color: row.shift.type === 'work' ? colors.primaryText : colors.success }]}>
+                                {formatComparableShift(row.shift)}
+                              </Text>
+                            </View>
+                            <Text style={[s.previewStatus, {
+                              color: row.kind === 'replace' ? colors.warning : row.kind === 'new' ? colors.success : colors.textMuted,
+                            }]}>
+                              {row.kind === 'replace' ? 'SOSTITUISCE' : row.kind === 'new' ? 'NUOVO' : 'INVARIATO'}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : (
+                  <View style={s.previewLoading}>
+                    <ActivityIndicator color={colors.primary} />
+                    <Text style={{ color: colors.textSub }}>Confronto con il calendario...</Text>
+                  </View>
+                )}
                 <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.lg }}>
                   <TouchableOpacity
                     style={[s.secondaryBtn, { borderColor: colors.border }]}
@@ -1278,8 +1474,9 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     <Text style={[s.secondaryBtnText, { color: colors.textSub }]}>{t('calChangeName')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[s.primaryBtn, { backgroundColor: colors.primary }]}
+                    style={[s.primaryBtn, { backgroundColor: colors.primary }, !importPreview && { opacity: 0.5 }]}
                     onPress={confirmImport}
+                    disabled={!importPreview}
                   >
                     <Text style={s.primaryBtnText}>{t('calSaveToCalendar')}</Text>
                   </TouchableOpacity>
@@ -1389,6 +1586,8 @@ function makeStyles(c: ThemeColors) {
       borderColor: c.glassBorder,
     },
     weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
+    weekHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+    weekShareBtn: { width: 38, height: 38, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
     weekTitle: { color: c.primaryDark, fontSize: 20, fontWeight: '900' },
     weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 14 },
     weekNavBtn: { width: 40, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
@@ -1453,6 +1652,8 @@ function makeStyles(c: ThemeColors) {
     flightBadge: { marginTop: 14, backgroundColor: c.primaryLight, borderRadius: 10, paddingHorizontal: 14, paddingVertical: SPACING.sm, alignSelf: 'flex-start' },
     flightBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     flightBadgeText: { color: c.primaryText, fontWeight: '700', fontSize: 13 },
+    quickShareBtn: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: SPACING.md, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: c.primaryLight },
+    quickShareText: { color: c.primaryText, fontSize: 12, fontWeight: '800' },
     restRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10 },
     restIconBox: { width: 48, height: 48, borderRadius: 14, backgroundColor: c.successSoft, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
     restText: { ...TYPE.headline, color: c.success },
@@ -1472,8 +1673,15 @@ function makeStyles(c: ThemeColors) {
     nameText: { fontSize: 15, fontWeight: '500' },
     previewRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, paddingHorizontal: SPACING.xs, borderBottomWidth: 1 },
     previewDate: { fontSize: 14, fontWeight: '600' },
+    previewExisting: { color: c.textMuted, fontSize: 11, marginTop: 3 },
+    previewStatus: { fontSize: 9, fontWeight: '900', letterSpacing: 0.7 },
     previewPill: { paddingHorizontal: SPACING.md, paddingVertical: 5, borderRadius: RADIUS.sm },
     previewPillText: { fontSize: 13, fontWeight: '700' },
+    previewLoading: { minHeight: 150, alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
+    importSummaryRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.sm },
+    importSummaryChip: { flex: 1, minHeight: 54, justifyContent: 'center', paddingHorizontal: SPACING.sm, borderRadius: RADIUS.md },
+    importSummaryValue: { fontSize: 18, fontWeight: '900' },
+    importSummaryLabel: { color: c.textMuted, fontSize: 8, fontWeight: '900', letterSpacing: 0.45, marginTop: 2 },
     secondaryBtn: { flex: 1, paddingVertical: SPACING.md, borderRadius: 10, alignItems: 'center', borderWidth: 1 },
     secondaryBtnText: { fontSize: 14, fontWeight: '600' },
     primaryBtn: { flex: 2, paddingVertical: SPACING.md, borderRadius: 10, alignItems: 'center' },

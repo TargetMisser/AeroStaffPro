@@ -6,11 +6,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as SystemCalendar from 'expo-calendar';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
@@ -26,9 +29,31 @@ import {
 import { RADIUS, SPACING } from '../theme/spacing';
 import { TYPE, WEIGHT } from '../theme/typography';
 import { devError, devWarn } from '../utils/devLog';
+import {
+  COMPENSATION_RULES_KEY,
+  DEFAULT_COMPENSATION_RULES,
+  buildCompensationCsv,
+  buildCompensationReportHtml,
+  normalizeCompensationRules,
+  parseCompensationRules,
+  summarizeCompensationMonth,
+  type CompensationRules,
+} from '../utils/shiftCompensation';
 
 type CalendarLoadState = 'loading' | 'ready' | 'permission' | 'unavailable' | 'error';
-type BusyAction = 'print' | 'share' | null;
+type BusyAction = 'print' | 'share' | 'reportPdf' | 'reportCsv' | null;
+
+type CompensationDraft = Record<keyof CompensationRules, string>;
+
+function rulesToDraft(rules: CompensationRules): CompensationDraft {
+  return {
+    hourlyRate: String(rules.hourlyRate),
+    nightBonusPercent: String(rules.nightBonusPercent),
+    holidayBonusPercent: String(rules.holidayBonusPercent),
+    overtimeBonusPercent: String(rules.overtimeBonusPercent),
+    dailyOvertimeThresholdHours: String(rules.dailyOvertimeThresholdHours),
+  };
+}
 
 function getMonthStart(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), 1);
@@ -48,6 +73,8 @@ export default function PrintableCalendarScreen() {
   const [eventsByDate, setEventsByDate] = useState<Record<string, PrintableShiftEvent[]>>({});
   const [loadState, setLoadState] = useState<CalendarLoadState>('loading');
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
+  const [compensationRules, setCompensationRules] = useState<CompensationRules>(DEFAULT_COMPENSATION_RULES);
+  const [compensationDraft, setCompensationDraft] = useState<CompensationDraft>(() => rulesToDraft(DEFAULT_COMPENSATION_RULES));
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const mondayFirstWeekDays = useMemo(
     () => [...weekDaysShort.slice(1), weekDaysShort[0]],
@@ -102,6 +129,14 @@ export default function PrintableCalendarScreen() {
     loadMonth();
   }, [loadMonth]);
 
+  useEffect(() => {
+    AsyncStorage.getItem(COMPENSATION_RULES_KEY).then(raw => {
+      const rules = parseCompensationRules(raw);
+      setCompensationRules(rules);
+      setCompensationDraft(rulesToDraft(rules));
+    });
+  }, []);
+
   const copy = useMemo(() => ({
     title: t('printCalTitle'),
     work: t('calTypeWork'),
@@ -127,7 +162,16 @@ export default function PrintableCalendarScreen() {
     [eventsByDate, month],
   );
 
+  const compensationSummary = useMemo(
+    () => summarizeCompensationMonth(month, eventsByDate, compensationRules),
+    [compensationRules, eventsByDate, month],
+  );
+
   const monthLabel = `${months[month.getMonth()]} ${month.getFullYear()}`;
+  const compensationHtml = useMemo(
+    () => buildCompensationReportHtml(month, compensationSummary, compensationRules, locale, monthLabel),
+    [compensationRules, compensationSummary, locale, month, monthLabel],
+  );
   const previewCells = useMemo(() => {
     const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
     const leadingBlankDays = (firstDay.getDay() + 6) % 7;
@@ -202,7 +246,74 @@ export default function PrintableCalendarScreen() {
     }
   };
 
+  const saveCompensationRules = async () => {
+    const rules = normalizeCompensationRules({
+      hourlyRate: compensationDraft.hourlyRate.replace(',', '.'),
+      nightBonusPercent: compensationDraft.nightBonusPercent.replace(',', '.'),
+      holidayBonusPercent: compensationDraft.holidayBonusPercent.replace(',', '.'),
+      overtimeBonusPercent: compensationDraft.overtimeBonusPercent.replace(',', '.'),
+      dailyOvertimeThresholdHours: compensationDraft.dailyOvertimeThresholdHours.replace(',', '.'),
+    });
+    setCompensationRules(rules);
+    setCompensationDraft(rulesToDraft(rules));
+    await AsyncStorage.setItem(COMPENSATION_RULES_KEY, JSON.stringify(rules));
+    Alert.alert('Regole salvate', 'Il consuntivo è stato ricalcolato.');
+  };
+
+  const shareCompensationPdf = async () => {
+    setBusyAction('reportPdf');
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert(t('error'), t('printCalShareUnavailable'));
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: compensationHtml });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        UTI: 'com.adobe.pdf',
+        dialogTitle: `Consuntivo turni - ${monthLabel}`,
+      });
+    } catch (error) {
+      devError('[compensation.pdf]', error);
+      Alert.alert(t('error'), 'Non sono riuscito a creare il consuntivo PDF.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const shareCompensationCsv = async () => {
+    setBusyAction('reportCsv');
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert(t('error'), t('printCalShareUnavailable'));
+        return;
+      }
+      if (!FileSystem.cacheDirectory) throw new Error('CACHE_DIRECTORY_UNAVAILABLE');
+      const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+      const uri = `${FileSystem.cacheDirectory}AeroStaffPro-consuntivo-${monthKey}.csv`;
+      const csv = buildCompensationCsv(month, compensationSummary, compensationRules, locale);
+      await FileSystem.writeAsStringAsync(uri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'text/csv',
+        UTI: 'public.comma-separated-values-text',
+        dialogTitle: `Consuntivo turni - ${monthLabel}`,
+      });
+    } catch (error) {
+      devError('[compensation.csv]', error);
+      Alert.alert(t('error'), 'Non sono riuscito a creare il consuntivo CSV.');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
   const actionDisabled = loadState !== 'ready' || busyAction !== null;
+  const compensationFields: Array<{ key: keyof CompensationRules; label: string; suffix: string }> = [
+    { key: 'hourlyRate', label: 'Paga oraria', suffix: 'EUR' },
+    { key: 'nightBonusPercent', label: 'Maggiorazione notte', suffix: '%' },
+    { key: 'holidayBonusPercent', label: 'Maggiorazione festivi', suffix: '%' },
+    { key: 'overtimeBonusPercent', label: 'Maggiorazione extra', suffix: '%' },
+    { key: 'dailyOvertimeThresholdHours', label: 'Soglia straordinario', suffix: 'h/g' },
+  ];
 
   return (
     <ScrollView
@@ -358,6 +469,83 @@ export default function PrintableCalendarScreen() {
           </TouchableOpacity>
 
           <Text style={styles.privacyHint}>{t('printCalPrivacyHint')}</Text>
+
+          <View style={styles.reportSection}>
+            <View style={styles.reportHeader}>
+              <View style={[styles.heroIcon, { width: 42, height: 42 }]}>
+                <MaterialIcons name="payments" size={22} color={colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.reportTitle}>Consuntivo ore e indennità</Text>
+                <Text style={styles.reportSubtitle}>Stima configurabile, esportabile in PDF o CSV</Text>
+              </View>
+            </View>
+
+            <View style={styles.estimateCard}>
+              <Text style={styles.estimateEyebrow}>STIMA DEL MESE</Text>
+              <Text style={styles.estimateValue}>
+                {compensationSummary.estimatedAmount.toLocaleString(locale, { style: 'currency', currency: 'EUR' })}
+              </Text>
+              <Text style={styles.estimateMeta}>{(compensationSummary.totalMinutes / 60).toFixed(1)} ore · {compensationSummary.shifts.length} turni</Text>
+            </View>
+
+            <View style={styles.compSummaryGrid}>
+              {[
+                ['Notturne', compensationSummary.nightMinutes],
+                ['Festive', compensationSummary.holidayMinutes],
+                ['Straordinario', compensationSummary.overtimeMinutes],
+              ].map(([label, minutes]) => (
+                <View key={String(label)} style={styles.compSummaryCard}>
+                  <Text style={styles.compSummaryValue}>{(Number(minutes) / 60).toFixed(1)} h</Text>
+                  <Text style={styles.compSummaryLabel}>{label}</Text>
+                </View>
+              ))}
+            </View>
+
+            <Text style={styles.rulesTitle}>REGOLE DI CALCOLO</Text>
+            <View style={styles.rulesGrid}>
+              {compensationFields.map(field => (
+                <View key={field.key} style={styles.ruleField}>
+                  <Text style={styles.ruleLabel}>{field.label}</Text>
+                  <View style={styles.ruleInputRow}>
+                    <TextInput
+                      value={compensationDraft[field.key]}
+                      onChangeText={value => setCompensationDraft(current => ({ ...current, [field.key]: value }))}
+                      keyboardType="decimal-pad"
+                      selectTextOnFocus
+                      style={styles.ruleInput}
+                    />
+                    <Text style={styles.ruleSuffix}>{field.suffix}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.saveRulesButton} onPress={saveCompensationRules}>
+              <MaterialIcons name="save" size={18} color={colors.primaryText} />
+              <Text style={styles.saveRulesText}>Salva e ricalcola</Text>
+            </TouchableOpacity>
+
+            <View style={styles.reportActions}>
+              <TouchableOpacity
+                style={[styles.reportActionButton, actionDisabled && styles.buttonDisabled]}
+                disabled={actionDisabled}
+                onPress={shareCompensationPdf}
+              >
+                {busyAction === 'reportPdf' ? <ActivityIndicator color="#fff" /> : <MaterialIcons name="picture-as-pdf" size={19} color="#fff" />}
+                <Text style={styles.reportActionPrimaryText}>PDF</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.reportActionButton, styles.reportActionSecondary, actionDisabled && styles.buttonDisabled]}
+                disabled={actionDisabled}
+                onPress={shareCompensationCsv}
+              >
+                {busyAction === 'reportCsv' ? <ActivityIndicator color={colors.primaryText} /> : <MaterialIcons name="table-view" size={19} color={colors.primaryText} />}
+                <Text style={styles.reportActionSecondaryText}>CSV</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.reportDisclaimer}>Stima personale: non sostituisce busta paga, contratto o conteggio aziendale.</Text>
+          </View>
         </>
       )}
     </ScrollView>
@@ -513,5 +701,32 @@ function makeStyles(colors: ThemeColors) {
     shareButtonText: { ...TYPE.subhead, color: colors.primaryText },
     buttonDisabled: { opacity: 0.55 },
     privacyHint: { ...TYPE.caption, color: colors.textMuted, textAlign: 'center', marginTop: SPACING.md },
+    reportSection: { marginTop: SPACING.xxl, paddingTop: SPACING.xl, borderTopWidth: 1, borderTopColor: colors.border },
+    reportHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.md },
+    reportTitle: { ...TYPE.headline, color: colors.text },
+    reportSubtitle: { ...TYPE.caption, color: colors.textSub, marginTop: 2 },
+    estimateCard: { padding: SPACING.lg, borderRadius: RADIUS.lg, backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primary },
+    estimateEyebrow: { ...TYPE.overline, color: colors.primaryText },
+    estimateValue: { color: colors.primaryText, fontSize: 30, fontWeight: WEIGHT.bold, marginTop: 3 },
+    estimateMeta: { ...TYPE.caption, color: colors.textSub, marginTop: 3 },
+    compSummaryGrid: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.sm },
+    compSummaryCard: { flex: 1, minHeight: 70, justifyContent: 'center', padding: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    compSummaryValue: { ...TYPE.subhead, color: colors.text },
+    compSummaryLabel: { ...TYPE.micro, color: colors.textMuted, marginTop: 3, textTransform: 'uppercase' },
+    rulesTitle: { ...TYPE.overline, color: colors.textMuted, marginTop: SPACING.lg, marginBottom: SPACING.sm },
+    rulesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+    ruleField: { width: '48%', padding: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    ruleLabel: { ...TYPE.micro, color: colors.textSub, minHeight: 28 },
+    ruleInputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
+    ruleInput: { flex: 1, minHeight: 36, color: colors.text, fontSize: 17, fontWeight: WEIGHT.semibold, paddingVertical: 0 },
+    ruleSuffix: { ...TYPE.caption, color: colors.textMuted },
+    saveRulesButton: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, marginTop: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: colors.primaryLight },
+    saveRulesText: { ...TYPE.callout, color: colors.primaryText, fontWeight: WEIGHT.semibold },
+    reportActions: { flexDirection: 'row', gap: SPACING.sm, marginTop: SPACING.md },
+    reportActionButton: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: colors.primary },
+    reportActionSecondary: { backgroundColor: colors.primaryLight, borderWidth: 1, borderColor: colors.primary },
+    reportActionPrimaryText: { ...TYPE.subhead, color: '#fff' },
+    reportActionSecondaryText: { ...TYPE.subhead, color: colors.primaryText },
+    reportDisclaimer: { ...TYPE.micro, color: colors.textMuted, textAlign: 'center', marginTop: SPACING.sm, lineHeight: 16 },
   });
 }

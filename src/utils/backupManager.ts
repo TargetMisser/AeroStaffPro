@@ -14,6 +14,9 @@ const PIN_ENABLED_KEY = 'aerostaff_pin_enabled_v1';
 // Only non-sensitive data is exported. Passwords and PINs stay in SecureStore.
 const SAFE_BACKUP_KEYS = [
   'aerostaff_notepad_v1',
+  'aerostaff_handover_v1',
+  'aerostaff_compensation_rules_v1',
+  'aerostaff_widget_preferences_v2',
   'aerostaff_phonebook_v1',
   'aerostaff_airport_code_v1',
   'aerostaff_airport_airlines_v1',
