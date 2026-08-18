@@ -10,7 +10,6 @@ const FORBIDDEN_MANIFEST_MARKERS = [
   'android.permission.READ_EXTERNAL_STORAGE',
   'android.permission.WRITE_EXTERNAL_STORAGE',
   'com.canhub.cropper.CropImageActivity',
-  'RNWidgetImageProvider',
   'android:allowBackup="true"',
   'android:usesCleartextTraffic="true"',
 ];
@@ -27,6 +26,17 @@ function inspectMergedManifest(source) {
   const violations = FORBIDDEN_MANIFEST_MARKERS.filter(marker => source.includes(marker));
   if (!/android:allowBackup="false"/.test(source)) violations.push('missing android:allowBackup="false"');
   if (!/android:usesCleartextTraffic="false"/.test(source)) violations.push('missing android:usesCleartextTraffic="false"');
+  const widgetImageProvider = source.match(/<provider\b[^>]*android:name="com\.reactnativeandroidwidget\.RNWidgetImageProvider"[^>]*>/)?.[0];
+  if (!widgetImageProvider) {
+    violations.push('missing RNWidgetImageProvider');
+  } else {
+    if (!widgetImageProvider.includes('android:authorities="com.aerostaffpro.app.rnwidget.imageprovider"')) {
+      violations.push('invalid RNWidgetImageProvider authority');
+    }
+    if (!widgetImageProvider.includes('android:exported="true"')) {
+      violations.push('RNWidgetImageProvider must be exported for launcher access');
+    }
+  }
   return violations;
 }
 

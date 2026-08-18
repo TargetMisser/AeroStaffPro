@@ -754,8 +754,9 @@ assert(
     manifestSource.includes('android:allowBackup="false"')
       && manifestSource.includes('android:dataExtractionRules="@xml/data_extraction_rules"')
       && !manifestSource.includes('android.permission.CAMERA')
-      && manifestSource.includes('com.reactnativeandroidwidget.RNWidgetImageProvider" tools:node="remove"'),
-    'release manifest must disable backup, remove unused dangerous permissions, and remove the unused exported widget image provider',
+      && manifestSource.includes('android:name="com.reactnativeandroidwidget.RNWidgetImageProvider" android:authorities="${applicationId}.rnwidget.imageprovider" android:exported="true"')
+      && !manifestSource.includes('RNWidgetImageProvider" tools:node="remove"'),
+    'release manifest must disable backup, remove unused dangerous permissions, and retain the launcher-readable widget image provider',
   );
   const nativeSecuritySource = fs.readFileSync(path.join(root, 'android/app/src/main/java/com/aerostaffpro/app/security/AppSecurityModule.kt'), 'utf8');
   assert(

@@ -267,7 +267,11 @@ function loadTsModule(relativePath, mocks = {}) {
   ]) {
     assert(!manifest.includes(permission), `unused permission must not be declared: ${permission}`);
   }
-  assert(manifest.includes('com.reactnativeandroidwidget.RNWidgetImageProvider" tools:node="remove"'), 'unused exported widget image provider must be removed');
+  assert(
+    manifest.includes('android:name="com.reactnativeandroidwidget.RNWidgetImageProvider" android:authorities="${applicationId}.rnwidget.imageprovider" android:exported="true"'),
+    'widget image provider must remain available to deliver rendered widget images to the launcher',
+  );
+  assert(!manifest.includes('RNWidgetImageProvider" tools:node="remove"'), 'widget image provider must not be removed from the merged manifest');
 
   const nativeSecurity = fs.readFileSync(path.join(root, 'android/app/src/main/java/com/aerostaffpro/app/security/AppSecurityModule.kt'), 'utf8');
   for (const evidence of ['APK package name mismatch', 'APK signing certificate does not match', 'APK SHA-256 mismatch', 'FLAG_SECURE']) {

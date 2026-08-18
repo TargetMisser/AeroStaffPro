@@ -46,8 +46,10 @@ try {
   const strictAudit = evaluateAudit({ metadata: { vulnerabilities: { high: 1, critical: 0, total: 1 } } }, { strict: true });
   assert(!strictAudit.ok, 'strict dependency policy should reject high advisories');
 
-  const safeManifest = '<application android:allowBackup="false" android:usesCleartextTraffic="false" />';
+  const safeManifest = '<application android:allowBackup="false" android:usesCleartextTraffic="false"><provider android:name="com.reactnativeandroidwidget.RNWidgetImageProvider" android:authorities="com.aerostaffpro.app.rnwidget.imageprovider" android:exported="true" /></application>';
   assert(inspectMergedManifest(safeManifest).length === 0, 'Android manifest policy should accept hardened settings');
+  const missingWidgetProvider = '<application android:allowBackup="false" android:usesCleartextTraffic="false" />';
+  assert(inspectMergedManifest(missingWidgetProvider).includes('missing RNWidgetImageProvider'), 'Android manifest policy should reject a release without the widget image provider');
   const unsafeManifest = '<uses-permission android:name="android.permission.CAMERA"/><application android:allowBackup="true" android:usesCleartextTraffic="true" />';
   assert(inspectMergedManifest(unsafeManifest).length >= 3, 'Android manifest policy should reject restored dangerous settings');
 
