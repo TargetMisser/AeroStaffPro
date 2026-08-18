@@ -27,6 +27,7 @@ import {
 } from './flightScheduleAdapter';
 import { mergeFlightExternalLinkMetadata } from './flightExternalLinks';
 import { TURNAROUND_MATCH_WINDOW_SECONDS } from './unifiedFlightList';
+import { getErrorMessage } from './errorUtils';
 export {
   enrichFlightScheduleWithFr24Ids,
   resolveFlightradar24IdForFlight,
@@ -92,11 +93,6 @@ export type FlightProviderDiagnosticsSnapshot = {
   tomorrowArrivals: number;
   tomorrowDepartures: number;
 };
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error ?? 'unknown_error');
-}
 
 async function loadCachedScheduleWithin(airportCode: string, ttlMs: number): Promise<ScheduleCacheEntry | null> {
   try {
@@ -305,7 +301,7 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
           mode: 'fallback',
           contributed: true,
           cacheMerged: false,
-          message: `Fallback cache: ${errorMessage(error)}`,
+          message: `Fallback cache: ${getErrorMessage(error)}`,
         },
       ],
     });

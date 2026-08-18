@@ -20,6 +20,8 @@ import {
   NOTIF_IDS_KEY,
   runNotificationScheduleExclusive,
 } from './notificationDiagnostics';
+import { devError } from './devLog';
+import { getErrorMessage } from './errorUtils';
 
 const FLIGHT_FILTER_STORAGE_KEY = 'aerostaff_flight_filter_v1';
 
@@ -254,7 +256,7 @@ export async function autoScheduleNotifications(): Promise<number> {
         });
         newIds.push(id);
       } catch (err) {
-        if (__DEV__) console.error('Failed to schedule arrival notification:', err);
+        devError('Failed to schedule arrival notification:', err);
       }
     }
 
@@ -367,7 +369,7 @@ export async function autoScheduleNotifications(): Promise<number> {
           newIds.push(id);
         }
       } catch (err) {
-        if (__DEV__) console.error('Failed to schedule departure notification:', err);
+        devError('Failed to schedule departure notification:', err);
       }
     }
 
@@ -416,9 +418,9 @@ export async function autoScheduleNotifications(): Promise<number> {
         source: 'auto',
         type: 'error',
         message: 'Startup scheduler failed.',
-        meta: { error: e instanceof Error ? e.message : String(e) },
+        meta: { error: getErrorMessage(e) },
       });
-      if (__DEV__) console.error('autoScheduleNotifications error:', e);
+      devError('autoScheduleNotifications error:', e);
       return 0;
     }
   });

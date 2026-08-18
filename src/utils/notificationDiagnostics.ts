@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import type { CurrentRequestCheck } from './currentRequestEffects';
+import { getErrorMessage } from './errorUtils';
 
 export const NOTIF_IDS_KEY = 'aerostaff_notif_ids_v1';
 export const NOTIF_ENABLED_KEY = 'aerostaff_notif_enabled';
@@ -217,7 +218,7 @@ export async function runNotificationScheduleExclusive<T>(
       source,
       type: 'scheduler_error',
       message: `Notification scheduler failed: ${label}`,
-      meta: { error: error instanceof Error ? error.message : String(error) },
+      meta: { error: getErrorMessage(error) },
     });
     throw error;
   } finally {

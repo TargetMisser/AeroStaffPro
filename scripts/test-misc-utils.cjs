@@ -731,6 +731,53 @@ async function testWidgetShiftSelfHeal() {
   assert(typeof denied.state === 'string', 'denied calendar permission should still return a widget state');
 }
 
+async function testErrorUtils() {
+  const errorUtils = loadTsModule('src/utils/errorUtils.ts');
+
+  const boom = new Error('boom');
+  assert(errorUtils.getErrorMessage(boom) === 'boom', 'Error values should keep their message');
+  assert(errorUtils.getErrorStack(boom).includes('boom'), 'Error values should keep their stack');
+  assert(errorUtils.getErrorMessage({ code: 42 }) === '{"code":42}', 'structured errors should retain diagnostic fields');
+  assert(errorUtils.getErrorMessage(null, 'fallback') === 'fallback', 'null errors should use the caller fallback');
+
+  const circular = {};
+  circular.self = circular;
+  assert(
+    errorUtils.getErrorMessage(circular) === '[object Object]',
+    'circular errors should fall back to safe string conversion instead of throwing',
+  );
+
+  const hostile = {
+    toJSON: () => { throw new Error('no json'); },
+    toString: () => { throw new Error('no string'); },
+  };
+  assert(
+    errorUtils.getErrorMessage(hostile, 'fallback') === 'fallback',
+    'unserializable errors should always return the caller fallback',
+  );
+}
+
+async function testDevLog() {
+  const quietLogger = loadTsModule('src/utils/devLog.ts');
+  quietLogger.devLog('safe outside Metro');
+
+  const calls = [];
+  const activeLogger = loadTsModule('src/utils/devLog.ts', {
+    __globals: {
+      __DEV__: true,
+      console: {
+        log: (...args) => calls.push(['log', ...args]),
+        warn: (...args) => calls.push(['warn', ...args]),
+        error: (...args) => calls.push(['error', ...args]),
+      },
+    },
+  });
+  activeLogger.devLog('visible');
+  activeLogger.devWarn('warning');
+  activeLogger.devError('failure');
+  assert(calls.length === 3, 'development log helpers should emit all diagnostics when __DEV__ is true');
+}
+
 async function testShiftCalendarOwnershipAndPartialImport() {
   const storedEvents = [
     { id: 'legacy-10', title: 'Lavoro', startDate: new Date(2026, 5, 10, 8, 0).toISOString(), endDate: new Date(2026, 5, 10, 16, 0).toISOString() },
@@ -1002,6 +1049,8 @@ async function testWidgetOperationalWindowsStayScheduled() {
 
 async function main() {
   await testDateFormat();
+  await testErrorUtils();
+  await testDevLog();
   await testShiftCalendarOwnershipAndPartialImport();
   await testWidgetShiftSelfHeal();
   await testWidgetKeepsPreviousDayNightShiftAfterMidnight();

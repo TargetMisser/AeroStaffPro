@@ -45,6 +45,7 @@ import {
 } from './src/utils/motion';
 import { ONBOARDING_SETUP_STORAGE_KEY, shouldShowOnboarding } from './src/utils/appSetup';
 import { SPACING, RADIUS } from './src/theme/spacing';
+import { devLog } from './src/utils/devLog';
 
 installGlobalCrashHandler();
 
@@ -96,7 +97,7 @@ function AppInner() {
     markRuntimeStartupCompleted().catch(() => {});
 
     autoScheduleNotifications().then(count => {
-      if (count > 0 && __DEV__) console.log(`Auto-scheduled ${count} notifications`);
+      if (count > 0) devLog(`Auto-scheduled ${count} notifications`);
     }).catch(() => {});
     // Check for updates; show modal once per new version
     checkForUpdate().then(async info => {

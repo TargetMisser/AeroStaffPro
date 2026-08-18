@@ -43,6 +43,10 @@ type ModalState =
   | { kind: 'item_add'; airlineId: string; sectionIdx: number }
   | { kind: 'item_edit'; airlineId: string; sectionIdx: number; itemIdx: number };
 
+type AirlineModalState = Extract<ModalState, { kind: 'airline_add' } | { kind: 'airline_edit' }>;
+type SectionModalState = Extract<ModalState, { kind: 'section_add' } | { kind: 'section_edit' }>;
+type ItemModalState = Extract<ModalState, { kind: 'item_add' } | { kind: 'item_edit' }>;
+
 // ─── Data ────────────────────────────────────────────────────────────────────
 const DEFAULT_AIRLINES: Airline[] = [
   {
@@ -300,7 +304,7 @@ const DEFAULT_AIRLINES: Airline[] = [
 // ─── Inline command highlighting ──────────────────────────────────────────────
 const CMD_REGEX = /(`[^`]+`)/g;
 
-function RichBodyText({ text, colors }: { text: string; colors: any }) {
+function RichBodyText({ text, colors }: { text: string; colors: ThemeColors }) {
   const parts = text.split(CMD_REGEX);
   return (
     <Text style={{ fontSize: 13, color: colors.textSub, lineHeight: 20 }}>
@@ -331,7 +335,7 @@ function RichBodyText({ text, colors }: { text: string; colors: any }) {
 }
 
 // ─── Commands Tab component ──────────────────────────────────────────────────
-function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: any }) {
+function CommandsTab({ commands, colors }: { commands: DCSCommand[]; colors: ThemeColors }) {
   const { t } = useLanguage();
   const [search, setSearch] = useState('');
   const lower = search.toLowerCase();
@@ -635,14 +639,15 @@ function makeStyles(c: ThemeColors) {
 function AirlineModal({
   modal, airlines, persist, closeModal,
 }: {
-  modal: ModalState;
+  modal: AirlineModalState;
   airlines: Airline[];
   persist: (a: Airline[]) => void;
   closeModal: () => void;
 }) {
   const { colors } = useAppTheme();
-  const isEdit = modal.kind === 'airline_edit';
-  const existing = isEdit ? airlines.find(a => a.id === (modal as any).airlineId) : undefined;
+  const airlineId = modal.kind === 'airline_edit' ? modal.airlineId : undefined;
+  const isEdit = airlineId !== undefined;
+  const existing = airlines.find(a => a.id === airlineId);
 
   const [name, setName] = useState(existing?.name ?? '');
   const [code, setCode] = useState(existing?.code ?? '');
@@ -652,14 +657,12 @@ function AirlineModal({
     return idx >= 0 ? idx : 0;
   });
 
-  const visible = modal.kind === 'airline_add' || modal.kind === 'airline_edit';
-
   const save = () => {
     if (!name.trim() || !code.trim()) return;
     const chosen = AIRLINE_COLORS[colorIdx] ?? AIRLINE_COLORS[0];
     if (isEdit) {
       const updated = airlines.map(a =>
-        a.id === (modal as any).airlineId
+        a.id === airlineId
           ? { ...a, name: name.trim(), code: code.trim().toUpperCase(), color: chosen.color, textColor: chosen.textColor }
           : a
       );
@@ -687,7 +690,7 @@ function AirlineModal({
         {
           text: 'Elimina', style: 'destructive',
           onPress: () => {
-            persist(airlines.filter(a => a.id !== (modal as any).airlineId));
+            persist(airlines.filter(a => a.id !== airlineId));
             closeModal();
           },
         },
@@ -696,7 +699,7 @@ function AirlineModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeModal}>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={closeModal}>
       <KeyboardAvoidingView
         style={modalStyles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -754,22 +757,20 @@ function AirlineModal({
 function SectionModal({
   modal, airlines, persist, closeModal,
 }: {
-  modal: ModalState;
+  modal: SectionModalState;
   airlines: Airline[];
   persist: (a: Airline[]) => void;
   closeModal: () => void;
 }) {
   const { colors } = useAppTheme();
   const isEdit = modal.kind === 'section_edit';
-  const airlineId = (modal as any).airlineId as string | undefined;
-  const sectionIdx = (modal as any).sectionIdx as number | undefined;
+  const airlineId = modal.airlineId;
+  const sectionIdx = modal.kind === 'section_edit' ? modal.sectionIdx : undefined;
   const existingTitle = isEdit && airlineId !== undefined && sectionIdx !== undefined
     ? airlines.find(a => a.id === airlineId)?.sections[sectionIdx]?.title ?? ''
     : '';
 
   const [title, setTitle] = useState(existingTitle);
-  const visible = modal.kind === 'section_add' || modal.kind === 'section_edit';
-
   const save = () => {
     if (!title.trim() || !airlineId) return;
     const updated = airlines.map(a => {
@@ -811,7 +812,7 @@ function SectionModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeModal}>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={closeModal}>
       <KeyboardAvoidingView
         style={modalStyles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -851,16 +852,16 @@ function SectionModal({
 function ItemModal({
   modal, airlines, persist, closeModal,
 }: {
-  modal: ModalState;
+  modal: ItemModalState;
   airlines: Airline[];
   persist: (a: Airline[]) => void;
   closeModal: () => void;
 }) {
   const { colors } = useAppTheme();
   const isEdit = modal.kind === 'item_edit';
-  const airlineId = (modal as any).airlineId as string | undefined;
-  const sectionIdx = (modal as any).sectionIdx as number | undefined;
-  const itemIdx = (modal as any).itemIdx as number | undefined;
+  const airlineId = modal.airlineId;
+  const sectionIdx = modal.sectionIdx;
+  const itemIdx = modal.kind === 'item_edit' ? modal.itemIdx : undefined;
 
   const existing = isEdit && airlineId && sectionIdx !== undefined && itemIdx !== undefined
     ? airlines.find(a => a.id === airlineId)?.sections[sectionIdx]?.items[itemIdx]
@@ -868,8 +869,6 @@ function ItemModal({
 
   const [title, setTitle] = useState(existing?.title ?? '');
   const [body, setBody] = useState(existing?.body ?? '');
-  const visible = modal.kind === 'item_add' || modal.kind === 'item_edit';
-
   const save = () => {
     if (!title.trim() || !airlineId || sectionIdx === undefined) return;
     const updated = airlines.map(a => {
@@ -917,7 +916,7 @@ function ItemModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" statusBarTranslucent onRequestClose={closeModal}>
+    <Modal visible transparent animationType="slide" statusBarTranslucent onRequestClose={closeModal}>
       <KeyboardAvoidingView
         style={modalStyles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}

@@ -49,6 +49,8 @@ import { ShiftWidget } from '../widgets/ShiftWidget';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
+import { devError, devLog } from '../utils/devLog';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const GOLD = '#F59E0B';
 
@@ -580,7 +582,7 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
 
       setShiftModalOpen(false);
       fetchShift(true);
-    } catch (e: any) { Alert.alert('Errore', e.message); }
+    } catch (e) { Alert.alert('Errore', getErrorMessage(e, 'Errore sconosciuto')); }
   };
 
   const fetchShift = async (silent = false) => {
@@ -653,7 +655,7 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
         isRestDay: !!todayRest && !currentWork && !todayWork,
         nextShift: tomorrowWork ? toWidgetShiftWindow(tomorrowWork, toLocalIso(tomorrowStart)) : null,
       });
-    } catch (e) { if (__DEV__) console.error('[shift]', e); } finally {
+    } catch (e) { devError('[shift]', e); } finally {
       hasLoadedShiftRef.current = true;
       setLoadingShift(false);
     }
@@ -679,7 +681,7 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
       setWeather({ ...w, temp });
     } catch (e) {
       setWeather(fallbackWeather);
-      if (__DEV__) console.log('[weather]', e);
+      devLog('[weather]', e);
     }
   };
 

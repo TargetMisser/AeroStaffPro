@@ -3,6 +3,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
 import { secureWipeAsyncStorageItem } from './secureWipe';
+import { getErrorMessage } from './errorUtils';
 
 const BACKUP_VERSION = 2;
 
@@ -88,8 +89,8 @@ export async function exportBackup(): Promise<BackupResult> {
     );
     await FileSystem.writeAsStringAsync(fileUri, payload, { encoding: FileSystem.EncodingType.UTF8 });
     return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message ?? 'Errore sconosciuto' };
+  } catch (e) {
+    return { ok: false, error: getErrorMessage(e, 'Errore sconosciuto') };
   }
 }
 
@@ -126,7 +127,7 @@ export async function importBackup(): Promise<BackupResult> {
       await AsyncStorage.multiSet(pairs);
     }
     return { ok: true };
-  } catch (e: any) {
-    return { ok: false, error: e?.message ?? 'Errore sconosciuto' };
+  } catch (e) {
+    return { ok: false, error: getErrorMessage(e, 'Errore sconosciuto') };
   }
 }

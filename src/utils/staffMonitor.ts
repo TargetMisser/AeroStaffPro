@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { devLog } from './devLog';
+import { devError, devLog } from './devLog';
 
 export type StaffMonitorFlight = {
   flightNumber: string;
@@ -519,7 +519,7 @@ async function runStaffMonitorFetch(
       // three URLs independently.
       try {
         html = await tryFetch(primaryUrls[0], 25_000, signal);
-      } catch (e: any) {
+      } catch (e) {
         throwIfAborted(signal);
         _lastDebugStatus = `D:ERR ${String(e).slice(0, 60)}`;
         devLog(`[staffMonitor] D canonical fetch error: ${_lastDebugStatus}`);
@@ -576,7 +576,7 @@ async function runStaffMonitorFetch(
     }
 
     const isXml = /<FLIGHTS/i.test(html);
-    if (__DEV__) console.log(`[staffMonitor] nature=${nature} ${isXml ? 'XML' : 'HTML'} sample:\n`, html.slice(0, 2000));
+    devLog(`[staffMonitor] nature=${nature} ${isXml ? 'XML' : 'HTML'} sample:\n`, html.slice(0, 2000));
 
     const results = isXml ? parseXmlSection(html) : parseSection(html);
 
@@ -600,7 +600,7 @@ async function runStaffMonitorFetch(
     return results;
   } catch (e) {
     if (signal.aborted) throw staffMonitorAbortError();
-    console.error(`[staffMonitor] error for nature=${nature}:`, e);
+    devError(`[staffMonitor] error for nature=${nature}:`, e);
     const cached = await loadCached(nature);
     if (cached) _lastDebugStatus = `${nature}:ERR->CACHE(${cached.length})`;
     return cached ?? [];

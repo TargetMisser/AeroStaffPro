@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AIRLINE_DISPLAY_NAMES } from '../airlineOps';
+import { getErrorMessage } from '../errorUtils';
+import { devLog } from '../devLog';
 import type { FlightScheduleProvider } from './types';
 
 const AIRLABS_API_BASE = 'https://airlabs.co/api/v9/schedules';
@@ -82,11 +84,6 @@ function buildAirLabsRoutesUrl(paramName: 'dep_iata' | 'arr_iata', airportCode: 
   return `${AIRLABS_ROUTES_API_BASE}?${params
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join('&')}`;
-}
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error ?? 'unknown_error');
 }
 
 function parseUnixTimestamp(value: unknown): number | undefined {
@@ -542,9 +539,7 @@ async function fetchAirLabsRoutePredictions(
         // Cooldown di rete attivo. Proviamo ad usare la cache rilassata (24 ore).
         const relaxedCached = await loadCachedFlights(AIRLABS_ROUTES_CACHE_KEY, cacheKey, 24 * 60 * 60 * 1000);
         if (relaxedCached && relaxedCached.length > 0) {
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.log(`[airLabsProvider] Cooldown di rete attivo. Uso cache rilassata (24h) per evitare chiamata di rete AirLabs.`);
-          }
+          devLog('[airLabsProvider] Cooldown di rete attivo. Uso cache rilassata (24h) per evitare chiamata di rete AirLabs.');
           return relaxedCached;
         }
       }
@@ -651,7 +646,7 @@ export const airLabsProvider: FlightScheduleProvider = {
       && routeArrivalsResult.status === 'rejected'
     ) {
       throw new Error(
-        `AIRLABS_FAILED D:${errorMessage(departuresResult.reason)} A:${errorMessage(arrivalsResult.reason)} RD:${errorMessage(routeDeparturesResult.reason)} RA:${errorMessage(routeArrivalsResult.reason)}`,
+        `AIRLABS_FAILED D:${getErrorMessage(departuresResult.reason)} A:${getErrorMessage(arrivalsResult.reason)} RD:${getErrorMessage(routeDeparturesResult.reason)} RA:${getErrorMessage(routeArrivalsResult.reason)}`,
       );
     }
 

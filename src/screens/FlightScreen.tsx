@@ -64,6 +64,8 @@ import {
   shouldShowFlightRefreshIndicator,
 } from '../utils/flightLoadingState';
 import { formatFlightSourceLabel } from '../utils/flightSourceLabel';
+import { devError, devLog, devWarn } from '../utils/devLog';
+import { getErrorMessage } from '../utils/errorUtils';
 import {
   buildFlightradar24AirportBoardUrl,
   buildFlightradar24FlightPageUrl,
@@ -154,7 +156,7 @@ try { Notifications.setNotificationHandler({
     shouldShowBanner: true,
     shouldShowList: true,
   }),
-}); } catch (e) { if (__DEV__) console.warn('[notifHandler]', e); }
+}); } catch (e) { devWarn('[notifHandler]', e); }
 
 
 // ─── FlightRow ────────────────────────────────────────────────────────────────
@@ -1059,12 +1061,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           }
         }
       } catch (e) {
-        if (__DEV__) console.log('[liveEta]', e);
+        devLog('[liveEta]', e);
         liveEtaDiagnostics.push({
           provider: 'liveEta',
           label: 'Live ETA (ADS-B)',
           status: 'failed',
-          message: String((e as any)?.message ?? e).slice(0, 120),
+          message: getErrorMessage(e).slice(0, 120),
         });
       }
       if (!isCurrentRequest()) return;
@@ -1165,7 +1167,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
                       isCurrentRequest,
                     );
                   } catch (e) {
-                    if (__DEV__) console.warn('[pinnedNotifRefresh]', e);
+                    devWarn('[pinnedNotifRefresh]', e);
                   }
                 },
                 () => showOrUpdatePinnedFlightNotification(
@@ -1368,7 +1370,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     } catch (e) {
       if (!isCurrentRequest()) return;
 
-      const message = e instanceof Error ? e.message : String(e);
+      const message = getErrorMessage(e);
       const providerUnavailable = message.includes('NO_FLIGHT_PROVIDER_AVAILABLE');
 
       if (providerUnavailable) {
@@ -1402,10 +1404,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         });
       }
 
-      if (__DEV__) {
-        if (providerUnavailable) console.log('[fetchAll]', message);
-        else console.error('[fetchAll]', e);
-      }
+      if (providerUnavailable) devLog('[fetchAll]', message);
+      else devError('[fetchAll]', e);
     } finally {
       if (fetchInFlightRef.current?.requestId === requestId) {
         fetchInFlightRef.current = null;
@@ -1658,7 +1658,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(pinnedItem));
       setPinnedFlight(pinnedItem);
       if (notifsEnabled) {
-        try { await schedulePinnedNotifications(pinnedItem, tab, locale, notifSettingsRef.current); } catch (e) { if (__DEV__) console.warn('[pinnedNotif]', e); }
+        try { await schedulePinnedNotifications(pinnedItem, tab, locale, notifSettingsRef.current); } catch (e) { devWarn('[pinnedNotif]', e); }
         await showOrUpdatePinnedFlightNotification(pinnedItem, tab, notifSettingsRef.current.sticky);
       } else {
         await dismissPinnedFlightNotification();
@@ -1669,10 +1669,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const unpinFlight = useCallback(async () => {
     try {
       await AsyncStorage.removeItem(PINNED_FLIGHT_KEY);
-      try { await cancelPinnedNotifications(); } catch (e) { if (__DEV__) console.warn('[cancelPinNotif]', e); }
+      try { await cancelPinnedNotifications(); } catch (e) { devWarn('[cancelPinNotif]', e); }
       await dismissPinnedFlightNotification();
       setPinnedFlight(null);
-    } catch (e) { if (__DEV__) console.error('[unpin]', e); }
+    } catch (e) { devError('[unpin]', e); }
   }, []);
 
   const userShift = activeDay === 'today' ? shifts.today : shifts.tomorrow;

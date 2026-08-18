@@ -1,4 +1,6 @@
 import { Alert } from 'react-native';
+import { devError } from './devLog';
+import { getErrorMessage } from './errorUtils';
 
 type ErrorContext =
   | 'calendar'
@@ -26,13 +28,13 @@ const CONTEXT_LABELS: Record<ErrorContext, string> = {
  * Use for all catch blocks to ensure consistent error reporting.
  */
 export function handleError(error: unknown, context: ErrorContext, silent = false): void {
-  const message = error instanceof Error ? error.message : String(error);
-  console.error(`[${context}]`, message);
+  const message = getErrorMessage(error, 'Si è verificato un errore imprevisto.');
+  devError(`[${context}]`, message);
 
   if (!silent) {
     Alert.alert(
       `Errore ${CONTEXT_LABELS[context]}`,
-      message || 'Si è verificato un errore imprevisto.',
+      message,
     );
   }
 }

@@ -1,4 +1,5 @@
 import { NativeModules } from 'react-native';
+import { getErrorMessage, getErrorStack } from './errorUtils';
 
 export type RuntimeReport = {
   type: string;
@@ -90,17 +91,9 @@ const initialRuntimeDiagnostics = parseDiagnostics(runtimeModule?.initialDiagnos
 let jsCrashHandlerInstalled = false;
 
 function normalizeError(error: unknown): { message: string; stack: string } {
-  if (error instanceof Error) {
-    return {
-      message: error.message || error.name || 'Unknown error',
-      stack: error.stack || '',
-    };
-  }
-
-  const message = typeof error === 'string' ? error : JSON.stringify(error);
   return {
-    message: message || 'Unknown error',
-    stack: '',
+    message: getErrorMessage(error, 'Unknown error'),
+    stack: getErrorStack(error),
   };
 }
 

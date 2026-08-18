@@ -4,6 +4,8 @@ import { fr24ApiProvider, fr24PublicProvider } from './fr24Provider';
 import { staffMonitorProvider } from './staffMonitorProvider';
 import { getFlightBestTs, getFlightScheduledTs, mergeFlightLists, type FlightDirection } from '../flightScheduleAdapter';
 import type { FlightProviderPreference } from '../flightProviderSettings';
+import { getErrorMessage } from '../errorUtils';
+import { devLog } from '../devLog';
 import type {
   FlightSchedulePayload,
   FlightScheduleProvider,
@@ -81,13 +83,8 @@ export function getFlightScheduleProviders(
   ];
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  return String(error ?? 'unknown_error');
-}
-
 function errorCode(error: unknown): string {
-  const message = errorMessage(error).toLowerCase();
+  const message = getErrorMessage(error).toLowerCase();
   if (message.includes('provider_timeout')) return 'provider_timeout';
   if (message.includes('abort')) return 'provider_aborted';
   if (message.includes('api key') || message.includes('key non configurata')) return 'missing_api_key';
@@ -529,11 +526,9 @@ export async function fetchFlightScheduleFromProviders(
       };
     } catch (error) {
       const code = errorCode(error);
-      const message = errorMessage(error);
+      const message = getErrorMessage(error);
       const cooldownUntil = setProviderCooldown(provider, context, code, message, nowMs);
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.log(`[flightProviders] ${provider.id} failed:`, error);
-      }
+      devLog(`[flightProviders] ${provider.id} failed:`, error);
       return {
         provider,
         diagnostic: {

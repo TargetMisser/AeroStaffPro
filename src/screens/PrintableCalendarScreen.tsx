@@ -25,6 +25,7 @@ import {
 } from '../utils/printableShiftCalendar';
 import { RADIUS, SPACING } from '../theme/spacing';
 import { TYPE, WEIGHT } from '../theme/typography';
+import { devError, devWarn } from '../utils/devLog';
 
 type CalendarLoadState = 'loading' | 'ready' | 'permission' | 'unavailable' | 'error';
 type BusyAction = 'print' | 'share' | null;
@@ -91,7 +92,7 @@ export default function PrintableCalendarScreen() {
       setEventsByDate(next);
       setLoadState('ready');
     } catch (error) {
-      if (__DEV__) console.error('[printableCalendar]', error);
+      devError('[printableCalendar]', error);
       setEventsByDate({});
       setLoadState('error');
     }
@@ -163,13 +164,13 @@ export default function PrintableCalendarScreen() {
         }),
       });
       if (result.mode === 'shared') {
-        console.warn(
+        devWarn(
           '[printableCalendar.print] Native print unavailable; opened PDF fallback.',
           result.printError,
         );
       }
     } catch (error) {
-      console.error('[printableCalendar.print]', error);
+      devError('[printableCalendar.print]', error);
       Alert.alert(t('error'), t('printCalPrintError'));
     } finally {
       setBusyAction(null);
@@ -194,7 +195,7 @@ export default function PrintableCalendarScreen() {
         dialogTitle: `${t('printCalTitle')} - ${monthLabel}`,
       });
     } catch (error) {
-      if (__DEV__) console.error('[printableCalendar.share]', error);
+      devError('[printableCalendar.share]', error);
       Alert.alert(t('error'), t('printCalShareError'));
     } finally {
       setBusyAction(null);

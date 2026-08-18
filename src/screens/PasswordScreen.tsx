@@ -12,6 +12,7 @@ import { TYPE } from '../theme/typography';
 import { useLanguage } from '../context/LanguageContext';
 import { secureWipeAsyncStorageItem } from '../utils/secureWipe';
 import { SPACING, RADIUS } from '../theme/spacing';
+import { devError } from '../utils/devLog';
 
 const PASSWORDS_KEY   = 'aerostaff_passwords_v1';
 const PIN_KEY         = 'aerostaff_pin_v1';
@@ -304,7 +305,7 @@ export default function PasswordScreen() {
             setFailedAttempts(0);
             setLockedUntil(0);
             await deleteSecurePin();
-          } catch (e) { if (__DEV__) console.error('[pin] disable error', e); }
+          } catch (e) { devError('[pin] disable error', e); }
         }},
       ]);
     } else {
@@ -323,7 +324,7 @@ export default function PasswordScreen() {
       setPinMode(null);
       Alert.alert(t('pinSetTitle'), t('pinSetMsg'));
     } catch (e) {
-      if (__DEV__) console.error('[pin] setup error', e);
+      devError('[pin] setup error', e);
       Alert.alert('Errore', t('pinErrMsg'));
     }
   }, []);
@@ -358,7 +359,7 @@ export default function PasswordScreen() {
         if (AppState.currentState === 'active') Alert.alert(t('pinWrong'), t('pinWrongMsg'));
       }
     } catch (e) {
-      if (__DEV__) console.error('[pin] unlock error', e);
+      devError('[pin] unlock error', e);
       Alert.alert('Errore', t('pinVerifyErr'));
     } finally {
       if (generation === loadGeneration.current) setUnlocking(false);

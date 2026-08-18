@@ -1,20 +1,16 @@
 /**
- * Development-only logging helpers.
- * In production builds Metro eliminates the dead `if (false)` branches,
- * so these calls compile away entirely — no performance cost in prod.
+ * Development-only logging helpers. They also tolerate non-Metro runtimes,
+ * such as isolated Node tests where the React Native `__DEV__` global is absent.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const devWarn = (...args: any[]): void => {
-  if (__DEV__) console.warn(...args);
+export const devWarn = (...args: unknown[]): void => {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) console.warn(...args);
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const devError = (...args: any[]): void => {
-  if (__DEV__) console.error(...args);
+export const devError = (...args: unknown[]): void => {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) console.error(...args);
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const devLog = (...args: any[]): void => {
-  if (__DEV__) console.log(...args);
+export const devLog = (...args: unknown[]): void => {
+  if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(...args);
 };

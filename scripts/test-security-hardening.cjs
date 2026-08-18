@@ -200,6 +200,7 @@ function loadTsModule(relativePath, mocks = {}) {
     '../context/LanguageContext': { useLanguage: () => ({}) },
     '../theme/typography': { TYPE: {} },
     '../utils/secureWipe': {},
+    '../utils/devLog': { devError: () => {} },
     '../theme/spacing': { SPACING: {}, RADIUS: {} },
   });
   assert(passwordModule.getPinBackoffMs(2) === 0, 'first two PIN failures should not delay normal typo recovery');
@@ -272,6 +273,29 @@ function loadTsModule(relativePath, mocks = {}) {
   for (const evidence of ['APK package name mismatch', 'APK signing certificate does not match', 'APK SHA-256 mismatch', 'FLAG_SECURE']) {
     assert(nativeSecurity.includes(evidence), `native hardening must include ${evidence}`);
   }
+
+  const sourceFiles = [path.join(root, 'App.tsx')];
+  const pendingDirectories = [path.join(root, 'src')];
+  while (pendingDirectories.length > 0) {
+    const directory = pendingDirectories.pop();
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      const absolutePath = path.join(directory, entry.name);
+      if (entry.isDirectory()) pendingDirectories.push(absolutePath);
+      else if (/\.tsx?$/.test(entry.name)) sourceFiles.push(absolutePath);
+    }
+  }
+
+  const directConsoleCalls = sourceFiles
+    .filter(file => !file.endsWith(path.join('utils', 'devLog.ts')))
+    .flatMap(file => {
+      const source = fs.readFileSync(file, 'utf8');
+      return [...source.matchAll(/\bconsole\.(?:log|warn|error)\s*\(/g)]
+        .map(match => `${path.relative(root, file)}:${source.slice(0, match.index).split('\n').length}`);
+    });
+  assert(
+    directConsoleCalls.length === 0,
+    `production source must route diagnostics through devLog helpers: ${directConsoleCalls.join(', ')}`,
+  );
 
   console.log('Security hardening tests passed.');
 })().catch(error => {

@@ -37,6 +37,8 @@ import { loadPdfJsRuntimeSources } from '../utils/pdfRuntimeAssets';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE, WEIGHT } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
+import { devError, devLog } from '../utils/devLog';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const STORAGE_KEY = '@shift_import_name';
 const MAX_PDF_FILES = 4;
@@ -291,7 +293,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       fetchCalendar(true);
       await pushShiftsToWidget([{ date: manualDate, type: shiftType, startH: manualStartH, startM: manualStartM, endH: manualEndH, endM: manualEndM }]);
       Alert.alert(t('calShiftSaved'));
-    } catch (e: any) { Alert.alert('Errore', e.message); }
+    } catch (e) { Alert.alert('Errore', getErrorMessage(e, 'Errore sconosciuto')); }
   };
 
   // Load saved name
@@ -381,7 +383,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       hasLoadedCalendarRef.current = true;
       setLoading(false);
     } catch (e) {
-      if (__DEV__) console.error(e);
+      devError(e);
       hasLoadedCalendarRef.current = true;
       setLoading(false);
     }
@@ -406,7 +408,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
           dict[date] = { weatherText: m.text, weatherIconName: m.iconName, flightCount: 0 };
         });
       }
-    } catch (e) { if (__DEV__) console.log('[calWeather]', e); }
+    } catch (e) { devLog('[calWeather]', e); }
     try {
       const cache = await loadFlightScreenCache(airportCode);
       const counts = buildCalendarFlightCountsFromCache(localData, cache?.departures ?? [], cache?.arrivals ?? []);
@@ -414,7 +416,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         if (dict[iso]) dict[iso].flightCount = cnt;
         else dict[iso] = { weatherText: 'N/A', weatherIconName: 'cloud-question', flightCount: cnt };
       });
-    } catch (e) { if (__DEV__) console.log('[calFlightsCache]', e); }
+    } catch (e) { devLog('[calFlightsCache]', e); }
     setDailyStats(dict);
   };
 
@@ -512,10 +514,10 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       pdfTimeoutRef.current = setTimeout(() => {
         failPdfExtraction('Estrazione PDF scaduta. Riprova con meno file o file più piccoli.');
       }, PDF_EXTRACTION_TIMEOUT_MS);
-    } catch (e: any) {
+    } catch (e) {
       clearPdfExtraction();
-      if (__DEV__) console.error(`Import error at step=${step}:`, e);
-      Alert.alert('Errore', `Errore (${step}): ${e?.message || e}`);
+      devError(`Import error at step=${step}:`, e);
+      Alert.alert('Errore', `Errore (${step}): ${getErrorMessage(e, 'Importazione fallita')}`);
     }
   };
 
@@ -561,7 +563,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
       setImportStep('pickName');
     } catch (e) {
-      if (__DEV__) console.error(e);
+      devError(e);
       failPdfExtraction('Errore nel parsing del PDF');
     }
   };
@@ -620,7 +622,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
         Alert.alert(t('calImportComplete'), `${saved} turni salvati nel calendario`);
       }, 800);
     } catch (e) {
-      if (__DEV__) console.error(e);
+      devError(e);
       Alert.alert('Errore', t('calImportError'));
       setImportStep('idle');
       setImportFileCount(0);
