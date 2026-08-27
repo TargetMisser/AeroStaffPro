@@ -233,5 +233,7 @@ assert(extractorHtml.includes('Content-Security-Policy'), 'PDF extraction HTML s
 assert(extractorHtml.includes("default-src 'none'"), 'PDF extraction CSP should deny all unspecified sources');
 assert(extractorHtml.includes('URL.createObjectURL'), 'PDF.js library and worker should execute from verified bundled blobs');
 assert(!extractorHtml.includes('// </script>'), 'embedded runtime source must escape closing script tags');
+assert(extractorHtml.includes('await loadingTask.destroy()'), 'PDF extraction must dispose PDF.js 6 through PDFDocumentLoadingTask');
+assert(!extractorHtml.includes('await pdf.destroy()'), 'PDF extraction must not call the removed PDFDocumentProxy.destroy API');
 
 console.log('PDF shift parser test passed.');

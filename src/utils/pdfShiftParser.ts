@@ -302,10 +302,10 @@ async function extractPdf(pdfjsLib, base64Data, fileIndex) {
     for (let i = 0; i < raw.length; i++) uint8[i] = raw.charCodeAt(i);
 
     const loadingTask = pdfjsLib.getDocument({ data: uint8 });
-    const pdf = await loadingTask.promise;
     const cells = [];
 
     try {
+      const pdf = await loadingTask.promise;
       for (let p = 0; p < pdf.numPages; p++) {
         const page = await pdf.getPage(p + 1);
         const content = await page.getTextContent();
@@ -323,7 +323,7 @@ async function extractPdf(pdfjsLib, base64Data, fileIndex) {
         page.cleanup();
       }
     } finally {
-      await pdf.destroy();
+      await loadingTask.destroy();
     }
 
     return cells;
