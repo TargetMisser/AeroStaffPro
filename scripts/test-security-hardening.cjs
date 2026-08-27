@@ -239,10 +239,16 @@ function loadTsModule(relativePath, mocks = {}) {
   assert(travelDocSource.includes("host.endsWith('.traveldoc.aero')"), 'TravelDoc must stay within its organizational domain');
   assert(travelDocSource.includes('mixedContentMode="never"'), 'TravelDoc must reject mixed content');
   assert(
-    travelDocSource.includes('if (!loadFailedRef.current) setLoadError(false);')
+    travelDocSource.includes('const timer = setTimeout(() => { setLoading(false); }, 15_000);')
+      && travelDocSource.includes('onLoadProgress={({ nativeEvent }) => {')
+      && travelDocSource.includes('onNavigationStateChange={state => {')
+      && travelDocSource.includes('onRenderProcessGone={restartWebView}')
+      && travelDocSource.includes('onContentProcessDidTerminate={restartWebView}')
+      && travelDocSource.includes('setWebViewKey(current => current + 1)')
+      && travelDocSource.includes('if (!loadFailedRef.current) setLoadError(false);')
       && travelDocSource.includes('onError={() => { loadFailedRef.current = true;')
       && travelDocSource.includes('onHttpError={() => { loadFailedRef.current = true;'),
-    'TravelDoc must retain load errors after onLoadEnd and surface HTTP failures',
+    'TravelDoc must reveal SPA results, recover terminated renderers, and retain real load failures',
   );
   const travelDocModule = loadTsModule('src/screens/TraveldocScreen.tsx', {
     react: commonReactMock,
@@ -257,6 +263,10 @@ function loadTsModule(relativePath, mocks = {}) {
   assert(travelDocModule.isAllowedTraveldocNavigation('https://legacy.traveldoc.aero/'), 'TravelDoc official subdomain should remain embedded');
   assert(!travelDocModule.isAllowedTraveldocNavigation('http://legacy.traveldoc.aero/'), 'TravelDoc must reject cleartext navigation');
   assert(!travelDocModule.isAllowedTraveldocNavigation('https://legacy.traveldoc.aero.evil.test/'), 'TravelDoc must reject host suffix spoofing');
+  assert(travelDocModule.isTraveldocResultsNavigation('https://legacy.traveldoc.aero/?S=1%7CLIRF%7CLIRP%7C2026-08-27&results=true'), 'TravelDoc result query should reveal the embedded WebView');
+  assert(travelDocModule.isTraveldocResultsNavigation('https://legacy.traveldoc.aero/results'), 'TravelDoc SPA results route should reveal the embedded WebView');
+  assert(!travelDocModule.isTraveldocResultsNavigation('https://legacy.traveldoc.aero/'), 'TravelDoc home should not be treated as a results navigation');
+  assert(!travelDocModule.isTraveldocResultsNavigation('https://legacy.traveldoc.aero.evil.test/results'), 'untrusted result routes must not affect the embedded WebView');
 
   const manifest = fs.readFileSync(path.join(root, 'android/app/src/main/AndroidManifest.xml'), 'utf8');
   assert(manifest.includes('android:allowBackup="false"'), 'Android backup must be disabled');

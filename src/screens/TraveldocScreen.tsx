@@ -40,6 +40,18 @@ export function isAllowedTraveldocNavigation(value: string): boolean {
   }
 }
 
+export function isTraveldocResultsNavigation(value: string): boolean {
+  if (!isAllowedTraveldocNavigation(value)) return false;
+  try {
+    const url = new URL(value);
+    const normalizedPath = url.pathname.replace(/\/+$/, '').toLowerCase();
+    return normalizedPath === '/results'
+      || url.searchParams.get('results')?.toLowerCase() === 'true';
+  } catch {
+    return false;
+  }
+}
+
 function openExternalNavigation(value: string): void {
   try {
     const url = new URL(value);
@@ -54,14 +66,31 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
   const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const [webViewKey, setWebViewKey] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const loadFailedRef = useRef(false);
 
   useEffect(() => {
     if (!isFocused || !loading) return;
-    const timer = setTimeout(() => { setLoading(false); setLoadError(true); }, 15_000);
+    // TravelDoc is an Angular SPA and its results route can keep Android's
+    // WebView load event open even after the page is already usable. Reveal
+    // the WebView after the fallback timeout; real network/HTTP failures are
+    // still handled by onError/onHttpError below.
+    const timer = setTimeout(() => { setLoading(false); }, 15_000);
     return () => clearTimeout(timer);
   }, [isFocused, loading]);
+
+  const markContentReady = () => {
+    setLoading(false);
+    if (!loadFailedRef.current) setLoadError(false);
+  };
+
+  const restartWebView = () => {
+    loadFailedRef.current = false;
+    setLoadError(false);
+    setLoading(true);
+    setWebViewKey(current => current + 1);
+  };
 
   const handleReload = () => {
     setLoading(true);
@@ -100,16 +129,24 @@ export default function TraveldocScreen({ isFocused = true }: { isFocused?: bool
       )}
       {isFocused && (
         <WebView
+          key={webViewKey}
           ref={webViewRef}
           source={{ uri: 'https://legacy.traveldoc.aero/' }}
           style={{ flex: 1, backgroundColor: colors.isDark ? '#111111' : '#ffffff' }}
           onLoadStart={() => { loadFailedRef.current = false; setLoading(true); setLoadError(false); }}
-          onLoadEnd={() => {
-            setLoading(false);
-            if (!loadFailedRef.current) setLoadError(false);
+          onLoadEnd={markContentReady}
+          onLoadProgress={({ nativeEvent }) => {
+            if (nativeEvent.progress >= 0.9 || isTraveldocResultsNavigation(nativeEvent.url)) {
+              markContentReady();
+            }
+          }}
+          onNavigationStateChange={state => {
+            if (isTraveldocResultsNavigation(state.url)) markContentReady();
           }}
           onError={() => { loadFailedRef.current = true; setLoading(false); setLoadError(true); }}
           onHttpError={() => { loadFailedRef.current = true; setLoading(false); setLoadError(true); }}
+          onRenderProcessGone={restartWebView}
+          onContentProcessDidTerminate={restartWebView}
           originWhitelist={['https://traveldoc.aero', 'https://*.traveldoc.aero']}
           javaScriptEnabled
           domStorageEnabled
