@@ -275,6 +275,11 @@ async function fetchProviderWithTimeout(
   provider: FlightScheduleProvider,
   context: FlightScheduleProviderContext,
 ): Promise<FlightScheduleProviderResult> {
+  // Reject cancellation before starting network work or a timeout promise.
+  if (context.signal?.aborted) {
+    throw new Error('PROVIDER_PARENT_ABORTED');
+  }
+
   const timeoutMs = providerTimeoutMs(provider, context);
   if (timeoutMs <= 0 || typeof AbortController === 'undefined') {
     return provider.fetch(context);
@@ -290,11 +295,6 @@ async function fetchProviderWithTimeout(
       controller.abort();
     }, timeoutMs);
   });
-
-  if (context.signal?.aborted) {
-    controller.abort();
-    throw new Error('PROVIDER_PARENT_ABORTED');
-  }
 
   let rejectParentAbort: ((reason: Error) => void) | undefined;
   const parentAbortPromise = new Promise<never>((_, reject) => {

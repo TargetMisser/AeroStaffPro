@@ -219,20 +219,15 @@ export async function replaceShiftForDate({
   titles = DEFAULT_TITLES,
   restTiming = DEFAULT_REST_TIMING,
 }: ReplaceShiftForDateArgs): Promise<number> {
-  const { year, month, day } = parseIsoDate(date);
-  const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0);
-  const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999);
+  if (type === 'work' && (!startTime || !endTime)) return 0;
 
-  await deleteShiftEventsInRange(calendarId, dayStart, dayEnd);
-
-  const created = await createShiftEvent(
+  // Keep the existing shift until its replacement has been created successfully.
+  return replaceShiftsForRange({
     calendarId,
-    { date, type, startTime, endTime },
+    shifts: [{ date, type, startTime, endTime }],
     titles,
     restTiming,
-  );
-
-  return created ? 1 : 0;
+  });
 }
 
 export async function replaceShiftsForRange({

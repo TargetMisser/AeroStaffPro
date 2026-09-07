@@ -86,7 +86,7 @@ assert(notifications.includes('dedupeAeroStaffScheduledNotifications'), 'notific
 assert(notifications.includes('pendingRequests'), 'notification debug snapshots should include pending request details');
 
 const autoNotifications = read('src/utils/autoNotifications.ts');
-assert(autoNotifications.includes('runNotificationScheduleExclusive'), 'startup notifications should use the scheduler lock');
+assert(autoNotifications.includes('scheduleShiftNotifications('), 'startup notifications should share the Flights scheduler and its lock');
 
 const releaseWorkflow = read('.github/workflows/ci.yml');
 assert(releaseWorkflow.includes('npm test'), 'CI should run the smoke test suite');

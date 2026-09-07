@@ -375,18 +375,18 @@ export default function PasswordScreen() {
 
   const saveModal = useCallback(async () => {
     if (!modal.name.trim()) { Alert.alert('Errore', t('passwordErrName')); return; }
-    if (!modal.password.trim()) { Alert.alert('Errore', t('passwordErrPw')); return; }
+    if (!modal.password) { Alert.alert('Errore', t('passwordErrPw')); return; }
     let next: PasswordEntry[];
     if (modal.editingId) {
       next = entries.map(e => e.id === modal.editingId
-        ? { ...e, name: modal.name.trim(), username: modal.username.trim(), password: modal.password.trim(), notes: modal.notes.trim() }
+        ? { ...e, name: modal.name.trim(), username: modal.username.trim(), password: modal.password, notes: modal.notes.trim() }
         : e);
     } else {
       const entry: PasswordEntry = {
         id: Date.now().toString(),
         name: modal.name.trim(),
         username: modal.username.trim(),
-        password: modal.password.trim(),
+        password: modal.password,
         notes: modal.notes.trim(),
       };
       next = [...entries, entry];

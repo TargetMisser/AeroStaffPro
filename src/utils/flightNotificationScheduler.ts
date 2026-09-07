@@ -8,6 +8,8 @@ import { isFlightEasyJet } from './easyjetOverlapMode';
 import type { CurrentRequestCheck } from './currentRequestEffects';
 import {
   appendNotificationDebugEvent,
+  createNotificationScheduleCheck,
+  NOTIF_ENABLED_KEY,
   buildNotificationData,
   cancelAeroStaffScheduledNotifications,
   dedupeAeroStaffScheduledNotifications,
@@ -62,7 +64,9 @@ export async function scheduleShiftNotifications(
   selectedAirlines: string[],
   isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
 ): Promise<number> {
+  isCurrent = createNotificationScheduleCheck(isCurrent);
   return runNotificationScheduleExclusive('flights', 'shift notification schedule', async () => {
+    if (!isCurrent() || (await AsyncStorage.getItem(NOTIF_ENABLED_KEY)) !== 'true') return 0;
     if (!isCurrent()) return 0;
     await cancelPreviousNotifications('flight shift reschedule', false, isCurrent);
     if (!isCurrent()) return 0;
@@ -236,7 +240,9 @@ export async function schedulePinnedNotifications(
   settings: FlightNotificationSettings,
   isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
 ): Promise<void> {
+  isCurrent = createNotificationScheduleCheck(isCurrent);
   return runNotificationScheduleExclusive('pinned', 'pinned flight notification schedule', async () => {
+    if (!isCurrent() || (await AsyncStorage.getItem(NOTIF_ENABLED_KEY)) !== 'true') return;
     if (!isCurrent()) return;
     await cancelPinnedNotifications('pinned flight reschedule', false, isCurrent);
     if (!isCurrent()) return;

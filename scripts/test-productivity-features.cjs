@@ -145,11 +145,44 @@ function testFeatureWiring() {
   const reportSource = fs.readFileSync(path.join(root, 'src', 'screens', 'PrintableCalendarScreen.tsx'), 'utf8');
   const notepadSource = fs.readFileSync(path.join(root, 'src', 'screens', 'NotepadScreen.tsx'), 'utf8');
   const settingsSource = fs.readFileSync(path.join(root, 'src', 'screens', 'SettingsScreen.tsx'), 'utf8');
-  assert(calendarSource.includes('replaceShiftsForRangeSafely') && calendarSource.includes('undoLastImport'), 'calendar screen should wire safe import and undo');
+  assert(calendarSource.includes('replaceShiftsForRangeSafely') && calendarSource.includes('undoLastImport') && calendarSource.includes('getWidgetData({ refreshShiftSnapshot: true })'), 'calendar screen should wire safe import and undo');
   assert(calendarSource.includes('buildShiftIcs') && calendarSource.includes('Condividi turno'), 'calendar screen should wire quick text/ICS sharing');
   assert(reportSource.includes('buildCompensationReportHtml') && reportSource.includes('shareCompensationCsv'), 'shift report screen should wire PDF and CSV exports');
   assert(notepadSource.includes('HANDOVER_STORAGE_KEY') && notepadSource.includes('buildHandoverSummary'), 'notes screen should wire structured handover storage and sharing');
   assert(settingsSource.includes('WIDGET_PREFERENCES_KEY') && settingsSource.includes('WIDGET 2.0'), 'settings should expose Widget 2.0 preferences');
+}
+
+async function testManualShiftReplacementKeepsExistingOnFailure() {
+  const original = { id: 'old', title: 'Lavoro', startDate: new Date(2026, 7, 10, 8), endDate: new Date(2026, 7, 10, 16) };
+  const events = new Map([['old', original]]);
+  const writeError = new Error('Calendar provider write failed');
+  let failCreation = true;
+  let creationAttempts = 0;
+  const mod = loadTsModule('src/utils/shiftCalendar.ts', {
+    'react-native': { Platform: { OS: 'android' } },
+    'expo-calendar': {
+      getEventsAsync: async (_ids, start, end) => [...events.values()].filter(event => event.startDate >= start && event.endDate <= end),
+      createEventAsync: async (_calendarId, data) => {
+        creationAttempts++;
+        if (failCreation) throw writeError;
+        assert(events.get('old') === original, 'the existing shift must survive until the replacement is created');
+        events.set('new', { id: 'new', ...data });
+        return 'new';
+      },
+      deleteEventAsync: async id => { events.delete(id); },
+    },
+  });
+  const replacement = { calendarId: 'cal', date: '2026-08-10', type: 'work', startTime: '10:00', endTime: '18:00' };
+  let error;
+  try { await mod.replaceShiftForDate(replacement); } catch (caught) { error = caught; }
+  assert(error === writeError, 'a failed manual save should report the calendar provider error');
+  assert(events.size === 1 && events.get('old') === original, 'a failed manual save must preserve the original shift');
+  const attemptsBeforeInvalid = creationAttempts;
+  const skipped = await mod.replaceShiftForDate({ ...replacement, endTime: undefined });
+  assert(skipped === 0 && events.get('old') === original && creationAttempts === attemptsBeforeInvalid, 'an incomplete manual shift must not delete the original');
+  failCreation = false;
+  const count = await mod.replaceShiftForDate(replacement);
+  assert(count === 1 && events.size === 1 && events.get('new')?.startDate.getHours() === 10, 'a successful retry must replace the old shift exactly once');
 }
 
 async function testImportRollback() {
@@ -201,6 +234,7 @@ async function main() {
   testWidgetPreferences();
   testHandover();
   testFeatureWiring();
+  await testManualShiftReplacementKeepsExistingOnFailure();
   await testImportRollback();
   console.log('Productivity feature tests passed.');
 }

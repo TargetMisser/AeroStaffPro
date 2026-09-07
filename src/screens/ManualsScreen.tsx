@@ -620,6 +620,9 @@ function makeStyles(c: ThemeColors) {
     airlineName: { ...TYPE.caption, color: c.textSub },
     content:    { flex: 1 },
     contentPad: { padding: 14, paddingBottom: 80 },
+    empty: { alignItems: 'center', paddingVertical: SPACING.xxxl, gap: SPACING.md },
+    emptyTitle: { fontSize: 16, fontWeight: '700', color: c.text },
+    emptyText: { fontSize: 13, textAlign: 'center', color: c.textSub },
     banner: {
       borderRadius: 14, padding: 18, marginBottom: 18,
     },
@@ -972,9 +975,9 @@ export default function ManualsScreen() {
       if (raw) {
         try {
           const parsed: Airline[] = JSON.parse(raw);
-          if (parsed.length > 0) {
+          if (Array.isArray(parsed)) {
             setAirlines(parsed);
-            setSelectedAirline(parsed[0].id);
+            setSelectedAirline(parsed[0]?.id ?? '');
           }
         } catch {
           AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_AIRLINES));
@@ -987,6 +990,7 @@ export default function ManualsScreen() {
 
   const persist = (updated: Airline[]) => {
     setAirlines(updated);
+    setSelectedAirline(current => updated.some(item => item.id === current) ? current : updated[0]?.id ?? '');
     AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   };
 
@@ -1059,72 +1063,90 @@ export default function ManualsScreen() {
         contentContainerStyle={s.contentPad}
         showsVerticalScrollIndicator={false}
       >
-        {/* Airline banner */}
-        <View style={[s.banner, { backgroundColor: airline.color }]}>
-          <Text style={[s.bannerCode, { color: airline.textColor }]}>{airline.code}</Text>
-          <Text style={[s.bannerName, { color: airline.textColor, opacity: 0.85 }]}>{airline.name}</Text>
-          <Text style={[s.bannerSub, { color: airline.textColor, opacity: 0.7 }]}>
-            {airline.sections.length} sezioni · {airline.sections.reduce((n, s) => n + s.items.length, 0)} argomenti
-            {airline.commands ? ` · ${airline.commands.length} comandi` : ''}
-          </Text>
-        </View>
+        {airline ? (
+          <>
+            {/* Airline banner */}
+            <View style={[s.banner, { backgroundColor: airline.color }]}>
+              <Text style={[s.bannerCode, { color: airline.textColor }]}>{airline.code}</Text>
+              <Text style={[s.bannerName, { color: airline.textColor, opacity: 0.85 }]}>{airline.name}</Text>
+              <Text style={[s.bannerSub, { color: airline.textColor, opacity: 0.7 }]}>
+                {airline.sections.length} sezioni · {airline.sections.reduce((n, s) => n + s.items.length, 0)} argomenti
+                {airline.commands ? ` · ${airline.commands.length} comandi` : ''}
+              </Text>
+            </View>
 
-        {/* Tab bar (only if airline has commands) */}
-        {airline.commands && airline.commands.length > 0 && (
-          <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginBottom: 14 }}>
-            {(['guides', 'commands'] as const).map(tab => (
-              <TouchableOpacity
-                key={tab}
-                onPress={() => setActiveTab(tab)}
-                style={{
-                  paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm,
-                  backgroundColor: activeTab === tab ? colors.primary : 'transparent',
-                  borderWidth: activeTab === tab ? 0 : 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <Text style={{
-                  fontSize: 12, fontWeight: activeTab === tab ? '700' : '600',
-                  color: activeTab === tab ? '#fff' : colors.textSub,
-                }}>
-                  {tab === 'guides' ? 'Guide' : 'Comandi'}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {/* Tab bar (only if airline has commands) */}
+            {airline.commands && airline.commands.length > 0 && (
+              <View style={{ flexDirection: 'row', gap: 6, justifyContent: 'center', marginBottom: 14 }}>
+                {(['guides', 'commands'] as const).map(tab => (
+                  <TouchableOpacity
+                    key={tab}
+                    onPress={() => setActiveTab(tab)}
+                    style={{
+                      paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm,
+                      backgroundColor: activeTab === tab ? colors.primary : 'transparent',
+                      borderWidth: activeTab === tab ? 0 : 1,
+                      borderColor: colors.border,
+                    }}
+                  >
+                    <Text style={{
+                      fontSize: 12, fontWeight: activeTab === tab ? '700' : '600',
+                      color: activeTab === tab ? '#fff' : colors.textSub,
+                    }}>
+                      {tab === 'guides' ? 'Guide' : 'Comandi'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {/* Content based on active tab */}
+            {activeTab === 'commands' && airline.commands && airline.commands.length > 0 ? (
+              <CommandsTab commands={airline.commands} colors={colors} />
+            ) : (
+              <>
+                {/* Sections */}
+                {airline.sections.map((section, i) => (
+                  <SectionBlock
+                    key={i}
+                    section={section}
+                    sectionIdx={i}
+                    airlineId={airline.id}
+                    editMode={editMode}
+                    onEdit={() => setModal({ kind: 'section_edit', airlineId: airline.id, sectionIdx: i })}
+                    onAddItem={() => setModal({ kind: 'item_add', airlineId: airline.id, sectionIdx: i })}
+                    onEditItem={(itemIdx) => setModal({ kind: 'item_edit', airlineId: airline.id, sectionIdx: i, itemIdx })}
+                  />
+                ))}
+                {editMode && (
+                  <TouchableOpacity
+                    style={[s.addBtn, { borderColor: colors.border }]}
+                    onPress={() => setModal({ kind: 'section_add', airlineId: airline.id })}
+                  >
+                    <MaterialIcons name="add" size={16} color={colors.textSub} />
+                    <Text style={[s.addBtnText, { color: colors.textSub }]}>Aggiungi sezione</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
+
+            <View style={{ height: 20 }} />
+          </>
+        ) : (
+          <View style={s.empty}>
+            <MaterialIcons name="menu-book" size={40} color={colors.textMuted} />
+            <Text style={s.emptyTitle}>Nessuna compagnia</Text>
+            <Text style={s.emptyText}>Aggiungi una compagnia per creare i tuoi manuali DCS.</Text>
+            <TouchableOpacity
+              style={[s.addBtn, { borderColor: colors.border }]}
+              onPress={() => setModal({ kind: 'airline_add' })}
+              accessibilityRole="button"
+            >
+              <MaterialIcons name="add" size={16} color={colors.textSub} />
+              <Text style={s.addBtnText}>Aggiungi compagnia</Text>
+            </TouchableOpacity>
           </View>
         )}
-
-        {/* Content based on active tab */}
-        {activeTab === 'commands' && airline.commands && airline.commands.length > 0 ? (
-          <CommandsTab commands={airline.commands} colors={colors} />
-        ) : (
-          <>
-            {/* Sections */}
-            {airline.sections.map((section, i) => (
-              <SectionBlock
-                key={i}
-                section={section}
-                sectionIdx={i}
-                airlineId={airline.id}
-                editMode={editMode}
-                onEdit={() => setModal({ kind: 'section_edit', airlineId: airline.id, sectionIdx: i })}
-                onAddItem={() => setModal({ kind: 'item_add', airlineId: airline.id, sectionIdx: i })}
-                onEditItem={(itemIdx) => setModal({ kind: 'item_edit', airlineId: airline.id, sectionIdx: i, itemIdx })}
-              />
-            ))}
-            {editMode && (
-              <TouchableOpacity
-                style={[s.addBtn, { borderColor: colors.border }]}
-                onPress={() => setModal({ kind: 'section_add', airlineId: airline.id })}
-              >
-                <MaterialIcons name="add" size={16} color={colors.textSub} />
-                <Text style={[s.addBtnText, { color: colors.textSub }]}>Aggiungi sezione</Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
-
-        <View style={{ height: 20 }} />
       </ScrollView>
 
       {(modal.kind === 'airline_add' || modal.kind === 'airline_edit') && (

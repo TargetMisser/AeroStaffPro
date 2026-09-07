@@ -278,20 +278,20 @@ async function refreshShiftSnapshotFromCalendar(): Promise<WidgetShiftData | nul
   }
 }
 
-async function readShiftSnapshot(): Promise<WidgetShiftData | null> {
+async function readShiftSnapshot(refreshFromCalendar = false): Promise<WidgetShiftData | null> {
   const shiftRaw = await AsyncStorage.getItem(WIDGET_SHIFT_KEY);
   let shiftData: WidgetShiftData | null = shiftRaw ? JSON.parse(shiftRaw) : null;
-  if (!shiftData || shiftData.date !== toLocalIso()) {
+  if (refreshFromCalendar || !shiftData || shiftData.date !== toLocalIso()) {
     shiftData = (await refreshShiftSnapshotFromCalendar()) ?? shiftData;
   }
   return shiftData;
 }
 
 // ─── Read cached data written by the main app ──────────────────────────────────
-export async function getWidgetData(): Promise<WidgetData> {
+export async function getWidgetData({ refreshShiftSnapshot = false }: { refreshShiftSnapshot?: boolean } = {}): Promise<WidgetData> {
   try {
     const preferences = await readWidgetPreferences();
-    const shiftData = await readShiftSnapshot();
+    const shiftData = await readShiftSnapshot(refreshShiftSnapshot);
 
     if (shiftData) {
       const resolved = resolveWidgetShift(shiftData);
@@ -311,6 +311,8 @@ export async function getWidgetData(): Promise<WidgetData> {
         // Cache is stale or missing — show work_empty until periodic update runs.
         return presentWidgetData({ state: 'work_empty', shiftLabel, updatedAt: '' }, preferences);
       }
+      // An empty current snapshot must not resurrect flights from an undone import.
+      if (shiftData.date === toLocalIso()) return { state: 'no_shift' };
     }
 
     // Shift key is missing or from a different day — fall back to cache.

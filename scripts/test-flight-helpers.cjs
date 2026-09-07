@@ -2111,6 +2111,51 @@ async function runProviderLayerTests() {
     'provider diagnostics should identify the global parent abort',
   );
 
+  const pendingProviderTimers = new Map();
+  let nextProviderTimer = 0;
+  const cancelledProviderLayer = loadTsModule('src/utils/flightProviders/index.ts', {
+    './aeroDataBoxProvider': {},
+    './airLabsProvider': {},
+    './staffMonitorProvider': {},
+    './fr24Provider': {},
+    __globals: {
+      setTimeout: callback => {
+        const id = ++nextProviderTimer;
+        pendingProviderTimers.set(id, callback);
+        return id;
+      },
+      clearTimeout: id => pendingProviderTimers.delete(id),
+    },
+  });
+  const alreadyAborted = new AbortController();
+  alreadyAborted.abort();
+  for (const providerTimeoutMs of [50, 0]) {
+    let cancelledProviderFetches = 0;
+    let cancelledProviderError = '';
+    try {
+      await cancelledProviderLayer.fetchFlightScheduleFromProviders({
+        airportCode: 'PSA',
+        airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
+        providerTimeoutMs,
+        signal: alreadyAborted.signal,
+        now,
+      }, [{
+        id: 'fr24Public',
+        label: 'Cancelled provider',
+        supports: () => true,
+        fetch: async () => {
+          cancelledProviderFetches += 1;
+          return { allArrivals: [], allDepartures: [] };
+        },
+      }]);
+    } catch (error) {
+      cancelledProviderError = String(error);
+    }
+    assert(cancelledProviderError.includes('PROVIDER_PARENT_ABORTED'), 'an already-cancelled request should report parent cancellation');
+    assert(cancelledProviderFetches === 0, 'an already-cancelled request must not start provider network work, even with timeouts disabled');
+    assert(pendingProviderTimers.size === 0, 'an already-cancelled request must leave no timeout that can reject without a handler');
+  }
+
   const cooldownCalls = [];
   const cooldownLayer = loadTsModule('src/utils/flightProviders/index.ts', {
     './aeroDataBoxProvider': {

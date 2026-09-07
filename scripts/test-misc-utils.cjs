@@ -731,6 +731,65 @@ async function testWidgetShiftSelfHeal() {
   assert(typeof denied.state === 'string', 'denied calendar permission should still return a widget state');
 }
 
+async function testWidgetRefreshAfterImportRollback() {
+  const now = new Date(2026, 8, 7, 9).getTime();
+  class FixedDate extends Date {
+    constructor(...args) { super(...(args.length ? args : [now])); }
+    static now() { return now; }
+  }
+  const importedShifts = [
+    { date: '2026-09-07', type: 'work', startTime: '08:00', endTime: '16:00' },
+    { date: '2026-09-08', type: 'work', startTime: '08:00', endTime: '16:00' },
+  ];
+  const scenarios = [
+    { label: 'rest day', previous: [{ date: '2026-09-07', type: 'rest' }], state: 'rest' },
+    { label: 'different hours', previous: [{ date: '2026-09-07', type: 'work', startTime: '10:00', endTime: '18:00' }], state: 'work_empty', shiftLabel: '10:00 – 18:00' },
+    { label: 'empty day', previous: [], state: 'no_shift' },
+    { label: 'tomorrow', previous: [{ date: '2026-09-07', type: 'rest' }, { date: '2026-09-08', type: 'work', startTime: '10:00', endTime: '18:00' }], state: 'work_empty', shiftLabel: 'Domani 10:00 – 18:00' },
+  ];
+  for (const scenario of scenarios) {
+    const events = new Map();
+    let nextId = 0;
+    let reads = 0;
+    const calendar = {
+      EntityTypes: { EVENT: 'event' },
+      getCalendarPermissionsAsync: async () => ({ status: 'granted' }),
+      getCalendarsAsync: async () => [{ id: 'cal', allowsModifications: true, isPrimary: true }],
+      getEventsAsync: async (_ids, start, end) => { reads++; return [...events.values()].filter(event => event.startDate >= start && event.endDate <= end); },
+      createEventAsync: async (_calendarId, data) => { const id = String(++nextId); events.set(id, { id, ...data }); return id; },
+      deleteEventAsync: async id => { events.delete(id); },
+    };
+    const shifts = loadTsModule('src/utils/shiftCalendar.ts', { 'expo-calendar': calendar, 'react-native': { Platform: { OS: 'android' } }, __globals: { Date: FixedDate } });
+    await shifts.replaceShiftsForRange({ calendarId: 'cal', shifts: scenario.previous });
+    const imported = await shifts.replaceShiftsForRangeSafely({ calendarId: 'cal', shifts: importedShifts });
+    const storage = makeAsyncStorageMock({
+      widget_shift_v1: JSON.stringify({ date: '2026-09-07', shiftToday: { start: new Date(2026, 8, 7, 8).getTime() / 1000, end: new Date(2026, 8, 7, 16).getTime() / 1000 }, isRestDay: false, nextShift: { date: '2026-09-08', start: new Date(2026, 8, 8, 8).getTime() / 1000, end: new Date(2026, 8, 8, 16).getTime() / 1000 } }),
+      widget_data_cache_v1: JSON.stringify({ state: 'work_empty', shiftLabel: '08:00 – 16:00', updatedAt: '' }),
+    });
+    const widget = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+      '@react-native-async-storage/async-storage': storage,
+      'expo-calendar': calendar,
+      'react-native-android-widget': {},
+      './ShiftWidget': { ShiftWidget: () => null },
+      './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light' }) },
+      '../utils/liveArrivalEta': { applyLiveDepartureStatus: departures => departures, fetchAdsbAircraft: async () => [] },
+      '../utils/flightProviders/staffMonitorProvider': { staffMonitorProvider: { supports: () => false } },
+      __globals: { Date: FixedDate },
+    });
+    await shifts.restoreShiftImport(imported.rollback);
+    const readsBeforeRefresh = reads;
+    const data = await widget.getWidgetData({ refreshShiftSnapshot: true });
+    assert(data.state === scenario.state && data.shiftLabel === scenario.shiftLabel, 'undo must refresh the widget to the restored ' + scenario.label + ', got ' + JSON.stringify(data));
+    assert(reads > readsBeforeRefresh, 'undo must reread the calendar even when the widget snapshot is from today');
+    const readsAfterRefresh = reads;
+    const nextPaint = await widget.getWidgetData();
+    assert(nextPaint.state === scenario.state && nextPaint.shiftLabel === scenario.shiftLabel, 'subsequent widget reads must retain the restored ' + scenario.label);
+    assert(reads === readsAfterRefresh, 'ordinary widget reads should keep using the refreshed snapshot');
+    const snapshot = JSON.parse(storage._store.widget_shift_v1);
+    assert(Boolean(snapshot.nextShift) === (scenario.label === 'tomorrow'), 'undo must refresh tomorrow as well as today');
+  }
+}
+
 async function testErrorUtils() {
   const errorUtils = loadTsModule('src/utils/errorUtils.ts');
 
@@ -1052,6 +1111,7 @@ async function main() {
   await testErrorUtils();
   await testDevLog();
   await testShiftCalendarOwnershipAndPartialImport();
+  await testWidgetRefreshAfterImportRollback();
   await testWidgetShiftSelfHeal();
   await testWidgetKeepsPreviousDayNightShiftAfterMidnight();
   await testWidgetCacheFirstPaint();

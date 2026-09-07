@@ -706,7 +706,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
               setLastImportRollback(null);
               setEditMenuOpen(false);
               await fetchCalendar(true);
-              const widgetData = await getWidgetData();
+              const widgetData = await getWidgetData({ refreshShiftSnapshot: true });
               requestShiftWidgetUpdate(widgetData as any).catch(() => {});
               Alert.alert('Importazione annullata', `${restored} turni precedenti ripristinati.`);
             } catch (error) {

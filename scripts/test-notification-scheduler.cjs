@@ -100,6 +100,152 @@ function handleFailure(err) {
 }
 
 async function main() {
+
+  // Startup must use the same saved preferences as the Flights tab.
+  async function startupScenario(settingsRaw, selectedAirlines = ['ryanair']) {
+    const nowMs = new Date(2026, 8, 5, 8, 0, 0).getTime();
+    class FixedDate extends Date {
+      constructor(...args) { super(...(args.length ? args : [nowMs])); }
+      static now() { return nowMs; }
+    }
+    const asyncStorage = makeAsyncStorageMock({
+      aerostaff_notif_enabled: 'true',
+      aerostaff_flight_filter_v1: JSON.stringify(selectedAirlines),
+      aerostaff_notif_settings_v1: settingsRaw,
+      aerostaff_language_v1: 'en',
+    });
+    const notifMock = makeNotificationsMock();
+    notifMock.requestPermissionsAsync = async () => ({ status: 'granted' });
+    const ongoingCalls = [];
+    const makeFlight = (number, direction, seconds) => ({ flight: {
+      identification: { number: { default: number } },
+      airline: { name: 'Ryanair', code: { iata: 'FR' } },
+      airport: { origin: { name: 'Rome' }, destination: { name: 'Pisa' } },
+      time: { scheduled: { [direction]: nowMs / 1000 + seconds } },
+    } });
+    const mocks = {
+      '@react-native-async-storage/async-storage': asyncStorage,
+      'expo-notifications': notifMock,
+      'expo-calendar': {
+        EntityTypes: { EVENT: 'event' },
+        requestCalendarPermissionsAsync: async () => ({ status: 'granted' }),
+        getCalendarsAsync: async () => [{ id: 'cal', allowsModifications: true, isPrimary: true }],
+        getEventsAsync: async () => [{ title: 'Lavoro', startDate: new Date(2026, 8, 5, 7).toISOString(), endDate: new Date(2026, 8, 5, 16).toISOString() }],
+      },
+      './fr24api': { fetchAirportScheduleRaw: async () => ({
+        arrivals: [makeFlight('FR111', 'arrival', 3600)],
+        departures: [makeFlight('FR222', 'departure', 14400)],
+      }) },
+      './shiftOngoingNotification': {
+        syncShiftOngoingExpiry: async () => {}, showShiftOngoingNotification: async (...args) => { ongoingCalls.push(args); }, dismissShiftOngoingNotification: async () => {},
+      },
+      __globals: { Date: FixedDate, __DEV__: false },
+    };
+    mocks['./notificationDiagnostics'] = loadTsModule('src/utils/notificationDiagnostics.ts', mocks);
+    const scheduler = loadTsModule('src/utils/autoNotifications.ts', mocks);
+    const count = await scheduler.autoScheduleNotifications();
+    return { count, pending: notifMock._pending, asyncStorage, ongoingCalls };
+  }
+
+  const disabledCategories = {
+    onlyTrackedAirlines: false, includeArrivals: false, includeDepartures: false,
+    includeShiftEnd: false, sticky: true, arrivalLeadMinutes: 45, departureLeadMinutes: 35,
+  };
+  {
+    const result = await startupScenario(JSON.stringify(disabledCategories));
+    assert(result.count === 0 && result.pending.length === 0,
+      'startup must schedule no alerts when arrivals, departures and shift end are all disabled');
+  }
+  {
+    const result = await startupScenario(JSON.stringify({ ...disabledCategories, includeArrivals: true, includeDepartures: true }), []);
+    assert(result.count === 2, 'onlyTrackedAirlines=false must include flights even with no tracked airlines');
+    assert(result.ongoingCalls[0]?.[1].startsWith('0 voli'), 'the persistent shift summary must keep counting only profile airlines');
+    const arrival = result.pending.find(item => item.content.data.type === 'arrival_shift');
+    const departure = result.pending.find(item => item.content.data.type === 'departure_shift');
+    assert(arrival?.trigger.seconds === 15 * 60, 'startup must honor the saved 45-minute arrival lead');
+    assert(departure?.trigger.seconds === 205 * 60, 'startup must honor the saved 35-minute departure lead');
+    assert(result.pending.every(item => item.content.sticky === true && item.content.autoDismiss === false),
+      'startup must honor sticky notifications');
+    const expectedTime = new Date(2026, 8, 5, 9).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    assert(arrival.content.body.includes(expectedTime), 'startup must format the time using the saved language');
+  }
+  {
+    const trackedOnly = await startupScenario(JSON.stringify({ ...disabledCategories, onlyTrackedAirlines: true, includeArrivals: true }), []);
+    assert(trackedOnly.count === 0, 'an empty tracked selection must stay empty at startup');
+    const defaults = await startupScenario('{invalid json');
+    assert(defaults.count === 2 && defaults.pending.some(item => item.content.data.type === 'shift_end'),
+      'invalid startup preferences must fall back to arrivals and shift-end defaults');
+    assert(defaults.pending.find(item => item.content.data.type === 'arrival_shift')?.trigger.seconds === 45 * 60,
+      'startup default arrival lead must match the Flights tab default of 15 minutes');
+  }
+
+  // A native scheduling call can finish after the user turns notifications off.
+  // Cover both the active batch and another batch already waiting in the queue.
+  for (const pinned of [false, true]) {
+    const storage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
+    const notifications = makeNotificationsMock();
+    const mocks = { '@react-native-async-storage/async-storage': storage, 'expo-notifications': notifications };
+    const diagnostics = loadTsModule('src/utils/notificationDiagnostics.ts', mocks);
+    mocks['./notificationDiagnostics'] = diagnostics;
+    const scheduler = loadTsModule('src/utils/flightNotificationScheduler.ts', mocks);
+    const settings = { ...disabledCategories, includeArrivals: true, arrivalLeadMinutes: 15 };
+    const now = Math.floor(Date.now() / 1000);
+    const arrival = number => ({ flight: {
+      identification: { number: { default: number } }, airline: { name: 'Ryanair' },
+      airport: { origin: { name: 'Rome' } }, time: { scheduled: { arrival: now + 3600 } },
+    } });
+    const oldRequest = diagnostics.createNotificationScheduleCheck();
+    const run = (check = oldRequest) => pinned
+      ? scheduler.schedulePinnedNotifications(arrival('FR123'), 'arrivals', 'it-IT', settings, check)
+      : scheduler.scheduleShiftNotifications([arrival('FR123'), arrival('FR456')], [], now + 7200, 'it-IT', settings, [], check);
+    let releaseNativeCall;
+    let nativeStarted;
+    const started = new Promise(resolve => { nativeStarted = resolve; });
+    const hold = new Promise(resolve => { releaseNativeCall = resolve; });
+    const originalSchedule = notifications.scheduleNotificationAsync;
+    notifications.scheduleNotificationAsync = async request => {
+      const id = await originalSchedule(request);
+      nativeStarted();
+      await hold;
+      return id;
+    };
+    const active = run();
+    await started;
+    const queued = run();
+    const disabling = diagnostics.setFlightNotificationsEnabled(false);
+    assert(!oldRequest(), 'disabling must invalidate active work immediately, before the native call returns');
+    releaseNativeCall();
+    await Promise.all([active, queued, disabling]);
+    assert(storage._store.aerostaff_notif_enabled === 'false', 'disable must persist the off state');
+    assert(notifications._pending.length === 0, 'disable must remove both active and queued flight/pin alerts');
+    assert(notifications._scheduled.length === 1, 'invalidated batches must stop after their in-flight native call');
+    assert(await storage.getItem(pinned ? diagnostics.PINNED_NOTIF_IDS_KEY : diagnostics.NOTIF_IDS_KEY) === null,
+      'disabled scheduling must not retain orphaned notification IDs');
+    await run(diagnostics.createNotificationScheduleCheck());
+    assert(notifications._pending.length === 0, 'a refresh arriving after disable must not create new alerts');
+    const enabling = diagnostics.setFlightNotificationsEnabled(true);
+    const freshRequest = diagnostics.createNotificationScheduleCheck();
+    await enabling;
+    await run(oldRequest);
+    assert(notifications._pending.length === 0, 'off then on must not revive an old refresh');
+    notifications.scheduleNotificationAsync = originalSchedule;
+    await run(freshRequest);
+    assert(notifications._pending.length === (pinned ? 1 : 2), 'a new request after re-enabling must schedule normally');
+  }
+
+  {
+    const storage = makeAsyncStorageMock();
+    const notifications = makeNotificationsMock();
+    const diagnostics = loadTsModule('src/utils/notificationDiagnostics.ts', {
+      '@react-native-async-storage/async-storage': storage, 'expo-notifications': notifications,
+    });
+    const disabled = diagnostics.setFlightNotificationsEnabled(false);
+    const enabled = diagnostics.setFlightNotificationsEnabled(true);
+    const results = await Promise.all([disabled, enabled]);
+    assert(results[0] === false && results[1] === true && storage._store.aerostaff_notif_enabled === 'true',
+      'rapid toggles must persist the latest intent and identify the obsolete UI completion');
+  }
+
   // ─── buildNotificationData: dedupeKey construction ─────────────────────────
   {
     const asyncStorage = makeAsyncStorageMock();
@@ -237,7 +383,7 @@ async function main() {
 
   // ─── scheduleShiftNotifications: lead-time math, filtering, EasyJet seconds ─
   await (async () => {
-    const asyncStorage = makeAsyncStorageMock();
+    const asyncStorage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
     const notifMock = makeNotificationsMock();
     const mocks = {
       '@react-native-async-storage/async-storage': asyncStorage,
@@ -345,7 +491,7 @@ async function main() {
 
   // ─── scheduleShiftNotifications: empty tracked selection means no flights ──
   await (async () => {
-    const asyncStorage = makeAsyncStorageMock();
+    const asyncStorage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
     const notifMock = makeNotificationsMock();
     const mocks = {
       '@react-native-async-storage/async-storage': asyncStorage,
@@ -391,7 +537,7 @@ async function main() {
 
   // ─── stale airport token: discard notifications created by old fetch ───────
   await (async () => {
-    const asyncStorage = makeAsyncStorageMock();
+    const asyncStorage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
     const notifMock = makeNotificationsMock();
     let isCurrent = true;
     const scheduleNotificationAsync = notifMock.scheduleNotificationAsync;
@@ -442,7 +588,7 @@ async function main() {
 
   // ─── schedulePinnedNotifications: multi-phase departures via airline ops ───
   await (async () => {
-    const asyncStorage = makeAsyncStorageMock();
+    const asyncStorage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
     const notifMock = makeNotificationsMock();
     const mocks = {
       '@react-native-async-storage/async-storage': asyncStorage,
@@ -491,7 +637,7 @@ async function main() {
 
   // ─── schedulePinnedNotifications: single-phase arrivals ────────────────────
   await (async () => {
-    const asyncStorage = makeAsyncStorageMock();
+    const asyncStorage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
     const notifMock = makeNotificationsMock();
     const mocks = {
       '@react-native-async-storage/async-storage': asyncStorage,
@@ -541,7 +687,7 @@ async function main() {
       },
     };
 
-    const asyncStorage2 = makeAsyncStorageMock();
+    const asyncStorage2 = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });
     const notifMock2 = makeNotificationsMock();
     const mocks2 = {
       '@react-native-async-storage/async-storage': asyncStorage2,
@@ -601,6 +747,8 @@ async function main() {
         syncShiftOngoingExpiry: async () => {},
       },
       './notificationDiagnostics': {
+        createNotificationScheduleCheck: (check = () => true) => check,
+        NOTIF_SETTINGS_KEY: 'aerostaff_notif_settings_v1',
         LAST_SCHEDULE_KEY: 'last_schedule',
         NOTIF_ENABLED_KEY: 'aerostaff_notif_enabled',
         NOTIF_IDS_KEY: 'notification_ids',

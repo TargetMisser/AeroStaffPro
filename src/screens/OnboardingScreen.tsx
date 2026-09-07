@@ -8,7 +8,7 @@ import { useAppTheme } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { formatAirportSettingLabel } from '../utils/airportSettings';
 import { getFlightProviderSettingsState, type FlightProviderSettingsState } from '../utils/flightProviderSettings';
-import { getNotificationDebugSnapshot, NOTIF_ENABLED_KEY, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
+import { getNotificationDebugSnapshot, NOTIF_ENABLED_KEY, setFlightNotificationsEnabled, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
 import { SPACING, RADIUS } from '../theme/spacing';
 import {
   buildSetupChecklist,
@@ -137,7 +137,7 @@ export default function OnboardingScreen({
     const result = await Notifications.requestPermissionsAsync();
     setNotificationPermission(normalizePermission(result.status));
     if (result.status === 'granted') {
-      await AsyncStorage.setItem(NOTIF_ENABLED_KEY, 'true');
+      await setFlightNotificationsEnabled(true);
       setNotificationsEnabled(true);
     }
     await refresh();

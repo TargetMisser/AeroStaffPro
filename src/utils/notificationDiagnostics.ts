@@ -11,6 +11,34 @@ export const LAST_SCHEDULE_KEY = 'aerostaff_notif_last_schedule';
 
 const DEBUG_EVENTS_KEY = 'aerostaff_notif_debug_v1';
 const MAX_DEBUG_EVENTS = 40;
+let notificationScheduleVersion = 0;
+let notificationSchedulingAllowed = true;
+
+export function createNotificationScheduleCheck(isCurrent: CurrentRequestCheck = () => true): CurrentRequestCheck {
+  const version = notificationScheduleVersion;
+  return () => notificationSchedulingAllowed && version === notificationScheduleVersion && isCurrent();
+}
+
+export async function setFlightNotificationsEnabled(
+  enabled: boolean,
+  onDisabled?: () => Promise<unknown>,
+): Promise<boolean> {
+  // Invalidate work immediately, including native calls already awaiting a result.
+  const version = ++notificationScheduleVersion;
+  notificationSchedulingAllowed = enabled;
+  return runNotificationScheduleExclusive('settings', 'change notification enablement', async () => {
+    await AsyncStorage.setItem(NOTIF_ENABLED_KEY, String(enabled));
+    if (!enabled) {
+      await cancelAeroStaffScheduledNotifications({
+        includeShift: true, includePinned: true, source: 'settings',
+        reason: 'user disabled notifications', logEmpty: true,
+      });
+      await AsyncStorage.removeItem(LAST_SCHEDULE_KEY);
+      await onDisabled?.();
+    }
+    return version === notificationScheduleVersion;
+  });
+}
 
 const KNOWN_SHIFT_TYPES = new Set([
   'arrival_10min',

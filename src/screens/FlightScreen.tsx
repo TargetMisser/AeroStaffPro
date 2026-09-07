@@ -92,6 +92,8 @@ import {
 } from '../utils/flightNotificationSettings';
 import {
   appendNotificationDebugEvent,
+  createNotificationScheduleCheck,
+  setFlightNotificationsEnabled,
   NOTIF_ENABLED_KEY,
   NOTIF_SETTINGS_KEY,
 } from '../utils/notificationDiagnostics';
@@ -770,6 +772,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const [departures, setDepartures] = useState<any[]>([]);
   const [shifts, setShifts] = useState<{ today: { start: number; end: number } | null; tomorrow: { start: number; end: number } | null }>({ today: null, tomorrow: null });
   const [notifsEnabled, setNotifsEnabled] = useState(false);
+  const notificationToggleRequestRef = useRef(0);
   const [scheduledCount, setScheduledCount] = useState(0);
   const [pinnedFlight, setPinnedFlight] = useState<any | null>(null);
   const [filterMenuVisible, setFilterMenuVisible] = useState(false);
@@ -914,6 +917,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       && flightRequestIdRef.current === requestId
     );
 
+    const isCurrentNotificationRequest = createNotificationScheduleCheck(isCurrentRequest);
     fetchInFlightRef.current = { airportCode: requestAirportCode, requestId };
     lastFlightRefreshAttemptAtRef.current = Date.now();
     if (options.markLoading) setLoading(true);
@@ -1155,7 +1159,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             if (!pinRefreshed) return;
 
             const pinEffects: Array<() => Promise<unknown>> = [];
-            if (notificationsEnabledNow) {
+            if (notificationsEnabledNow && isCurrentNotificationRequest()) {
               pinEffects.push(
                 async () => {
                   try {
@@ -1164,7 +1168,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
                       tab,
                       locale,
                       notifSettingsRef.current,
-                      isCurrentRequest,
+                      isCurrentNotificationRequest,
                     );
                   } catch (e) {
                     devWarn('[pinnedNotifRefresh]', e);
@@ -1174,13 +1178,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
                   refreshedPinned,
                   tab,
                   notifSettingsRef.current.sticky,
-                  isCurrentRequest,
+                  isCurrentNotificationRequest,
                 ),
               );
-            } else {
+            } else if (isCurrentNotificationRequest()) {
               pinEffects.push(
-                () => cancelPinnedNotifications('flight refresh notifications disabled', false, isCurrentRequest),
-                () => dismissPinnedFlightNotification(isCurrentRequest),
+                () => cancelPinnedNotifications('flight refresh notifications disabled', false, isCurrentNotificationRequest),
+                () => dismissPinnedFlightNotification(isCurrentNotificationRequest),
               );
             }
 
@@ -1342,7 +1346,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       if (!isCurrentRequest()) return;
 
       // Schedula notifiche se attive (solo turno di oggi)
-      if (notificationsEnabledNow && shiftToday) {
+      if (notificationsEnabledNow && shiftToday && isCurrentNotificationRequest()) {
         const shiftArrivals = fetchedArrivals.filter(item => {
           const ts = getBestArrivalTs(item);
           return ts && ts >= shiftToday.start && ts <= shiftToday.end;
@@ -1358,13 +1362,13 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           locale,
           notifSettingsRef.current,
           selectedAirlinesRef.current,
-          isCurrentRequest,
+          isCurrentNotificationRequest,
         );
-        if (!isCurrentRequest()) return;
+        if (!isCurrentNotificationRequest()) return;
         setScheduledCount(count);
-      } else {
-        await cancelPreviousNotifications('flight refresh inactive', false, isCurrentRequest);
-        if (!isCurrentRequest()) return;
+      } else if (isCurrentNotificationRequest()) {
+        await cancelPreviousNotifications('flight refresh inactive', false, isCurrentNotificationRequest);
+        if (!isCurrentNotificationRequest()) return;
         setScheduledCount(0);
       }
     } catch (e) {
@@ -1518,9 +1522,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
   const scheduleNotificationsForCurrentShift = useCallback(async (
     settings: FlightNotificationSettings = notifSettingsRef.current,
+    isCurrent = createNotificationScheduleCheck(),
   ): Promise<number> => {
+    if (!isCurrent()) return 0;
     if (!shifts.today) {
-      await cancelPreviousNotifications('no current shift', false);
+      await cancelPreviousNotifications('no current shift', false, isCurrent);
       await appendNotificationDebugEvent({
         source: 'flights',
         type: 'skip_no_shift',
@@ -1545,18 +1551,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       locale,
       settings,
       selectedAirlinesRef.current,
+      isCurrent,
     );
-    setScheduledCount(count);
+    if (isCurrent()) setScheduledCount(count);
     return count;
   }, [arrivals, departures, locale, shifts.today]);
 
   const setNotificationsEnabled = useCallback(async (next: boolean) => {
+    const toggleId = ++notificationToggleRequestRef.current;
     if (!next) {
       setNotifsEnabled(false);
-      await AsyncStorage.setItem(NOTIF_ENABLED_KEY, 'false');
-      await cancelPreviousNotifications('user disabled notifications', true);
-      await cancelPinnedNotifications('user disabled notifications', true);
-      await dismissPinnedFlightNotification();
+      if (!await setFlightNotificationsEnabled(false, dismissPinnedFlightNotification)) return;
       await appendNotificationDebugEvent({
         source: 'settings',
         type: 'disabled',
@@ -1567,6 +1572,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     }
 
     const { status } = await Notifications.requestPermissionsAsync();
+    if (toggleId !== notificationToggleRequestRef.current) return;
     if (status !== 'granted') {
       await appendNotificationDebugEvent({
         source: 'settings',
@@ -1581,8 +1587,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     if (!shifts.today) {
       showNotifDialog(t('flightNoShift'), t('flightNoShiftMsg'), 'info');
       setNotifsEnabled(false);
-      await AsyncStorage.setItem(NOTIF_ENABLED_KEY, 'false');
-      await cancelPreviousNotifications('enable requested without shift', true);
+      if (!await setFlightNotificationsEnabled(false, dismissPinnedFlightNotification)) return;
       await appendNotificationDebugEvent({
         source: 'settings',
         type: 'enable_without_shift',
@@ -1592,18 +1597,22 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       return;
     }
 
+    const enabling = setFlightNotificationsEnabled(true);
+    const isCurrent = createNotificationScheduleCheck(() => toggleId === notificationToggleRequestRef.current);
+    await enabling;
+    if (!isCurrent()) return;
     setNotifsEnabled(true);
-    await AsyncStorage.setItem(NOTIF_ENABLED_KEY, 'true');
     const pinnedRaw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
     if (pinnedRaw) {
       try {
         const pinned = JSON.parse(pinnedRaw);
         const pinTab = pinned._pinTab || 'departures';
-        await schedulePinnedNotifications(pinned, pinTab, locale, notifSettingsRef.current);
-        await showOrUpdatePinnedFlightNotification(pinned, pinTab, notifSettingsRef.current.sticky);
+        await schedulePinnedNotifications(pinned, pinTab, locale, notifSettingsRef.current, isCurrent);
+        await showOrUpdatePinnedFlightNotification(pinned, pinTab, notifSettingsRef.current.sticky, isCurrent);
       } catch {}
     }
-    const count = await scheduleNotificationsForCurrentShift();
+    const count = await scheduleNotificationsForCurrentShift(notifSettingsRef.current, isCurrent);
+    if (!isCurrent()) return;
     showNotifDialog(
       t('flightNotifEnabled'),
       count > 0
@@ -1621,8 +1630,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const updateNotificationSettings = useCallback(async (
     patch: Partial<FlightNotificationSettings>,
   ) => {
+    const isCurrent = createNotificationScheduleCheck();
     const next = sanitizeNotificationSettings({ ...notifSettingsRef.current, ...patch });
     await persistNotificationSettings(next);
+    if (!isCurrent()) return;
 
     if (notifsEnabled && pinnedFlight) {
       const pinnedRaw = await AsyncStorage.getItem(PINNED_FLIGHT_KEY);
@@ -1630,14 +1641,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         try {
           const pinned = JSON.parse(pinnedRaw);
           const pinTab = pinned._pinTab || 'departures';
-          await schedulePinnedNotifications(pinned, pinTab, locale, next);
-          await showOrUpdatePinnedFlightNotification(pinned, pinTab, next.sticky);
+          await schedulePinnedNotifications(pinned, pinTab, locale, next, isCurrent);
+          await showOrUpdatePinnedFlightNotification(pinned, pinTab, next.sticky, isCurrent);
         } catch {}
       }
     }
 
     if (notifsEnabled) {
-      await scheduleNotificationsForCurrentShift(next);
+      await scheduleNotificationsForCurrentShift(next, isCurrent);
     }
   }, [locale, notifsEnabled, persistNotificationSettings, pinnedFlight, scheduleNotificationsForCurrentShift]);
 
@@ -1650,6 +1661,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   }, [notifsEnabled, scheduleNotificationsForCurrentShift, selectedAirlines]);
 
   const pinFlight = useCallback(async (item: any, direction: FlightDirection) => {
+    const isCurrent = createNotificationScheduleCheck();
     try {
       const id = item.flight?.identification?.number?.default;
       if (!id) return;
@@ -1658,9 +1670,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       await AsyncStorage.setItem(PINNED_FLIGHT_KEY, JSON.stringify(pinnedItem));
       setPinnedFlight(pinnedItem);
       if (notifsEnabled) {
-        try { await schedulePinnedNotifications(pinnedItem, tab, locale, notifSettingsRef.current); } catch (e) { devWarn('[pinnedNotif]', e); }
-        await showOrUpdatePinnedFlightNotification(pinnedItem, tab, notifSettingsRef.current.sticky);
-      } else {
+        try { await schedulePinnedNotifications(pinnedItem, tab, locale, notifSettingsRef.current, isCurrent); } catch (e) { devWarn('[pinnedNotif]', e); }
+        await showOrUpdatePinnedFlightNotification(pinnedItem, tab, notifSettingsRef.current.sticky, isCurrent);
+      } else if (isCurrent()) {
         await dismissPinnedFlightNotification();
       }
     } catch {}
