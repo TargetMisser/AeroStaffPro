@@ -60,10 +60,10 @@ const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const HOME_REST_TIMING = { startHour: 12, startMinute: 0, endHour: 14, endMinute: 0, allDay: true };
 type HomeShiftKind = 'today' | 'next' | 'rest' | 'none';
 
-function healthToneColor(tone: HomeHealthTone, fallback: string): string {
-  if (tone === 'ready') return '#10B981';
-  if (tone === 'missing') return '#EF4444';
-  return fallback;
+function healthToneColor(tone: HomeHealthTone, colors: ThemeColors): string {
+  if (tone === 'ready') return colors.success;
+  if (tone === 'missing') return colors.danger;
+  return colors.warning;
 }
 
 function healthIcon(id: HomeHealthChip['id']): keyof typeof MaterialIcons.glyphMap {
@@ -232,10 +232,10 @@ function EasyJetOverlapMonitor({ overlappingFlights, tickerMs, colors, t, locale
       padding: SPACING.lg,
     }}>
       {/* Header */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexShrink: 1 }}>
           <MaterialCommunityIcons name="radar" size={20} color="#FF6600" />
-          <Text style={{ fontSize: 13, fontWeight: '900', color: '#FF6600', letterSpacing: 1.2, textTransform: 'uppercase' }}>
+          <Text style={{ fontSize: 13, fontWeight: '800', color: colors.warning, letterSpacing: 0.4, flexShrink: 1 }}>
             easyJet Overlap Active
           </Text>
         </View>
@@ -299,7 +299,7 @@ function EasyJetOverlapMonitor({ overlappingFlights, tickerMs, colors, t, locale
 export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }) {
   const { colors, mode } = useAppTheme();
   const { airportCode } = useAirport();
-  const { t, months, locale, weatherMap } = useLanguage();
+  const { t, locale, weatherMap } = useLanguage();
   const isOperations = colors.isDark;
   const [timelineKey, setTimelineKey] = React.useState(0);
   React.useEffect(() => { if (isFocused) setTimelineKey(k => k + 1); }, [isFocused]);
@@ -711,33 +711,15 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} contentContainerStyle={{ paddingBottom: 96 }}>
-      {/* Top cards row: Weather + Date */}
-      <View style={s.topRow}>
-        <BoardReveal index={0} enabled={isOperations} style={{ flex: 1 }}>
-          <View style={s.weatherCard}>
-            {weather ? (
-              <>
-                <MaterialCommunityIcons
-                  name={weather.iconName as keyof typeof MaterialCommunityIcons.glyphMap}
-                  size={28}
-                  color={colors.primaryDark}
-                  style={s.weatherIcon}
-                />
-                <Text style={s.weatherTemp}>{weather.temp == null ? '--' : `${weather.temp}°`}</Text>
-                <Text style={s.weatherDesc}>{t('homeWeatherLocal')} • {weather.text}</Text>
-              </>
-            ) : (
-              <ActivityIndicator color={colors.primary} />
-            )}
-          </View>
-        </BoardReveal>
-        <BoardReveal index={1} enabled={isOperations}>
-          <View style={s.dateCard}>
-            <Text style={s.dateToday}>{t('homeToday')}</Text>
-            <Text style={s.dateNum}>{today.getDate()}</Text>
-            <Text style={s.dateMonth}>{months[today.getMonth()]}</Text>
-          </View>
-        </BoardReveal>
+      <View style={s.intro}>
+        <View style={s.introCopy}>
+          <Text style={s.introDate}>{today.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}</Text>
+          <Text accessibilityRole="header" style={s.introTitle}>{t('homeDayOverview')}</Text>
+        </View>
+        <View style={s.airportBadge}>
+          <MaterialIcons name="flight-takeoff" size={16} color={colors.primaryText} />
+          <Text style={s.airportCode}>{airportCode}</Text>
+        </View>
       </View>
 
       <BoardReveal index={2} enabled={isOperations}>
@@ -757,7 +739,7 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
               <MaterialIcons
                 name={operationalSummary.tone === 'active' ? 'play-arrow' : operationalSummary.tone === 'rest' ? 'hotel' : 'schedule'}
                 size={22}
-                color="#FFFFFF"
+                color={colors.isDark ? '#99F6E4' : '#FFD4B3'}
               />
             </View>
           </View>
@@ -765,30 +747,44 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
             <View style={s.summaryBadgeRow}>
               {operationalSummary.badges.map(badge => (
                 <View key={badge} style={s.summaryBadge}>
-                  <MaterialIcons name="push-pin" size={12} color={colors.primaryDark} />
+                  <MaterialIcons name="push-pin" size={12} color="#DCE8EF" />
                   <Text style={s.summaryBadgeText}>{badge}</Text>
                 </View>
               ))}
             </View>
           )}
-          <View style={s.healthGrid}>
-            {healthChips.map(chip => {
-              const tone = healthToneColor(chip.tone, colors.primary);
-              return (
-                <View key={chip.id} style={[s.healthChip, { borderColor: `${tone}55`, backgroundColor: `${tone}16` }]}>
-                  <MaterialIcons name={healthIcon(chip.id)} size={15} color={tone} />
-                  <View style={s.healthText}>
-                    <Text style={[s.healthLabel, { color: colors.textSub }]}>{chip.label}</Text>
-                    <Text numberOfLines={1} style={[s.healthValue, { color: chip.tone === 'missing' ? tone : colors.text }]}>
-                      {chip.value}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
+          <View style={s.weatherStrip}>
+            {weather ? (
+              <>
+                <MaterialCommunityIcons name={weather.iconName as keyof typeof MaterialCommunityIcons.glyphMap} size={22} color="#DCE8EF" />
+                <Text style={s.weatherTemp}>{weather.temp == null ? '—' : `${weather.temp}°`}</Text>
+                <Text style={s.weatherDesc}>{weather.text}</Text>
+              </>
+            ) : <ActivityIndicator color="#DCE8EF" />}
+            <Text style={s.weatherPlace}>{getAirportInfo(airportCode).city}</Text>
           </View>
         </View>
       </BoardReveal>
+
+      <Text accessibilityRole="header" style={s.sectionTitle}>{t('homeOverviewStatus')}</Text>
+      <View style={s.healthGrid}>
+        {healthChips.map(chip => {
+          const tone = healthToneColor(chip.tone, colors);
+          return (
+            <View key={chip.id} style={s.healthChip}>
+              <View style={[s.healthIcon, { backgroundColor: colors.cardSecondary }]}>
+                <MaterialIcons name={healthIcon(chip.id)} size={18} color={tone} />
+              </View>
+              <View style={s.healthText}>
+                <Text style={[s.healthLabel, { color: colors.textSub }]}>{chip.label}</Text>
+                <Text style={[s.healthValue, { color: chip.tone === 'missing' ? tone : colors.text }]}>
+                  {chip.value}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
 
       {/* Pinned flight */}
       {pinnedFlight && (
@@ -864,46 +860,47 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
 }
 
 function makeStyles(c: ThemeColors, isOperations = false) {
-  const operationPanel = isOperations ? 'rgba(2,8,12,0.64)' : c.card;
-  const operationBorder = isOperations ? 'rgba(45,212,191,0.30)' : c.glassBorder;
-  const operationShadow = isOperations ? 0 : undefined;
+  const operationPanel = c.card;
+  const operationBorder = c.glassBorder;
   return StyleSheet.create({
-    topRow: { flexDirection: 'row', gap: SPACING.md, padding: SPACING.lg, paddingBottom: SPACING.sm },
-    weatherCard: { flex: 1, backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, padding: SPACING.lg, alignItems: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: operationShadow ?? 0.12, shadowRadius: 12, elevation: isOperations ? 0 : 4, borderWidth: 1, borderColor: operationBorder },
-    weatherIcon: { marginBottom: SPACING.xs },
-    weatherTemp: { fontSize: isOperations ? 30 : 28, fontWeight: '800', color: c.primaryDark },
-    weatherDesc: { fontSize: 11, color: c.textSub, textAlign: 'center', marginTop: 2, letterSpacing: isOperations ? 0.4 : 0 },
-    dateCard: { width: isOperations ? 96 : 90, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryDark, borderRadius: isOperations ? 20 : 18, padding: 14, alignItems: 'center', justifyContent: 'center', shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.30, shadowRadius: 12, elevation: isOperations ? 0 : 6, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
-    dateToday: { ...TYPE.micro, color: isOperations ? 'rgba(153,246,228,0.72)' : 'rgba(255,255,255,0.6)', letterSpacing: 1.7 },
-    dateNum: { ...TYPE.display, color: isOperations ? c.primaryDark : '#fff' },
-    dateMonth: { fontSize: 12, color: isOperations ? c.textSub : 'rgba(255,255,255,0.7)', marginTop: 2 },
-    operationalCard: { marginHorizontal: SPACING.lg, marginTop: SPACING.sm, backgroundColor: operationPanel, borderRadius: isOperations ? 24 : 20, padding: SPACING.lg, borderWidth: 1, borderColor: operationBorder, gap: 13, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 12, elevation: isOperations ? 0 : 3 },
-    operationalHeader: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    operationalTitleBlock: { flex: 1, gap: 3 },
-    operationalKicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.8, color: isOperations ? 'rgba(153,246,228,0.70)' : c.textMuted },
-    operationalTitle: { ...(isOperations ? TYPE.titleLg : TYPE.title), color: c.text, letterSpacing: -0.5 },
-    operationalDetail: { fontSize: 13, lineHeight: 18, color: c.textSub },
-    operationalBeacon: { width: 48, height: 48, borderRadius: isOperations ? 16 : 24, alignItems: 'center', justifyContent: 'center', backgroundColor: c.neutral },
-    operationalBeaconActive: { backgroundColor: c.success },
-    operationalBeaconNext: { backgroundColor: c.primary },
-    operationalBeaconRest: { backgroundColor: c.info },
+    intro: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingHorizontal: SPACING.lg, paddingTop: SPACING.xxl, paddingBottom: SPACING.xl },
+    introCopy: { flex: 1, minWidth: 0, gap: 5 },
+    introDate: { ...TYPE.caption, color: c.textSub, textTransform: 'capitalize' },
+    introTitle: { fontSize: 28, lineHeight: 34, fontWeight: '800', letterSpacing: -1, color: c.text },
+    airportBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 9, backgroundColor: c.primaryLight, borderRadius: RADIUS.md },
+    airportCode: { ...TYPE.caption, fontWeight: '800', color: c.primaryText, letterSpacing: 0.6 },
+    operationalCard: { marginHorizontal: SPACING.lg, backgroundColor: c.isDark ? '#193340' : '#193747', borderRadius: 24, padding: SPACING.xl, borderWidth: 1, borderColor: c.isDark ? '#315261' : '#244858', gap: 16 },
+    operationalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+    operationalTitleBlock: { flex: 1, minWidth: 0, gap: 8 },
+    operationalKicker: { ...TYPE.overline, color: c.isDark ? '#99F6E4' : '#FFD4B3', letterSpacing: 1.8 },
+    operationalTitle: { fontSize: 26, lineHeight: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.6 },
+    operationalDetail: { fontSize: 15, lineHeight: 22, color: '#D0DFE7', fontVariant: ['tabular-nums'] },
+    operationalBeacon: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
+    operationalBeaconActive: { backgroundColor: 'rgba(52,211,153,0.14)' },
+    operationalBeaconNext: { backgroundColor: 'rgba(255,255,255,0.10)' },
+    operationalBeaconRest: { backgroundColor: 'rgba(96,165,250,0.14)' },
     summaryBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-    summaryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: RADIUS.pill, borderWidth: 1, borderColor: operationBorder, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, paddingHorizontal: 9, paddingVertical: 5 },
-    summaryBadgeText: { fontSize: 11, fontWeight: '900', color: c.primaryDark },
-    healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-    healthChip: { width: '48%', minWidth: 134, flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderRadius: 14, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 9 },
-    healthText: { flex: 1, minWidth: 0 },
-    healthLabel: { ...TYPE.glyph, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
-    healthValue: { fontSize: 12, fontWeight: '900', marginTop: 1 },
-    sectionTitle: { fontSize: 12, fontWeight: '800', color: isOperations ? 'rgba(153,246,228,0.66)' : c.textSub, letterSpacing: isOperations ? 1.6 : 0.5, marginHorizontal: SPACING.lg, marginTop: SPACING.lg, marginBottom: SPACING.sm, textTransform: 'uppercase' },
-    shiftCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: SPACING.lg, padding: isOperations ? 18 : 16, flexDirection: 'row', gap: 14, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.10, shadowRadius: 12, elevation: isOperations ? 0 : 4, minHeight: isOperations ? 104 : 90, borderWidth: 1, borderColor: operationBorder },
+    summaryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.10)', paddingHorizontal: 10, paddingVertical: 6 },
+    summaryBadgeText: { ...TYPE.caption, color: '#DCE8EF' },
+    weatherStrip: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACING.sm, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.16)', paddingTop: SPACING.lg },
+    weatherTemp: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
+    weatherDesc: { ...TYPE.caption, color: '#D0DFE7', flexShrink: 1 },
+    weatherPlace: { ...TYPE.caption, color: '#D0DFE7', marginLeft: 'auto', flexShrink: 1 },
+    healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginHorizontal: SPACING.lg },
+    healthChip: { flexBasis: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: c.glassBorder, backgroundColor: c.card, padding: SPACING.md },
+    healthIcon: { width: 32, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+    healthText: { flex: 1, minWidth: 0, gap: 3 },
+    healthLabel: { fontSize: 11, fontWeight: '500' },
+    healthValue: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
+    sectionTitle: { ...TYPE.subhead, color: c.text, marginHorizontal: SPACING.lg, marginTop: SPACING.xxl, marginBottom: SPACING.md },
+    shiftCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: SPACING.lg, padding: isOperations ? 18 : 16, flexDirection: 'row', gap: 14, shadowColor: '#172B3A', shadowOpacity: isOperations ? 0 : 0.04, shadowRadius: 12, elevation: 0, minHeight: isOperations ? 104 : 90, borderWidth: 1, borderColor: operationBorder },
     shiftStrip: { width: isOperations ? 5 : 4, borderRadius: RADIUS.pill, backgroundColor: c.primary, marginRight: 2 },
     shiftBadgeRow: { flexDirection: 'row', marginBottom: SPACING.sm },
-    inProgressBadge: { backgroundColor: isOperations ? 'rgba(45,212,191,0.14)' : '#D1FAE5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.xl, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' },
+    inProgressBadge: { backgroundColor: c.successSoft, paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.xl, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' },
     inProgressText: { ...TYPE.micro, color: isOperations ? c.primaryDark : c.success, letterSpacing: isOperations ? 1 : 0 },
     shiftTitle: { ...TYPE.headline, color: isOperations ? c.text : c.primaryDark, marginBottom: SPACING.xs },
-    shiftTime: { fontSize: isOperations ? 28 : 22, fontWeight: '900', color: isOperations ? c.primaryDark : c.primary, marginBottom: SPACING.xs, fontVariant: ['tabular-nums'] },
-    timelineCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.lg, shadowColor: c.isDark ? '#000000' : c.primary, shadowOpacity: isOperations ? 0 : 0.08, shadowRadius: 10, elevation: isOperations ? 0 : 3, borderWidth: 1, borderColor: operationBorder },
+    shiftTime: { fontSize: isOperations ? 28 : 22, fontWeight: '900', color: c.text, marginBottom: SPACING.xs, fontVariant: ['tabular-nums'] },
+    timelineCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.lg, shadowColor: '#172B3A', shadowOpacity: isOperations ? 0 : 0.04, shadowRadius: 10, elevation: 0, borderWidth: 1, borderColor: operationBorder },
     restRow: { flexDirection: 'row', alignItems: 'center' },
     restIconWrap: { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: c.success + '22', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
     restText: { fontSize: 18, fontWeight: '700', color: c.success },

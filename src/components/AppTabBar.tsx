@@ -96,16 +96,16 @@ function getSurfaceConfig(variant: AppTabBarVariant, isDark: boolean): SurfaceCo
   }
 
   return {
-    blurIntensity: 90,
+    blurIntensity: 24,
     blurTint: isDark ? 'dark' : 'light',
-    baseColor: isDark ? 'rgba(8,11,16,0.84)' : 'rgba(248,250,255,0.88)',
+    baseColor: isDark ? '#15232E' : '#FFFFFF',
     gradientColors: isDark
-      ? ['rgba(255,255,255,0.05)', 'rgba(9,11,15,0.66)']
-      : ['rgba(255,255,255,0.55)', 'rgba(255,244,230,0.34)'],
-    overlayColor: isDark ? 'rgba(0,0,0,0.40)' : 'rgba(255,255,255,0.10)',
-    borderColor: 'rgba(255,255,255,0.28)',
-    shadowColor: '#000000',
-    shadowOpacity: 0.24,
+      ? ['rgba(21,35,46,0.95)', 'rgba(21,35,46,0.95)']
+      : ['rgba(255,255,255,0.95)', 'rgba(255,255,255,0.95)'],
+    overlayColor: 'transparent',
+    borderColor: isDark ? '#304654' : '#DCE3E9',
+    shadowColor: '#172B3A',
+    shadowOpacity: 0.10,
   };
 }
 
@@ -140,15 +140,15 @@ function AppTab({
   const focusAmount = createFocusAmount(navigationProgress, index);
   const progressScale = focusAmount.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.98, 1.14],
+    outputRange: [1, 1.06],
   });
   const progressTranslateY = focusAmount.interpolate({
     inputRange: [0, 1],
-    outputRange: [2, -6],
+    outputRange: [0, -1],
   });
   const progressOpacity = focusAmount.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.62, 1],
+    outputRange: [1, 1],
   });
   const indicatorScale = focusAmount.interpolate({
     inputRange: [0, 1],
@@ -164,6 +164,7 @@ function AppTab({
       pressedScale={0.94}
       haptic="selection"
       accessibilityRole="button"
+      accessibilityLabel={label}
       accessibilityState={{ selected: focused }}
     >
       <Animated.View style={{ transform: [{ scale: progressScale }, { translateY: progressTranslateY }], alignItems: 'center' }}>
@@ -403,6 +404,8 @@ export default function AppTabBar({
               style={[
                 styles.detentSelector,
                   {
+                    backgroundColor: isDark ? 'rgba(45,212,191,0.12)' : '#FFF0E3',
+                    borderColor: 'transparent',
                     left: regularLayout.selectorLeft,
                     width: regularLayout.selectorWidth,
                     transform: [{ translateX: detentTranslateX }, { scale: detentScale }],
@@ -438,13 +441,13 @@ export default function AppTabBar({
 
 const styles = StyleSheet.create({
   surface: {
-    height: 66,
-    borderRadius: 33,
+    minHeight: 66,
+    borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 1,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 12,
+    elevation: 4,
   },
   opsSurface: {
     minHeight: 84,
@@ -458,16 +461,17 @@ const styles = StyleSheet.create({
   row: {
     flex: 1,
     flexDirection: 'row',
-    height: 66,
-    alignItems: 'center',
+    minHeight: 66,
+    alignItems: 'stretch',
     position: 'relative',
     paddingHorizontal: REGULAR_HORIZONTAL_PADDING,
+    paddingVertical: 5,
   },
   detentSelector: {
     position: 'absolute',
     top: 7,
     bottom: 7,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(45,212,191,0.22)',
     backgroundColor: 'rgba(45,212,191,0.10)',
@@ -485,26 +489,29 @@ const styles = StyleSheet.create({
   },
   tabPressable: {
     flex: 1,
-    height: 56,
+    minHeight: 56,
     zIndex: 1,
   },
   tab: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    height: 56,
+    minHeight: 56,
+    paddingVertical: 8,
   },
   label: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '600',
     marginTop: 3,
-    letterSpacing: 0.3,
+    letterSpacing: 0,
+    textAlign: 'center',
   },
   indicator: {
     position: 'absolute',
-    bottom: 4,
-    width: 18,
-    height: 3,
+    bottom: 2,
+    width: 12,
+    height: 2,
     borderRadius: RADIUS.pill,
   },
   opsDeck: {

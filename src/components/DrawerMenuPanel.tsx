@@ -92,17 +92,15 @@ function getDrawerSurface(c: ThemeColors, variant: DrawerMenuSurfaceVariant): Dr
   }
 
   return {
-    blurIntensity: c.isDark ? 72 : 58,
+    blurIntensity: 24,
     blurTint: c.isDark ? 'dark' : 'light',
-    baseColor: c.isDark ? 'rgba(8,12,18,0.86)' : 'rgba(248,250,255,0.90)',
-    gradientColors: c.isDark
-      ? ['rgba(255,255,255,0.05)', 'rgba(8,12,18,0.72)']
-      : ['rgba(255,255,255,0.60)', 'rgba(255,244,236,0.40)'],
-    overlayColor: c.isDark ? 'rgba(0,0,0,0.42)' : 'rgba(255,255,255,0.10)',
-    headerGradient: ['#C2410C', '#F97316', '#FB923C'],
-    accentColor: c.primary,
+    baseColor: c.card,
+    gradientColors: [c.card, c.card],
+    overlayColor: 'transparent',
+    headerGradient: ['#193747', '#1D4052', '#244858'],
+    accentColor: c.primaryText,
     iconBackground: c.primaryLight,
-    itemBackground: c.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.62)',
+    itemBackground: c.card,
     isOperations: false,
   };
 }

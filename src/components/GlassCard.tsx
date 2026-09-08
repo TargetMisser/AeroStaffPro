@@ -63,23 +63,21 @@ export default function GlassCard({
     ? {
         shadowColor: '#000000',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.45,
+        shadowOpacity: 0.12,
         shadowRadius: 24,
-        elevation: 12,
+        elevation: 0,
       }
     : {
-        shadowColor: colors.primary,
+        shadowColor: '#172B3A',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.12,
+        shadowOpacity: 0.04,
         shadowRadius: 20,
-        elevation: 6,
+        elevation: 0,
       };
 
   // Android fallback: no BlurView, opaque background
   const androidFallback: ViewStyle = {
-    backgroundColor: colors.isDark
-      ? 'rgba(28,28,32,0.96)'
-      : 'rgba(255,255,255,0.97)',
+    backgroundColor: v.bgOverlay,
   };
 
   if (!useBlur) {

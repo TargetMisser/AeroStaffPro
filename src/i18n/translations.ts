@@ -43,8 +43,8 @@ const it = {
   // Settings
   settingsTitle: 'Impostazioni',
   sectionTheme: 'TEMA',
-  themeLight: 'Chiaro', themeLightSub: 'Tema standard, sfondo bianco',
-  themeDark: 'Scuro', themeDarkSub: 'Tema control room con UI tecnica',
+  themeLight: 'Chiaro', themeLightSub: 'Toni chiari e accenti arancio',
+  themeDark: 'Scuro', themeDarkSub: 'Blu notte e accenti verde acqua',
   themeAuto: 'Automatico', themeAutoSub: 'Cambia in base all\'ora (chiaro 8-20, scuro altrimenti)',
   themeActive: 'Attivo', themeLoading: 'Caricamento tema…',
   sectionAccount: 'PROFILI',
@@ -174,6 +174,7 @@ const it = {
   calNoEmployees: 'Nessun dipendente trovato nei PDF selezionati',
   // Home
   homeToday: 'OGGI', homeCurrentShift: 'Turno Attuale',
+  homeDayOverview: 'La tua giornata', homeOverviewStatus: 'A colpo d’occhio', a11yOpenProfile: 'Apri profilo',
   homeShiftWork: 'Turno Lavoro', homeInProgress: 'IN CORSO',
   homeNextShift: 'Turno di domani', homeNextShiftBadge: 'DOMANI',
   homeRestDay: 'Giorno di Riposo', homeNoShift: 'Nessun turno per oggi',
@@ -370,8 +371,8 @@ const en: typeof it = {
   // Settings
   settingsTitle: 'Settings',
   sectionTheme: 'THEME',
-  themeLight: 'Light', themeLightSub: 'Standard theme, white background',
-  themeDark: 'Dark', themeDarkSub: 'Control-room theme with technical UI',
+  themeLight: 'Light', themeLightSub: 'Light surfaces with orange accents',
+  themeDark: 'Dark', themeDarkSub: 'Midnight blue with teal accents',
   themeAuto: 'Automatic', themeAutoSub: 'Switches based on time (light 8-20, dark otherwise)',
   themeActive: 'Active', themeLoading: 'Loading theme…',
   sectionAccount: 'PROFILES',
@@ -501,6 +502,7 @@ const en: typeof it = {
   calNoEmployees: 'No employees found in the selected PDF files',
   // Home
   homeToday: 'TODAY', homeCurrentShift: 'Current Shift',
+  homeDayOverview: 'Your day ahead', homeOverviewStatus: 'At a glance', a11yOpenProfile: 'Open profile',
   homeShiftWork: 'Work Shift', homeInProgress: 'IN PROGRESS',
   homeNextShift: "Tomorrow's shift", homeNextShiftBadge: 'TOMORROW',
   homeRestDay: 'Rest Day', homeNoShift: 'No shift today',

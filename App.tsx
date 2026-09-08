@@ -1,7 +1,6 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView as ExpoBlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -271,8 +270,7 @@ function AppInner() {
 
 
   const appBarTitle = overlay ? overlayTitles[overlay] : 'AeroStaff Pro';
-  const surfaceVariant = colors.isDark ? 'operations' : 'solid';
-  const isOperations = colors.isDark;
+  const surfaceVariant = 'app';
   const activeTabIndex = TABS.findIndex(tab => tab.id === activeTab);
   const tabInactiveColor = colors.tabIconInactive;
   const topInset = Math.max(insets.top, StatusBar.currentHeight ?? 0);
@@ -298,15 +296,6 @@ function AppInner() {
         ]}
       >
         <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.appBar }]} />
-        {isOperations && (
-          <LinearGradient
-            colors={['rgba(45,212,191,0.18)', 'rgba(2,8,12,0.00)', 'rgba(45,212,191,0.08)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        )}
         {overlay ? (
           <TactilePressable onPress={handleBack} animatedStyle={styles.iconBtn} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yBack')}>
             <MaterialIcons name="arrow-back" size={22} color={colors.primaryDark} />
@@ -319,17 +308,11 @@ function AppInner() {
         <View style={styles.titleRow}>
           <Text style={[styles.appBarTitle, { color: colors.text }]}>{appBarTitle}</Text>
         </View>
-        <TactilePressable onPress={() => setProfileModalOpen(true)} depth={3} pressedScale={0.94} haptic="selection">
-          <LinearGradient
-            colors={[colors.primaryLight, colors.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={[styles.avatar, isOperations && styles.avatarOperations]}
-          >
-            <Text style={styles.avatarText}>{profileInitials}</Text>
-          </LinearGradient>
+        <TactilePressable onPress={() => setProfileModalOpen(true)} depth={1} pressedScale={0.96} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yOpenProfile')}>
+          <View style={[styles.avatar, { backgroundColor: colors.primaryLight, borderColor: colors.border }]}>
+            <Text style={[styles.avatarText, { color: colors.primaryText }]}>{profileInitials}</Text>
+          </View>
         </TactilePressable>
-        {isOperations && <View style={styles.appBarRail} pointerEvents="none" />}
       </ExpoBlurView>
 
       {/* Screen Content */}
@@ -348,9 +331,9 @@ function AppInner() {
         ))}
       </View>
 
-      {/* Bottom Nav — Glassmorphic Floating Pill (hidden on overlay screens) */}
+      {/* Floating navigation, hidden on overlay screens. */}
       {!overlay && (
-        <View style={styles.tabBarWrapper} {...swipePan.panHandlers}>
+        <View style={[styles.tabBarWrapper, { bottom: Math.max(insets.bottom, 12) }]} {...swipePan.panHandlers}>
           <AppTabBar
             tabs={TABS.map(tab => ({ ...tab, label: tabLabels[tab.id] }))}
             activeTab={activeTab}
@@ -463,34 +446,16 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     overflow: 'hidden',
   },
-  iconBtn: { padding: 6, borderRadius: RADIUS.sm, marginRight: 6 },
+  iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: RADIUS.md, marginRight: 6 },
   titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-  appBarTitle: { fontSize: 18, fontWeight: '700', letterSpacing: 0.3 },
+  appBarTitle: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, flexShrink: 1 },
   avatar: {
-    width: 34, height: 34, borderRadius: 17,
+    width: 44, height: 44, borderRadius: 16, borderWidth: 1,
     justifyContent: 'center', alignItems: 'center',
     overflow: 'hidden',
   },
-  avatarOperations: {
-    borderWidth: 1,
-    borderColor: 'rgba(153,246,228,0.42)',
-    shadowColor: '#2DD4BF',
-    shadowOpacity: 0.24,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
-  },
   avatarText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
-  appBarRail: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 1,
-    backgroundColor: 'rgba(45,212,191,0.34)',
-  },
   content: { flex: 1 },
-  // ─── Glassmorphic floating tab bar ───
   tabBarWrapper: {
     position: 'absolute',
     bottom: 16,

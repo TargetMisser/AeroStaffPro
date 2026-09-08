@@ -921,7 +921,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
               key={dot.key ?? dot.color}
               style={[
                 s.dayDot,
-                { backgroundColor: isSelected ? (dot.selectedDotColor ?? '#fff') : dot.color },
+                { backgroundColor: isSelected ? colors.primaryText : dot.color },
               ]}
             />
           ))}
@@ -940,9 +940,9 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
               <Text style={s.pageTitle}>{t('calTitle')}</Text>
               <Text style={s.pageSub}>{monthLabel.toUpperCase()}</Text>
             </View>
-            <TouchableOpacity style={[s.importBtn, { backgroundColor: colors.primary }]} onPress={() => setEditMenuOpen(true)}>
-              <MaterialIcons name="edit-calendar" size={20} color="#fff" />
-              <Text style={s.importBtnText}>{t('calEditBtn')}</Text>
+            <TouchableOpacity style={[s.importBtn, { backgroundColor: colors.primaryLight }]} onPress={() => setEditMenuOpen(true)}>
+              <MaterialIcons name="edit-calendar" size={20} color={colors.primaryText} />
+              <Text style={[s.importBtnText, { color: colors.primaryText }]}>{t('calEditBtn')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -953,16 +953,16 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
             return (
               <TouchableOpacity
                 key={mode}
-                style={[s.viewModeBtn, active && { backgroundColor: colors.primary }]}
+                style={[s.viewModeBtn, active && { backgroundColor: colors.primaryLight }]}
                 activeOpacity={0.85}
                 onPress={() => setViewMode(mode)}
               >
                 <MaterialIcons
                   name={mode === 'calendar' ? 'calendar-month' : 'view-week'}
                   size={16}
-                  color={active ? '#fff' : colors.textSub}
+                  color={active ? colors.primaryText : colors.textSub}
                 />
-                <Text style={[s.viewModeText, { color: active ? '#fff' : colors.textSub }]}>
+                <Text style={[s.viewModeText, { color: active ? colors.primaryText : colors.textSub }]}>
                   {mode === 'calendar' ? t('calModeCalendar') : t('calModeWeek')}
                 </Text>
               </TouchableOpacity>
@@ -1508,8 +1508,8 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
-    pageHeader: { backgroundColor: c.card, paddingHorizontal: SPACING.lg, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: c.border },
-    pageTitle: { ...TYPE.title, color: c.primaryDark },
+    pageHeader: { backgroundColor: c.bg, paddingHorizontal: SPACING.lg, paddingTop: SPACING.xxl, paddingBottom: SPACING.md },
+    pageTitle: { ...TYPE.titleLg, color: c.text, letterSpacing: -0.6 },
     pageSub: { fontSize: 11, color: c.textSub, letterSpacing: 1.5, marginTop: 3 },
     importBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: SPACING.sm, borderRadius: 10 },
     importBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
@@ -1521,7 +1521,7 @@ function makeStyles(c: ThemeColors) {
       backgroundColor: c.card,
       borderRadius: RADIUS.lg,
       padding: 6,
-      borderWidth: c.isDark ? 1 : 0,
+      borderWidth: 1,
       borderColor: c.glassBorder,
     },
     viewModeBtn: {
@@ -1542,24 +1542,24 @@ function makeStyles(c: ThemeColors) {
       paddingHorizontal: SPACING.md,
       paddingTop: SPACING.sm,
       paddingBottom: 14,
-      shadowColor: c.primary,
-      shadowOpacity: c.isDark ? 0 : 0.08,
+      shadowColor: '#172B3A',
+      shadowOpacity: c.isDark ? 0 : 0.03,
       shadowRadius: 10,
-      elevation: c.isDark ? 0 : 4,
-      borderWidth: c.isDark ? 1 : 0,
+      elevation: 0,
+      borderWidth: 1,
       borderColor: c.glassBorder,
     },
     monthCalendar: { borderRadius: RADIUS.lg },
     monthCalendarHeader: { paddingBottom: SPACING.sm, marginBottom: 6 },
     dayCellWrap: { alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
     dayCellInner: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'transparent' },
-    dayCellInnerSelected: { backgroundColor: c.primary },
+    dayCellInnerSelected: { backgroundColor: c.primaryLight },
     dayCellInnerToday: { borderColor: c.primary, backgroundColor: c.primaryLight },
     dayCellInnerTodaySelected: { borderColor: c.primaryDark },
     dayCellText: { color: c.text, fontSize: 15, fontWeight: '600' },
     dayCellTextInactive: { color: c.textMuted },
     dayCellTextToday: { color: c.primaryDark, fontWeight: '800' },
-    dayCellTextSelected: { color: '#fff' },
+    dayCellTextSelected: { color: c.primaryText, fontWeight: '800' },
     dayDotsRow: { minHeight: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 3 },
     dayDot: { width: 5, height: 5, borderRadius: 2.5, marginHorizontal: 1.5 },
     calendarLegend: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.lg, paddingHorizontal: 6, paddingTop: SPACING.sm },
@@ -1578,11 +1578,11 @@ function makeStyles(c: ThemeColors) {
       marginHorizontal: SPACING.lg,
       marginTop: SPACING.lg,
       padding: SPACING.lg,
-      shadowColor: c.primary,
-      shadowOpacity: c.isDark ? 0 : 0.08,
+      shadowColor: '#172B3A',
+      shadowOpacity: c.isDark ? 0 : 0.03,
       shadowRadius: 10,
-      elevation: c.isDark ? 0 : 4,
-      borderWidth: c.isDark ? 1 : 0,
+      elevation: 0,
+      borderWidth: 1,
       borderColor: c.glassBorder,
     },
     weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
@@ -1627,10 +1627,10 @@ function makeStyles(c: ThemeColors) {
     weekRestText: { color: c.success, fontSize: 16, fontWeight: '900' },
     weekEmptyText: { color: c.textSub, fontSize: 14, fontWeight: '700' },
     mainCard: {
-      backgroundColor: c.card, borderRadius: 14,
+      backgroundColor: c.card, borderRadius: RADIUS.xl,
       marginHorizontal: SPACING.lg, marginTop: SPACING.lg,
       padding: SPACING.xl,
-      shadowColor: c.primary, shadowOpacity: c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: c.isDark ? 0 : 4, borderWidth: c.isDark ? 1 : 0, borderColor: c.glassBorder,
+      shadowColor: '#172B3A', shadowOpacity: c.isDark ? 0 : 0.03, shadowRadius: 10, elevation: 0, borderWidth: 1, borderColor: c.glassBorder,
       minHeight: 160,
     },
     selectedDayHeader: { marginBottom: SPACING.md, paddingRight: 90 },
@@ -1700,4 +1700,3 @@ function makeStyles(c: ThemeColors) {
     manualTypeInner: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   });
 }
-

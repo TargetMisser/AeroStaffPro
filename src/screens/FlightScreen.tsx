@@ -475,13 +475,13 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
             {!compactMode && <LogoPill iataCode={iataCode} airlineName={airline} color={color} />}
             <View style={s.headerText}>
               <View style={s.headerFlightRow}>
-                <Text numberOfLines={1} style={[s.headerFlightNum, isOperations && { color: brandAccent }]}>{flightNumber}</Text>
+                <Text numberOfLines={1} style={[s.headerFlightNum, isOperations && { color: colors.text }]}>{flightNumber}</Text>
                 <View style={[s.directionBadge, { borderColor: directionBadgeBorder, backgroundColor: directionBadgeBackground }]}>
                   <MaterialIcons name={isArrival ? 'flight-land' : 'flight-takeoff'} size={10} color={directionColor} />
                   <Text style={[s.directionBadgeText, { color: directionColor }]}>{directionLabel}</Text>
                 </View>
               </View>
-              {!compactMode && <Text numberOfLines={1} style={[s.headerAirlineName, isOperations && { color: hexToRgba(brandAccent, 0.82) }]}>{airline}</Text>}
+              {!compactMode && <Text numberOfLines={1} style={[s.headerAirlineName, isOperations && { color: colors.textSub }]}>{airline}</Text>}
             </View>
           </View>
           <ValueChangeFlash
@@ -707,7 +707,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
             style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
           >
             <MaterialIcons name="local-parking" size={11} color={isOperations ? brandAccent : colors.primary} />
-            <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>Stand {standLabel}</Text>
+            <Text style={[s.smPillText, isOperations && { color: colors.text }]}>Stand {standLabel}</Text>
           </ValueChangeFlash>
           {!isArrival ? (
             <>
@@ -717,7 +717,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
                 style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
               >
                 <MaterialIcons name="desktop-windows" size={11} color={isOperations ? brandAccent : colors.primary} />
-                <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>{t('flightCheckin')} {checkinLabel}</Text>
+                <Text style={[s.smPillText, isOperations && { color: colors.text }]}>{t('flightCheckin')} {checkinLabel}</Text>
               </ValueChangeFlash>
               <ValueChangeFlash
                 valueKey={gateLabel}
@@ -725,7 +725,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
                 style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
               >
                 <MaterialIcons name="meeting-room" size={11} color={isOperations ? brandAccent : colors.primary} />
-                <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>{t('flightGate')} {gateLabel}</Text>
+                <Text style={[s.smPillText, isOperations && { color: colors.text }]}>{t('flightGate')} {gateLabel}</Text>
               </ValueChangeFlash>
             </>
           ) : (
@@ -735,7 +735,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
               style={[s.smPill, isOperations && { backgroundColor: airlineTint, borderColor: airlineBorder }]}
             >
               <MaterialIcons name="luggage" size={11} color={isOperations ? brandAccent : colors.primary} />
-              <Text style={[s.smPillText, isOperations && { color: brandAccent }]}>{t('flightBelt')} {beltLabel}</Text>
+              <Text style={[s.smPillText, isOperations && { color: colors.text }]}>{t('flightBelt')} {beltLabel}</Text>
             </ValueChangeFlash>
           )}
           {renderFr24Button()}
@@ -1760,7 +1760,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           accessibilityLabel={t('flightFilterTitle')}
           accessibilityRole="button"
         >
-          <MaterialIcons name="filter-list" size={20} color={!allSelected ? '#fff' : '#64748B'} />
+          <MaterialIcons name="filter-list" size={20} color={!allSelected ? colors.primaryText : colors.textSub} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[s.notifBtn, notifsEnabled && s.notifBtnActive]}
@@ -1954,20 +1954,20 @@ function makeStyles(c: ThemeColors, isOperations = false) {
       shadowOpacity: c.isDark ? 0.25 : 0.16,
       shadowRadius: 7,
     };
-  const operationPanel = isOperations ? 'rgba(2,8,12,0.68)' : c.card;
-  const operationPanelStrong = isOperations ? 'rgba(7,20,20,0.94)' : c.cardSecondary;
-  const operationBorder = isOperations ? 'rgba(45,212,191,0.30)' : c.glassBorder;
-  const operationBorderSoft = isOperations ? 'rgba(45,212,191,0.18)' : c.border;
+  const operationPanel = c.card;
+  const operationPanelStrong = c.cardSecondary;
+  const operationBorder = c.glassBorder;
+  const operationBorderSoft = c.border;
 
   return StyleSheet.create({
-    pageHeader: { backgroundColor: isOperations ? 'rgba(2,8,12,0.90)' : c.card, paddingHorizontal: SPACING.lg, paddingVertical: isOperations ? 12 : 14, borderBottomWidth: 1, borderBottomColor: operationBorderSoft, flexDirection: 'row', alignItems: 'center' },
-    notifBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    pageHeader: { backgroundColor: c.bg, paddingHorizontal: SPACING.lg, paddingTop: SPACING.xxl, paddingBottom: SPACING.md, flexDirection: 'row', alignItems: 'center' },
+    notifBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     notifBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
     notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: RADIUS.sm, backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
     notifBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
-    pageTitle: { ...(isOperations ? TYPE.titleLg : TYPE.title), color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
+    pageTitle: { ...TYPE.titleLg, color: c.text, letterSpacing: -0.6 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
-    controlsRow: { flexDirection: 'row', gap: SPACING.sm, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
+    controlsRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, backgroundColor: c.bg },
     fr24ArrivalsBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: isOperations ? 14 : 8, backgroundColor: isOperations ? 'rgba(125,211,252,0.10)' : c.primaryLight, borderWidth: 1, borderColor: isOperations ? 'rgba(125,211,252,0.28)' : c.primary },
     fr24ArrivalsBtnText: { fontSize: 10, lineHeight: 13, fontWeight: '900', color: c.primaryDark, letterSpacing: 0.25 },
     sourceRow: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: SPACING.sm, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: SPACING.lg },
@@ -1975,12 +1975,12 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     sourceBadgeText: { flexShrink: 1, flexWrap: 'wrap', fontSize: 11, lineHeight: 15, fontWeight: '800', color: c.primaryDark },
     refreshBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: RADIUS.pill, backgroundColor: isOperations ? 'rgba(15,23,42,0.82)' : c.cardSecondary, borderWidth: 1, borderColor: operationBorderSoft },
     refreshBadgeText: { fontSize: 11, fontWeight: '800', color: c.textSub },
-    segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
-    segBtn: { flex: 1, minHeight: 44, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', justifyContent: 'center', borderRadius: isOperations ? 11 : 6 },
-    segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },
+    segment: { flex: 1, flexDirection: 'row', backgroundColor: c.cardSecondary, borderRadius: 14, padding: 4, borderWidth: 1, borderColor: operationBorderSoft },
+    segBtn: { flex: 1, minHeight: 44, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+    segBtnActive: { backgroundColor: c.card, borderWidth: 1, borderColor: operationBorder },
     segBtnText: { ...TYPE.caption, color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
     segBtnTextActive: { color: c.primaryText, fontWeight: '800' },
-    card: { backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 12, elevation: isOperations || c.isDark ? 0 : 4, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
+    card: { backgroundColor: operationPanel, borderRadius: isOperations ? 20 : 18, marginBottom: 10, overflow: 'hidden', shadowColor: '#172B3A', shadowOpacity: 0, shadowRadius: 12, elevation: 0, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
     departureCard: { minHeight: isOperations ? 300 : 330 },
     cardCompact: { minHeight: 0 },
     cardShift: { borderWidth: 1.5, borderColor: c.warning },
@@ -2037,8 +2037,8 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     opsTime: { fontSize: 15, lineHeight: 19, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
     pinBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
-    filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
-    filterBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
+    filterBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    filterBtnActive: { backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.primaryText },
     fr24FlightBtn: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: c.primary, backgroundColor: hexToRgba(c.primary, 0.1) },
     fr24FlightBtnDisabled: { borderColor: operationBorderSoft, backgroundColor: operationPanelStrong },
     fr24FlightBtnText: { fontSize: 10, lineHeight: 13, fontWeight: '900', color: c.primary, letterSpacing: 0.4 },

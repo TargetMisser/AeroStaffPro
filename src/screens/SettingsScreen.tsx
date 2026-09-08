@@ -97,17 +97,17 @@ const THEME_OPTIONS: ThemeOption[] = [
   {
     id: 'light',
     label: 'Chiaro',
-    sublabel: 'Tema standard, sfondo bianco',
+    sublabel: 'Toni chiari e accenti arancio',
     icon: 'light-mode',
-    previewBg: '#F3F4F6',
+    previewBg: '#F3F5F7',
     previewAccent: '#F47B16',
   },
   {
     id: 'dark',
     label: 'Scuro',
-    sublabel: 'Tema control room con UI tecnica',
+    sublabel: 'Blu notte e accenti verde acqua',
     icon: 'dashboard',
-    previewBg: '#0B1114',
+    previewBg: '#0D171F',
     previewAccent: '#2DD4BF',
   },
   {
