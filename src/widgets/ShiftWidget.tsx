@@ -1,346 +1,107 @@
 import React from 'react';
+import { WEIGHT } from '../theme/typography';
 import { FlexWidget, TextWidget, ListWidget } from 'react-native-android-widget';
 import type { ThemeMode, ThemeSnapshotColors } from '../utils/themeMode';
-import type { WidgetData, WidgetFlight, WidgetPresentation } from './widgetTaskHandler';
+import type { WidgetData, WidgetFlight } from './widgetTaskHandler';
 import { getWidgetThemePalette, type WidgetThemePalette } from './widgetTheme';
-import { WEIGHT } from '../theme/typography';
-
-const PILL_R = 10;
+import { getWidgetFlightDetails, getWidgetLayout, getWidgetShiftHeading, getWidgetStatusLabel } from './widgetLayout';
 
 type ShiftWidgetProps = {
   data: WidgetData;
   themeMode?: ThemeMode;
   themeSnapshot?: ThemeSnapshotColors | null;
+  width?: number;
+  height?: number;
 };
+type Layout = ReturnType<typeof getWidgetLayout>;
 
-function FlightRow({
-  flight,
-  index,
-  theme,
-}: {
-  flight: WidgetFlight;
-  index: number;
-  theme: WidgetThemePalette;
-}) {
-  const pinned = flight.isPinned === true;
+function FlightRow({ flight, theme, layout }: { flight: WidgetFlight; theme: WidgetThemePalette; layout: Layout }) {
+  const details = layout.showDetails ? getWidgetFlightDetails(flight) : '';
+  const accessibilityLabel = `${flight.isPinned ? 'Volo seguito, ' : ''}${flight.flightNumber}, ${flight.destinationIata}, partenza ${flight.departureTime}. Check-in ${flight.ciOpen}–${flight.ciClose}. Gate ${flight.gateOpen}–${flight.gateClose}.${details ? ' ' + details : ''}`;
   return (
     <FlexWidget
-      style={{
-        width: 'match_parent',
-        paddingVertical: 8,
-        paddingHorizontal: 12,
-        backgroundColor: pinned ? theme.pinnedBg : (index % 2 === 0 ? theme.cardOdd : theme.cardEven),
-        flexDirection: 'column',
-        ...(pinned ? { borderLeftWidth: 3, borderLeftColor: theme.accent } : {}),
-      }}
+      style={{ width: 'match_parent', padding: layout.compact ? 10 : 12, marginBottom: 8, backgroundColor: flight.isPinned ? theme.pinnedBg : theme.cardOdd, borderRadius: 16, borderWidth: 1, borderColor: flight.isPinned ? theme.accent : theme.border }}
       clickAction="OPEN_APP"
+      accessibilityLabel={accessibilityLabel}
     >
-      <FlexWidget
-        style={{
-          width: 'match_parent',
-          flexDirection: 'row',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <FlexWidget style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <FlexWidget
-            style={{
-              backgroundColor: flight.airlineColor,
-              borderRadius: PILL_R,
-              paddingHorizontal: 8,
-              paddingVertical: 3,
-            }}
-          >
-            <TextWidget
-              text={flight.flightNumber}
-              style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.airlineText }}
-            />
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
+        <FlexWidget style={{ width: 3, height: 24, borderRadius: 2, backgroundColor: flight.airlineColor, marginRight: 8 }} />
+        <FlexWidget style={{ flex: 1, width: 0 }}>
+          <TextWidget text={flight.flightNumber + (flight.isPinned ? ' · SEGUITO' : '')} maxLines={1} truncate="END" style={{ color: flight.isPinned ? theme.accentText : theme.muted, fontSize: 10, fontWeight: WEIGHT.medium }} />
+          <TextWidget text={flight.destinationIata} maxLines={1} truncate="END" style={{ color: theme.text, fontSize: layout.compact ? 15 : 18, fontWeight: WEIGHT.semibold }} />
+        </FlexWidget>
+        <TextWidget text={flight.departureTime} maxLines={1} style={{ fontSize: layout.compact ? 21 : 24, fontWeight: WEIGHT.semibold, color: theme.text, marginLeft: 8 }} />
+      </FlexWidget>
+      {!layout.minimal && (
+        <FlexWidget style={{ width: 'match_parent', marginTop: 8 }}>
+          <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center' }}>
+            <TextWidget text="Check-in" style={{ fontSize: 11, color: theme.accentText }} />
+            <FlexWidget style={{ flex: 1 }} />
+            <TextWidget text={`${flight.ciOpen} – ${flight.ciClose}`} style={{ fontSize: 12, fontWeight: WEIGHT.medium, color: theme.text }} />
           </FlexWidget>
-          <FlexWidget
-            style={{
-              backgroundColor: theme.chipBg,
-              borderRadius: PILL_R,
-              paddingHorizontal: 7,
-              paddingVertical: 3,
-              marginLeft: 6,
-            }}
-          >
-            <TextWidget
-              text={flight.destinationIata}
-              style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.text }}
-            />
+          <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', marginTop: 3 }}>
+            <TextWidget text="Gate" style={{ fontSize: 11, color: theme.gate }} />
+            <FlexWidget style={{ flex: 1 }} />
+            <TextWidget text={`${flight.gateOpen} – ${flight.gateClose}`} style={{ fontSize: 12, fontWeight: WEIGHT.medium, color: theme.text }} />
           </FlexWidget>
         </FlexWidget>
-        <TextWidget
-          text={flight.departureTime}
-          style={{ fontSize: 15, fontWeight: WEIGHT.semibold, color: pinned ? theme.accent : theme.text }}
-        />
-      </FlexWidget>
-
-      <FlexWidget
-        style={{ width: 'match_parent', flexDirection: 'row', marginTop: 5 }}
-      >
-        <FlexWidget
-          style={{
-            backgroundColor: theme.accentBg,
-            borderRadius: PILL_R,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <TextWidget text="CI" style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.accentText }} />
-          <TextWidget text={` ${flight.ciOpen}-${flight.ciClose}`} style={{ fontSize: 12, color: theme.accentText }} />
-        </FlexWidget>
-        <FlexWidget
-          style={{
-            backgroundColor: theme.gateBg,
-            borderRadius: PILL_R,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            marginLeft: 6,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <TextWidget text="Gate" style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.gate }} />
-          <TextWidget text={` ${flight.gateOpen}-${flight.gateClose}`} style={{ fontSize: 12, color: theme.gate }} />
-        </FlexWidget>
-      </FlexWidget>
-
-      <FlexWidget
-        style={{ width: 'match_parent', flexDirection: 'row', marginTop: 4 }}
-      >
-        <FlexWidget
-          style={{
-            backgroundColor: theme.detailBg,
-            borderRadius: PILL_R,
-            paddingHorizontal: 7,
-            paddingVertical: 2,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <TextWidget text="Stand " style={{ fontSize: 10, fontWeight: WEIGHT.semibold, color: theme.muted }} />
-          <TextWidget text={flight.stand ?? '-'} style={{ fontSize: 10, color: theme.text }} />
-        </FlexWidget>
-        <FlexWidget
-          style={{
-            backgroundColor: theme.detailBg,
-            borderRadius: PILL_R,
-            paddingHorizontal: 7,
-            paddingVertical: 2,
-            marginLeft: 5,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <TextWidget text="Banco " style={{ fontSize: 10, fontWeight: WEIGHT.semibold, color: theme.muted }} />
-          <TextWidget text={flight.checkin ?? '-'} style={{ fontSize: 10, color: theme.text }} />
-        </FlexWidget>
-        <FlexWidget
-          style={{
-            backgroundColor: theme.detailBg,
-            borderRadius: PILL_R,
-            paddingHorizontal: 7,
-            paddingVertical: 2,
-            marginLeft: 5,
-            flexDirection: 'row',
-            alignItems: 'center',
-          }}
-        >
-          <TextWidget text="Uscita " style={{ fontSize: 10, fontWeight: WEIGHT.semibold, color: theme.muted }} />
-          <TextWidget text={flight.gate ?? '-'} style={{ fontSize: 10, color: theme.text }} />
-        </FlexWidget>
-      </FlexWidget>
+      )}
+      {!!details && <TextWidget text={details} maxLines={2} truncate="END" style={{ fontSize: 10, color: theme.muted, marginTop: 7 }} />}
     </FlexWidget>
   );
 }
 
-function Header({ label, presentation, theme }: { label?: string; presentation?: WidgetPresentation; theme: WidgetThemePalette }) {
+function EmptyState({ data, theme, compact }: { data: WidgetData; theme: WidgetThemePalette; compact: boolean }) {
+  const isRest = data.state === 'rest';
+  const isError = data.state === 'error';
+  const title = isRest ? 'Giorno di riposo' : isError ? 'Dati non disponibili' : data.state === 'work_empty' ? 'Nessuna partenza' : 'Nessun turno oggi';
+  const hint = isRest ? 'La giornata è tua.' : isError ? 'Tocca Aggiorna per riprovare.' : data.state === 'work_empty' ? 'Nessun volo da mostrare per il turno.' : 'Apri AeroStaff per vedere il calendario.';
   return (
-    <FlexWidget
-      style={{
-        width: 'match_parent',
-        flexDirection: 'column',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        overflow: 'hidden',
-      }}
-      clickAction="OPEN_APP"
-    >
-      <FlexWidget
-        style={{
-          width: 'match_parent',
-          height: 3,
-          backgroundColor: theme.accent,
-        }}
-      />
-      <FlexWidget
-        style={{
-          width: 'match_parent',
-          backgroundColor: theme.headerBg,
-          paddingVertical: 10,
-          paddingHorizontal: 14,
-          flexDirection: 'row',
-          alignItems: 'center',
-        }}
-      >
-        <FlexWidget
-          style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.accent, marginRight: 8 }}
-        />
-        <TextWidget
-          text={label ? `${presentation?.modeLabel ?? 'Turno'}  ${label}` : 'AeroStaff Pro'}
-          style={{ fontSize: 14, fontWeight: WEIGHT.semibold, color: theme.text }}
-        />
-      </FlexWidget>
+    <FlexWidget style={{ flex: 1, height: 0, width: 'match_parent', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12 }} clickAction="OPEN_APP" accessibilityLabel={`${title}. ${hint}`}>
+      <FlexWidget style={{ width: 40, height: 4, borderRadius: 2, marginBottom: 14, backgroundColor: isRest ? theme.restAccent : isError ? theme.errorAccent : theme.accent }} />
+      <TextWidget text={title} maxLines={2} style={{ fontSize: compact ? 18 : 22, fontWeight: WEIGHT.semibold, color: theme.text, textAlign: 'center' }} />
+      <TextWidget text={hint} maxLines={3} style={{ fontSize: 12, color: theme.muted, textAlign: 'center', marginTop: 6 }} />
     </FlexWidget>
   );
 }
 
-function Footer({ updatedAt, presentation, theme }: { updatedAt: string; presentation?: WidgetPresentation; theme: WidgetThemePalette }) {
-  const freshnessLabel = presentation?.freshness === 'offline'
-    ? 'OFFLINE'
-    : presentation?.freshness === 'stale'
-      ? 'DATI VECCHI'
-      : 'LIVE';
-  const workloadLabel = presentation?.mode === 'load'
-    ? ` · ${presentation.workloadCount} voli/${presentation.workloadWindowMinutes}m`
-    : '';
-  const statusColor = presentation?.freshness === 'fresh' ? theme.accent : theme.errorAccent;
-  return (
-    <FlexWidget
-      style={{
-        width: 'match_parent',
-        backgroundColor: theme.headerBg,
-        paddingVertical: 6,
-        paddingHorizontal: 14,
-        borderBottomLeftRadius: 20,
-        borderBottomRightRadius: 20,
-        flexDirection: 'row',
-        alignItems: 'center',
-      }}
-      clickAction="OPEN_APP"
-    >
-      <FlexWidget
-        style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor, marginRight: 6 }}
-      />
-      <TextWidget
-        text={`${presentation?.showDataAge === false ? '' : `${freshnessLabel} · `}Aggiornato: ${updatedAt || '--:--'}${workloadLabel}`}
-        style={{ fontSize: 10, color: theme.muted }}
-      />
-    </FlexWidget>
-  );
-}
-
-export function ShiftWidget({ data, themeMode = 'light', themeSnapshot }: ShiftWidgetProps) {
+export function ShiftWidget({ data, themeMode = 'light', themeSnapshot, width = 320, height = 320 }: ShiftWidgetProps) {
   const theme = getWidgetThemePalette(themeMode, themeSnapshot);
-  const rootStyle = {
-    height: 'match_parent' as const,
-    width: 'match_parent' as const,
-    backgroundColor: theme.bg,
-    borderRadius: 20,
-    flexDirection: 'column' as const,
-    overflow: 'hidden' as const,
-  };
-
-  if (data.state === 'rest') {
-    return (
-      <FlexWidget style={rootStyle} clickAction="OPEN_APP">
-        <FlexWidget style={{ width: 'match_parent', height: 3, backgroundColor: theme.restAccent }} />
-        <FlexWidget
-          style={{ flex: 1, width: 'match_parent', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}
-        >
-          <FlexWidget
-            style={{
-              backgroundColor: theme.restBg,
-              borderRadius: 16,
-              paddingHorizontal: 14,
-              paddingVertical: 8,
-              flexDirection: 'row',
-              alignItems: 'center',
-            }}
-          >
-            <FlexWidget
-              style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: theme.restAccent, marginRight: 6 }}
-            />
-            <TextWidget
-              text="RIPOSO"
-              style={{ fontSize: 13, fontWeight: WEIGHT.semibold, color: theme.restAccent }}
-            />
-          </FlexWidget>
-          <FlexWidget style={{ width: 'match_parent', alignItems: 'center', marginTop: 8 }}>
-            <TextWidget
-              text="Giorno di Riposo"
-              style={{ fontSize: 18, fontWeight: WEIGHT.semibold, color: theme.text, textAlign: 'center' }}
-            />
-          </FlexWidget>
-        </FlexWidget>
-      </FlexWidget>
-    );
-  }
-
-  if (data.state === 'no_shift') {
-    return (
-      <FlexWidget style={rootStyle} clickAction="OPEN_APP">
-        <FlexWidget style={{ width: 'match_parent', height: 3, backgroundColor: theme.accent }} />
-        <FlexWidget
-          style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}
-        >
-          <TextWidget
-            text="Nessun turno oggi"
-            style={{ fontSize: 16, color: theme.muted }}
-          />
-        </FlexWidget>
-      </FlexWidget>
-    );
-  }
-
-  if (data.state === 'error') {
-    return (
-      <FlexWidget style={rootStyle} clickAction="REFRESH">
-        <FlexWidget style={{ width: 'match_parent', height: 3, backgroundColor: theme.errorAccent }} />
-        <FlexWidget
-          style={{ flex: 1, justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}
-        >
-          <TextWidget
-            text="Aggiornamento fallito"
-            style={{ fontSize: 14, color: theme.errorAccent }}
-          />
-          <TextWidget
-            text="Tocca per riprovare"
-            style={{ fontSize: 12, color: theme.muted, marginTop: 4 }}
-          />
-        </FlexWidget>
-      </FlexWidget>
-    );
-  }
-
-  if (data.state === 'work_empty') {
-    return (
-      <FlexWidget style={rootStyle} clickAction="OPEN_APP">
-        <Header label={data.shiftLabel} presentation={data.presentation} theme={theme} />
-        <FlexWidget
-          style={{ flex: 1, width: 'match_parent', justifyContent: 'center', alignItems: 'center' }}
-        >
-          <TextWidget text="Nessuna partenza" style={{ fontSize: 14, color: theme.muted }} />
-        </FlexWidget>
-        <Footer updatedAt={data.updatedAt} presentation={data.presentation} theme={theme} />
-      </FlexWidget>
-    );
-  }
-
+  const layout = getWidgetLayout(width, height);
+  const hasShift = data.state === 'work' || data.state === 'work_empty';
+  const heading = hasShift ? getWidgetShiftHeading(data.shiftLabel) : null;
+  const status = getWidgetStatusLabel(data);
+  const context = hasShift && data.presentation?.mode === 'load'
+    ? `${data.presentation.workloadCount} voli / ${data.presentation.workloadWindowMinutes} min`
+    : hasShift && data.presentation?.mode === 'pinned'
+      ? (data.state === 'work' && data.flights.some(flight => flight.isPinned) ? 'Volo seguito' : 'Prossimo volo')
+      : '';
   return (
-    <FlexWidget style={rootStyle}>
-      <Header label={data.shiftLabel} presentation={data.presentation} theme={theme} />
-      <ListWidget style={{ height: 'match_parent', width: 'match_parent' }}>
-        {data.flights.map((flight, i) => (
-          <FlightRow key={`${flight.flightNumber}-${i}`} flight={flight} index={i} theme={theme} />
-        ))}
-      </ListWidget>
-      <Footer updatedAt={data.updatedAt} presentation={data.presentation} theme={theme} />
+    <FlexWidget style={{ width: 'match_parent', height: 'match_parent', backgroundColor: theme.bg, borderRadius: 24, borderWidth: 1, borderColor: theme.border, paddingTop: 6, paddingBottom: 6, overflow: 'hidden' }} accessibilityLabel="AeroStaff Pro, turno e voli">
+      <FlexWidget style={{ width: 'match_parent', flexDirection: 'row', alignItems: 'center', paddingLeft: layout.horizontalPadding, paddingRight: 6 }}>
+        <FlexWidget style={{ flex: 1, width: 0 }} clickAction="OPEN_APP" accessibilityLabel="Apri AeroStaff Pro">
+          <TextWidget text="AEROSTAFF PRO" maxLines={1} style={{ fontSize: 10, fontWeight: WEIGHT.semibold, letterSpacing: 1, color: theme.accentText }} />
+        </FlexWidget>
+        <FlexWidget style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }} clickAction="REFRESH" accessibilityLabel="Aggiorna widget">
+          <FlexWidget style={{ width: 32, height: 32, borderRadius: 12, backgroundColor: theme.accentBg, justifyContent: 'center', alignItems: 'center' }}>
+            <TextWidget text="↻" allowFontScaling={false} style={{ fontSize: 24, color: theme.accentText }} />
+          </FlexWidget>
+        </FlexWidget>
+      </FlexWidget>
+      {heading && (
+        <FlexWidget style={{ width: 'match_parent', paddingHorizontal: layout.horizontalPadding, paddingBottom: layout.minimal ? 6 : 10 }} clickAction="OPEN_APP" accessibilityLabel={`${heading.day} ${heading.time}${context ? ', ' + context : ''}`}>
+          {!layout.minimal && <TextWidget text={heading.day + (context ? ' · ' + context : '')} maxLines={1} truncate="END" style={{ fontSize: 10, color: theme.muted, fontWeight: WEIGHT.medium, marginBottom: 3 }} />}
+          <TextWidget text={(layout.minimal && heading.day === 'DOMANI' ? 'Domani ' : '') + heading.time} maxLines={1} style={{ fontSize: layout.compact ? 22 : 26, adjustsFontSizeToFit: true, fontWeight: WEIGHT.semibold, color: theme.text }} />
+        </FlexWidget>
+      )}
+      {data.state === 'work' && data.flights.length > 0 ? (
+        <FlexWidget style={{ flex: 1, height: 0, width: 'match_parent', paddingHorizontal: layout.horizontalPadding }}>
+          <ListWidget style={{ width: 'match_parent', height: 'match_parent' }}>
+            {data.flights.map((flight, index) => <FlightRow key={`${flight.flightNumber}-${index}`} flight={flight} theme={theme} layout={layout} />)}
+          </ListWidget>
+        </FlexWidget>
+      ) : <EmptyState data={data.state === 'work' ? { ...data, state: 'work_empty' } : data} theme={theme} compact={layout.compact} />}
+      {!!status && <TextWidget text={status} maxLines={1} truncate="END" style={{ fontSize: 10, color: hasShift && data.presentation?.freshness === 'offline' ? theme.errorAccent : theme.muted, paddingHorizontal: layout.horizontalPadding, paddingTop: 7, paddingBottom: 3 }} />}
     </FlexWidget>
   );
 }

@@ -331,6 +331,8 @@ async function renderThemedWidget(props: WidgetTaskHandlerProps, data: WidgetDat
   props.renderWidget(
     <ShiftWidget
       data={data}
+      width={props.widgetInfo.width}
+      height={props.widgetInfo.height}
       themeMode={themeMode}
       themeSnapshot={themeSnapshot}
     />,

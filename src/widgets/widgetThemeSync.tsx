@@ -17,9 +17,11 @@ export async function requestShiftWidgetUpdate(
   const { themeMode, themeSnapshot } = await getStoredWidgetThemeProps(themeModeOverride);
   await requestWidgetUpdate({
     widgetName: 'ShiftFlights',
-    renderWidget: () => (
+    renderWidget: ({ width, height }) => (
       <ShiftWidget
         data={data}
+        width={width}
+        height={height}
         themeMode={themeMode}
         themeSnapshot={themeSnapshot}
       />
