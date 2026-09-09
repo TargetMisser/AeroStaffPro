@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
   Animated,
   type GestureResponderEvent,
@@ -26,8 +26,8 @@ type TactilePressableProps = PressableProps & {
 export default function TactilePressable({
   children,
   animatedStyle,
-  depth = 4,
-  pressedScale = 0.975,
+  depth = 1,
+  pressedScale = 0.985,
   haptic = false,
   onPress,
   onPressIn,
@@ -38,9 +38,20 @@ export default function TactilePressable({
   const reducedMotion = useReducedMotionPreference();
   const press = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => {
+    press.stopAnimation();
+    press.setValue(0);
+    return () => press.stopAnimation();
+  }, [disabled, press, reducedMotion]);
+
   const animateTo = useCallback(
     (value: number) => {
+      press.stopAnimation();
       if (reducedMotion) {
+        press.setValue(0);
+        return;
+      }
+      if (value === 1) {
         Animated.timing(press, {
           toValue: value,
           duration: motionDurations.instant,
@@ -84,11 +95,11 @@ export default function TactilePressable({
 
   const translateY = press.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, reducedMotion ? Math.min(depth, 1) : depth],
+    outputRange: [0, reducedMotion ? 0 : depth],
   });
   const scale = press.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, reducedMotion ? 0.995 : pressedScale],
+    outputRange: [1, reducedMotion ? 1 : pressedScale],
   });
 
   return (

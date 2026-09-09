@@ -1,3 +1,4 @@
+import ScreenHeading, { ScreenAction } from '../components/ScreenHeading';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity,
@@ -934,18 +935,9 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 96 }}>
         {/* Page Header */}
-        <View style={s.pageHeader}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <View>
-              <Text style={s.pageTitle}>{t('calTitle')}</Text>
-              <Text style={s.pageSub}>{monthLabel.toUpperCase()}</Text>
-            </View>
-            <TouchableOpacity style={[s.importBtn, { backgroundColor: colors.primaryLight }]} onPress={() => setEditMenuOpen(true)}>
-              <MaterialIcons name="edit-calendar" size={20} color={colors.primaryText} />
-              <Text style={[s.importBtnText, { color: colors.primaryText }]}>{t('calEditBtn')}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ScreenHeading title={t('calTitle')} subtitle={monthLabel} icon="calendar-month">
+          <ScreenAction label={t('calEditBtn')} icon="edit-calendar" onPress={() => setEditMenuOpen(true)} />
+        </ScreenHeading>
 
         <View style={s.viewModeRow}>
           {(['week', 'calendar'] as const).map(mode => {
@@ -955,6 +947,8 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                 key={mode}
                 style={[s.viewModeBtn, active && { backgroundColor: colors.primaryLight }]}
                 activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
                 onPress={() => setViewMode(mode)}
               >
                 <MaterialIcons
@@ -1197,7 +1191,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                             <Text style={s.weekRestText}>{t('calRestDay')}</Text>
                           </View>
                         ) : (
-                          <Text style={s.weekEmptyText}>{t('calNoShift')}</Text>
+                          <Text style={s.weekEmptyText}>{t('printCalNoShift')}</Text>
                         )}
                       </View>
                     </TouchableOpacity>
@@ -1508,11 +1502,6 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
-    pageHeader: { backgroundColor: c.bg, paddingHorizontal: SPACING.lg, paddingTop: SPACING.xxl, paddingBottom: SPACING.md },
-    pageTitle: { ...TYPE.titleLg, color: c.text, letterSpacing: -0.6 },
-    pageSub: { fontSize: 11, color: c.textSub, letterSpacing: 1.5, marginTop: 3 },
-    importBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: SPACING.sm, borderRadius: 10 },
-    importBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
     viewModeRow: {
       flexDirection: 'row',
       gap: SPACING.sm,
@@ -1526,6 +1515,7 @@ function makeStyles(c: ThemeColors) {
     },
     viewModeBtn: {
       flex: 1,
+      minHeight: 44,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',

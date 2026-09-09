@@ -1,3 +1,4 @@
+import ScreenHeading from '../components/ScreenHeading';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
@@ -150,13 +151,7 @@ export default function NotepadScreen() {
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <View style={styles.headerIcon}><MaterialIcons name="edit-note" size={24} color={colors.primary} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Note e consegne</Text>
-            <Text style={styles.subtitle}>Appunti personali e passaggio turno strutturato</Text>
-          </View>
-        </View>
+        <ScreenHeading inset title={t('uiNotesTitle')} subtitle={t('uiNotesSubtitle')} icon="edit-note" />
 
         <View style={styles.noteCard}>
           <View style={styles.cardHeader}>
@@ -178,8 +173,8 @@ export default function NotepadScreen() {
             style={styles.noteInput}
           />
           <TouchableOpacity style={[styles.primaryButton, noteSaved && styles.savedButton]} onPress={saveNote}>
-            <MaterialIcons name={noteSaved ? 'check' : 'save'} size={18} color="#fff" />
-            <Text style={styles.primaryButtonText}>{noteSaved ? t('notepadSaved') : t('notepadSave')}</Text>
+            <MaterialIcons name={noteSaved ? 'check' : 'save'} size={18} color={noteSaved ? colors.success : colors.primaryText} />
+            <Text style={[styles.primaryButtonText, noteSaved && { color: colors.success }]}>{noteSaved ? t('notepadSaved') : t('notepadSave')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -206,7 +201,7 @@ export default function NotepadScreen() {
                   style={[styles.scopeButton, selected && styles.scopeButtonSelected, disabled && styles.disabled]}
                   onPress={() => setScope(item)}
                 >
-                  <MaterialIcons name={item === 'shift' ? 'schedule' : 'flight'} size={17} color={selected ? '#fff' : colors.textSub} />
+                  <MaterialIcons name={item === 'shift' ? 'schedule' : 'flight'} size={17} color={selected ? colors.primaryText : colors.textSub} />
                   <Text style={[styles.scopeText, selected && styles.scopeTextSelected]}>
                     {item === 'shift' ? 'Turno' : pinnedFlight?.flightNumber ?? 'Volo non pinnato'}
                   </Text>
@@ -238,7 +233,7 @@ export default function NotepadScreen() {
           </View>
 
           <TouchableOpacity style={styles.primaryButton} onPress={saveHandover}>
-            <MaterialIcons name="add-task" size={19} color="#fff" />
+            <MaterialIcons name="add-task" size={19} color={colors.primaryText} />
             <Text style={styles.primaryButtonText}>Salva consegna</Text>
           </TouchableOpacity>
         </View>
@@ -275,30 +270,26 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
     content: { padding: SPACING.lg, paddingBottom: 120 },
-    header: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.lg },
-    headerIcon: { width: 48, height: 48, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight },
-    title: { ...TYPE.title, color: colors.text },
-    subtitle: { ...TYPE.caption, color: colors.textSub, marginTop: 3 },
-    noteCard: { padding: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    noteCard: { padding: SPACING.lg, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
     cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: SPACING.sm },
     cardTitle: { ...TYPE.headline, color: colors.text },
     cardMeta: { ...TYPE.micro, color: colors.textMuted, marginTop: 3 },
-    iconButton: { width: 38, height: 38, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSoft },
+    iconButton: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSoft },
     noteInput: { minHeight: 180, padding: SPACING.md, borderRadius: RADIUS.md, color: colors.text, backgroundColor: colors.cardSecondary, borderWidth: 1, borderColor: colors.border, fontSize: 15, lineHeight: 22 },
-    primaryButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, marginTop: SPACING.md, borderRadius: RADIUS.md, backgroundColor: colors.primary },
-    savedButton: { backgroundColor: colors.success },
-    primaryButtonText: { ...TYPE.subhead, color: '#fff' },
+    primaryButton: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, marginTop: SPACING.md, borderRadius: RADIUS.md, backgroundColor: colors.primaryLight },
+    savedButton: { backgroundColor: colors.successSoft },
+    primaryButtonText: { ...TYPE.subhead, color: colors.primaryText },
     sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: SPACING.xxl, marginBottom: SPACING.sm },
     sectionTitle: { ...TYPE.overline, color: colors.textMuted },
     sectionSubtitle: { ...TYPE.caption, color: colors.textSub, marginTop: 2 },
     shareButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: colors.primaryLight },
     shareButtonText: { ...TYPE.caption, color: colors.primaryText, fontWeight: WEIGHT.semibold },
-    handoverComposer: { padding: SPACING.md, borderRadius: RADIUS.lg, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+    handoverComposer: { padding: SPACING.lg, borderRadius: 20, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
     scopeRow: { flexDirection: 'row', gap: SPACING.sm },
     scopeButton: { flex: 1, minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: RADIUS.md, backgroundColor: colors.cardSecondary, borderWidth: 1, borderColor: colors.border },
-    scopeButtonSelected: { backgroundColor: colors.primary, borderColor: colors.primary },
+    scopeButtonSelected: { backgroundColor: colors.primaryLight, borderColor: colors.primaryText },
     scopeText: { ...TYPE.caption, color: colors.textSub, fontWeight: WEIGHT.semibold },
-    scopeTextSelected: { color: '#fff' },
+    scopeTextSelected: { color: colors.primaryText },
     disabled: { opacity: 0.45 },
     handoverInput: { minHeight: 90, marginTop: SPACING.sm, padding: SPACING.md, borderRadius: RADIUS.md, color: colors.text, backgroundColor: colors.cardSecondary, borderWidth: 1, borderColor: colors.border, fontSize: 14, lineHeight: 20 },
     checklist: { marginTop: SPACING.sm },

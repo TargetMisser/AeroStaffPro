@@ -178,6 +178,7 @@ function loadTsModule(relativePath, mocks = {}) {
   assert(passwordSource.includes('getPinBackoffMs'), 'PIN failures must be throttled');
   assert(passwordSource.includes('setSecureWindow(true)'), 'vault must enable Android FLAG_SECURE through the native bridge');
   const passwordModule = loadTsModule('src/screens/PasswordScreen.tsx', {
+    '../components/ScreenHeading': { __esModule: true, default: () => null, ScreenAction: () => null },
     react: {
       __esModule: true,
       default: { memo: component => component },
@@ -257,6 +258,7 @@ function loadTsModule(relativePath, mocks = {}) {
     '../context/ThemeContext': { useAppTheme: () => ({}) },
     '../context/LanguageContext': { useLanguage: () => ({}) },
     '../components/motion/TactilePressable': { __esModule: true, default: () => null },
+    '../components/ScreenHeading': { __esModule: true, default: () => null, ScreenAction: () => null },
     '../theme/typography': { TYPE: {}, WEIGHT: {} },
     '../theme/spacing': { SPACING: {}, RADIUS: {} },
   });

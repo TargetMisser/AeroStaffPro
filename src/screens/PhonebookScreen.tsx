@@ -1,3 +1,4 @@
+import ScreenHeading, { ScreenAction } from '../components/ScreenHeading';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
@@ -296,36 +297,23 @@ const ContactRow = React.memo(ContactRowComponent);
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: c.bg },
-    header: {
-      flexDirection: 'row', alignItems: 'center', gap: 10,
-      paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md,
-      backgroundColor: c.card,
-      borderBottomWidth: 1, borderBottomColor: c.border,
-    },
-    headerTitle: { ...TYPE.headline, color: c.primaryDark, flex: 1 },
-    addBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 6,
-      backgroundColor: c.primary, borderRadius: 10,
-      paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm,
-    },
-    addTxt: { color: '#fff', fontWeight: '700', fontSize: 13 },
     searchRow: {
       flexDirection: 'row', alignItems: 'center', gap: 10,
-      margin: SPACING.md, paddingHorizontal: 14, paddingVertical: 10,
+      marginHorizontal: SPACING.lg, marginBottom: 8, minHeight: 50, paddingHorizontal: 14, paddingVertical: 10,
       backgroundColor: c.card, borderRadius: 14,
       borderWidth: 1.5, borderColor: c.border,
     },
     searchInput: { flex: 1, fontSize: 14, color: c.text },
-    filterBar: { maxHeight: 50, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
+    filterBar: { flexGrow: 0, flexShrink: 0 },
     filterContent: { paddingHorizontal: SPACING.md, paddingVertical: 9, gap: SPACING.sm },
     filterChip: {
-      paddingHorizontal: 14, paddingVertical: 6,
+      minHeight: 44, justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10,
       borderRadius: RADIUS.xl, borderWidth: 1.5, borderColor: c.border,
       backgroundColor: c.card,
     },
-    filterChipActive: { backgroundColor: c.primary, borderColor: c.primary },
+    filterChipActive: { backgroundColor: c.primaryLight, borderColor: c.primaryText },
     filterTxt: { ...TYPE.caption, color: c.textSub },
-    filterTxtActive: { color: '#fff' },
+    filterTxtActive: { color: c.primaryText },
     list: { flex: 1 },
     listPad: { padding: SPACING.lg, paddingBottom: 96 },
     groupHeader: {
@@ -402,14 +390,9 @@ export default function PhonebookScreen() {
   return (
     <View style={s.root}>
       {/* Header */}
-      <View style={s.header}>
-        <MaterialIcons name="contacts" size={22} color={colors.primary} />
-        <Text style={s.headerTitle}>{t('phonebookTitle')}</Text>
-        <TouchableOpacity style={s.addBtn} onPress={openAdd}>
-          <MaterialIcons name="add" size={20} color="#fff" />
-          <Text style={s.addTxt}>{t('contactAdd')}</Text>
-        </TouchableOpacity>
-      </View>
+      <ScreenHeading title={t('phonebookTitle')} subtitle={t('uiContactsSubtitle')} icon="contacts">
+        <ScreenAction label={t('contactAdd')} icon="person-add-alt" onPress={openAdd} />
+      </ScreenHeading>
 
       {/* Search */}
       <View style={s.searchRow}>

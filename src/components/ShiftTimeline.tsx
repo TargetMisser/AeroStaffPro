@@ -12,6 +12,7 @@ import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { fetchAirportScheduleRaw } from '../utils/fr24api';
 import { filterFlightsByAirlines, getFlightAirportLabel } from '../utils/flightScheduleAdapter';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
+import { useReducedMotionPreference } from '../utils/motion';
 import { useLanguage } from '../context/LanguageContext';
 import { SPACING, RADIUS } from '../theme/spacing';
 
@@ -116,8 +117,9 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
     }
   }, [inline, active, visible, airportLoading, fetchFlights]);
 
+  const reducedMotion = useReducedMotionPreference();
   const toggleExpand = (id: string) => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (!reducedMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedId(prev => (prev === id ? null : id));
   };
 

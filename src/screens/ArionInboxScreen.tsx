@@ -99,7 +99,7 @@ export default function ArionInboxScreen() {
         <View style={styles.urlBox}>
           <View style={[styles.secureDot, { backgroundColor: colors.primary }]} />
           <Text numberOfLines={1} style={[styles.urlText, { color: colors.textMuted }]}>
-            Arion messages
+            Arion
           </Text>
         </View>
 
@@ -207,8 +207,8 @@ const styles = StyleSheet.create({
   },
   navActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   navButton: {
-    width: 34,
-    height: 34,
+    width: 44,
+    height: 44,
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -224,8 +224,8 @@ const styles = StyleSheet.create({
   secureDot: { width: 7, height: 7, borderRadius: 99 },
   urlText: { flex: 1, fontSize: 12, fontWeight: '800' },
   externalButton: {
-    width: 36,
-    height: 36,
+    width: 44,
+    height: 44,
     borderRadius: 13,
     borderWidth: 1,
     alignItems: 'center',

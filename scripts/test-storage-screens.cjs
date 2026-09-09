@@ -56,6 +56,8 @@ function createHarness(initialStorage = new Map(), initialSecrets = new Map()) {
     '@expo/vector-icons/MaterialIcons': 'Icon',
     '../context/ThemeContext': { useAppTheme: () => ({ colors: {} }) },
     '../context/LanguageContext': { useLanguage: () => ({ t: key => key }) },
+    '../components/ScreenHeading': { __esModule: true, default: 'ScreenHeading', ScreenAction: 'ScreenAction' },
+    '../utils/motion': { useReducedMotionPreference: () => true },
     '../theme/typography': { TYPE: {} },
     '../theme/spacing': { SPACING: {}, RADIUS: {} },
     '../utils/layoutAnimation': { enableLegacyAndroidLayoutAnimation() {} },
@@ -108,8 +110,9 @@ function nodes(tree) {
 }
 
 function button(tree, label) {
-  const found = nodes(tree).find(node => node.type === 'TouchableOpacity'
-    && nodes(node).some(child => child.type === 'Text' && child.props.children.includes(label)));
+  const found = nodes(tree).find(node => (node.type === 'ScreenAction' && node.props.label === label)
+    || (node.type === 'TouchableOpacity'
+      && nodes(node).some(child => child.type === 'Text' && child.props.children.includes(label))));
   assert.ok(found, 'Missing button: ' + label);
   return found;
 }
@@ -131,7 +134,7 @@ test('manuals: deleting the last airline stays empty after reopening and permits
   const harness = createHarness(store);
   const Screen = harness.load('src/screens/ManualsScreen.tsx');
   let tree = await harness.mount(Screen);
-  nodes(tree).find(node => node.props.accessibilityLabel === 'a11yEdit').props.onPress();
+  button(tree, 'a11yEdit').props.onPress();
   tree = harness.render(Screen);
   button(tree, onlyAirline.name).props.onLongPress();
   const editor = childComponent(harness.render(Screen), 'AirlineModal');

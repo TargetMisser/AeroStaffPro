@@ -8,8 +8,6 @@ import { computeRegularTabLayout } from '../utils/tabBarLayout';
 import {
   motionDurations,
   motionEasing,
-  motionRecipeDurations,
-  motionRecipeSprings,
   useReducedMotionPreference,
 } from '../utils/motion';
 
@@ -43,11 +41,6 @@ type SurfaceConfig = {
   borderColor: string;
   shadowColor: string;
   shadowOpacity: number;
-};
-
-const withMotionTokens = {
-  reducedMotionSnapMs: Math.min(motionDurations.instant, motionRecipeDurations.snap),
-  navDetentSpring: motionRecipeSprings.navDetent,
 };
 
 const REGULAR_HORIZONTAL_PADDING = 5;
@@ -160,8 +153,8 @@ function AppTab({
       onPress={onPress}
       style={styles.tabPressable}
       animatedStyle={styles.tab}
-      depth={3}
-      pressedScale={0.94}
+      depth={1}
+      pressedScale={0.985}
       haptic="selection"
       accessibilityRole="button"
       accessibilityLabel={label}
@@ -284,21 +277,20 @@ export default function AppTabBar({
   });
 
   useEffect(() => {
+    fallbackProgress.stopAnimation();
     if (reducedMotion) {
-      Animated.timing(fallbackProgress, {
-        toValue: activeIndex,
-        duration: withMotionTokens.reducedMotionSnapMs,
-        easing: motionEasing.board,
-        useNativeDriver: true,
-      }).start();
+      fallbackProgress.setValue(activeIndex);
       return;
     }
 
-    Animated.spring(fallbackProgress, {
+    const animation = Animated.timing(fallbackProgress, {
       toValue: activeIndex,
-      ...withMotionTokens.navDetentSpring,
+      duration: motionDurations.panel,
+      easing: motionEasing.board,
       useNativeDriver: true,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [activeIndex, fallbackProgress, reducedMotion]);
 
   const regularLayout = computeRegularTabLayout(

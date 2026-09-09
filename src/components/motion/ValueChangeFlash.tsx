@@ -7,8 +7,6 @@ import {
 import {
   motionDurations,
   motionEasing,
-  motionRecipeDurations,
-  motionRecipeSprings,
   useReducedMotionPreference,
 } from '../../utils/motion';
 
@@ -42,38 +40,37 @@ export default function ValueChangeFlash({
 
     if (previousKey.current === nextKey) return;
     previousKey.current = nextKey;
-    if (!enabled) return;
+    if (!enabled || reducedMotion) {
+      flash.stopAnimation();
+      flash.setValue(0);
+      return;
+    }
 
     flash.stopAnimation();
     flash.setValue(0);
-    Animated.sequence([
+    const animation = Animated.sequence([
       Animated.timing(flash, {
         toValue: 1,
-        duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.snap,
+        duration: motionDurations.quick,
         easing: motionEasing.board,
         useNativeDriver: true,
       }),
-      Animated.spring(flash, {
+      Animated.timing(flash, {
         toValue: 0,
-        ...(reducedMotion ? motionRecipeSprings.navDetent : motionRecipeSprings.instrument),
+        duration: motionDurations.normal,
+        easing: motionEasing.board,
         useNativeDriver: true,
       }),
-    ]).start();
+    ]);
+    animation.start();
+    return () => { animation.stop(); flash.setValue(0); };
   }, [enabled, flash, reducedMotion, valueKey]);
 
-  const flashScale = flash.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, reducedMotion ? 1.006 : 1.024],
-  });
-  const instrumentSheen = flash.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-60, 80],
-  });
 
   return (
     <Animated.View
       accessibilityLiveRegion="polite"
-      style={[style, styles.wrap, { transform: [{ scale: flashScale }] }]}
+      style={[style, styles.wrap]}
     >
       <Animated.View
         pointerEvents="none"
@@ -83,16 +80,6 @@ export default function ValueChangeFlash({
           {
             backgroundColor: flashColor,
             opacity: flash,
-          },
-        ]}
-      />
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.instrumentSheen,
-          {
-            opacity: flash,
-            transform: [{ translateX: instrumentSheen }, { skewX: '-18deg' }],
           },
         ]}
       />
@@ -108,14 +95,5 @@ const styles = StyleSheet.create({
   },
   flash: {
     borderRadius: RADIUS.pill,
-  },
-  instrumentSheen: {
-    position: 'absolute',
-    top: -6,
-    bottom: -6,
-    left: 0,
-    width: 22,
-    borderRadius: RADIUS.pill,
-    backgroundColor: 'rgba(255,255,255,0.24)',
   },
 });

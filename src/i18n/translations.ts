@@ -2,6 +2,17 @@ export type Lang = 'it' | 'en';
 export type WeatherDescriptor = { text: string; iconName: string };
 
 const it = {
+  uiNotesTitle: 'Note e consegne',
+  uiNotesSubtitle: 'Appunti e informazioni per il prossimo turno.',
+  uiContactsSubtitle: 'I numeri utili, sempre a portata di mano.',
+  uiPasswordsSubtitle: 'Le credenziali che usi al lavoro.',
+  uiManualsSubtitle: 'Procedure e comandi, divisi per compagnia.',
+  uiDone: 'Fine modifica',
+  uiFilters: 'Filtri', uiAlerts: 'Avvisi',
+  uiPinOn: 'PIN attivo', uiPinOff: 'Attiva PIN',
+  uiPinDisable: 'Disattiva protezione PIN', uiPinEnable: 'Attiva protezione PIN',
+  uiWebError: 'Non è stato possibile caricare la pagina.',
+  uiRetry: 'Riprova',
   // Navigation
   tabHome: 'Home', tabShifts: 'Turni', tabFlights: 'Voli', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Blocco Note', overlayPhonebook: 'Rubrica', overlayPasswords: 'Password',
@@ -342,6 +353,17 @@ const it = {
 };
 
 const en: typeof it = {
+  uiNotesTitle: 'Notes & handover',
+  uiNotesSubtitle: 'Notes and information for the next shift.',
+  uiContactsSubtitle: 'Useful numbers, always within reach.',
+  uiPasswordsSubtitle: 'The credentials you use at work.',
+  uiManualsSubtitle: 'Procedures and commands, organised by airline.',
+  uiDone: 'Done editing',
+  uiFilters: 'Filters', uiAlerts: 'Alerts',
+  uiPinOn: 'PIN enabled', uiPinOff: 'Enable PIN',
+  uiPinDisable: 'Disable PIN protection', uiPinEnable: 'Enable PIN protection',
+  uiWebError: 'The page could not be loaded.',
+  uiRetry: 'Try again',
   // Navigation
   tabHome: 'Home', tabShifts: 'Shifts', tabFlights: 'Flights', tabTravelDoc: 'TravelDoc',
   overlayNotepad: 'Notepad', overlayPhonebook: 'Phonebook', overlayPasswords: 'Password',

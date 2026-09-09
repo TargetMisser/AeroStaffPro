@@ -8,8 +8,6 @@ import { APP_VERSION } from '../utils/updateChecker';
 import {
   motionDurations,
   motionEasing,
-  motionRecipeDurations,
-  motionRecipeSprings,
   useReducedMotionPreference,
 } from '../utils/motion';
 import DrawerMenuPanel, {
@@ -43,31 +41,21 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      if (reducedMotion) {
-        Animated.timing(panelProgress, {
-          toValue: 1,
-          duration: motionDurations.instant,
-          easing: motionEasing.board,
-          useNativeDriver: true,
-        }).start();
-        return;
-      }
-
-      Animated.spring(panelProgress, {
-        toValue: 1,
-        ...motionRecipeSprings.panel,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(panelProgress, {
-        toValue: 0,
-        duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.instrument,
-        easing: motionEasing.exit,
-        useNativeDriver: true,
-      }).start(({ finished }) => { if (finished) setMounted(false); });
+    panelProgress.stopAnimation();
+    if (reducedMotion) {
+      panelProgress.setValue(visible ? 1 : 0);
+      setMounted(visible);
+      return;
     }
+    if (visible) setMounted(true);
+    const animation = Animated.timing(panelProgress, {
+      toValue: visible ? 1 : 0,
+      duration: visible ? motionDurations.panel : motionDurations.quick,
+      easing: visible ? motionEasing.board : motionEasing.exit,
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => { if (finished && !visible) setMounted(false); });
+    return () => animation.stop();
   }, [panelProgress, reducedMotion, visible]);
 
   if (!mounted && !visible) return null;
@@ -79,10 +67,6 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
   const panelTranslateX = panelProgress.interpolate({
     inputRange: [0, 1],
     outputRange: [-DRAWER_WIDTH, 0],
-  });
-  const panelScale = panelProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [reducedMotion ? 1 : 0.965, 1],
   });
 
   return (
@@ -97,7 +81,7 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
         <Animated.View
           style={[
             styles.drawerWrapper,
-            { transform: [{ translateX: panelTranslateX }, { scale: panelScale }] },
+            { transform: [{ translateX: panelTranslateX }] },
           ]}
         >
           <DrawerMenuPanel
@@ -115,11 +99,11 @@ export default function DrawerMenu({ visible, onClose, onSelect, surfaceVariant 
 }
 
 function makeStyles(surfaceVariant: DrawerMenuSurfaceVariant) {
-  const warmShadow = surfaceVariant === 'operations' ? '#14B8A6' : '#F97316';
+  const shadow = surfaceVariant === 'operations' ? '#000000' : '#172B3A';
 
   return StyleSheet.create({
     root: { flex: 1 },
-    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,5,0,0.55)' },
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,20,30,0.48)' },
     drawerWrapper: {
       position: 'absolute',
       left: 0,
@@ -128,8 +112,7 @@ function makeStyles(surfaceVariant: DrawerMenuSurfaceVariant) {
       width: DRAWER_WIDTH,
       height: '100%',
       overflow: 'hidden',
-      // Subtle warm glow shadow
-      shadowColor: warmShadow,
+      shadowColor: shadow,
       shadowOffset: { width: 6, height: 0 },
       shadowOpacity: 0.12,
       shadowRadius: 24,

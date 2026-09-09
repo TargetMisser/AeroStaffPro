@@ -1,3 +1,4 @@
+import ScreenHeading, { ScreenAction } from '../components/ScreenHeading';
 import React, { useState, useMemo, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -8,6 +9,7 @@ import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE } from '../theme/typography';
+import { useReducedMotionPreference } from '../utils/motion';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import { SPACING, RADIUS } from '../theme/spacing';
 
@@ -463,8 +465,9 @@ function ManualItemRow({
   const itemStyles = useMemo(() => makeItemStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
 
+  const reducedMotion = useReducedMotionPreference();
   const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (!reducedMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpen(v => !v);
   };
 
@@ -525,8 +528,9 @@ function SectionBlock({
   const sectionStyles = useMemo(() => makeSectionStyles(colors), [colors]);
   const [open, setOpen] = useState(true);
 
+  const reducedMotion = useReducedMotionPreference();
   const toggle = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    if (!reducedMotion) LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpen(v => !v);
   };
 
@@ -595,24 +599,17 @@ const modalStyles = StyleSheet.create({
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: c.bg },
-    header: {
-      flexDirection: 'row', alignItems: 'center', gap: 10,
-      paddingHorizontal: SPACING.lg, paddingVertical: 13,
-      backgroundColor: c.card,
-      borderBottomWidth: 1, borderBottomColor: c.border,
-    },
-    headerTitle: { ...TYPE.headline, color: c.primaryDark },
     airlineBar: {
       backgroundColor: c.card,
       borderBottomWidth: 1, borderBottomColor: c.border,
-      maxHeight: 62,
+      flexGrow: 0, flexShrink: 0,
     },
     airlineBarContent: {
       paddingHorizontal: SPACING.md, paddingVertical: 10, gap: SPACING.sm,
     },
     airlineChip: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
-      paddingHorizontal: 14, paddingVertical: 7,
+      paddingHorizontal: 14, paddingVertical: 10, minHeight: 44,
       borderRadius: RADIUS.xl, borderWidth: 1.5, borderColor: c.border,
       backgroundColor: c.card,
     },
@@ -624,10 +621,11 @@ function makeStyles(c: ThemeColors) {
     emptyTitle: { fontSize: 16, fontWeight: '700', color: c.text },
     emptyText: { fontSize: 13, textAlign: 'center', color: c.textSub },
     banner: {
-      borderRadius: 14, padding: 18, marginBottom: 18,
+      borderRadius: 20, padding: 16, marginBottom: 14, borderWidth: 1, borderColor: c.border,
+      backgroundColor: c.card, borderLeftWidth: 5,
     },
-    bannerCode: { fontSize: 28, fontWeight: '900', letterSpacing: 1 },
-    bannerName: { fontSize: 15, fontWeight: '600', marginTop: 2 },
+    bannerCode: { fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+    bannerName: { fontSize: 20, fontWeight: '800', marginTop: 4 },
     bannerSub:  { fontSize: 12, marginTop: SPACING.xs },
     addBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -1004,17 +1002,9 @@ export default function ManualsScreen() {
   return (
     <View style={s.root}>
       {/* Header */}
-      <View style={s.header}>
-        <MaterialIcons name="menu-book" size={22} color={colors.primary} />
-        <Text style={s.headerTitle}>Manuali DCS</Text>
-        <TouchableOpacity onPress={() => setEditMode(v => !v)} style={{ marginLeft: 'auto' }} accessibilityRole="button" accessibilityLabel={t('a11yEdit')}>
-          <MaterialIcons
-            name="edit"
-            size={20}
-            color={editMode ? colors.primary : colors.textMuted}
-          />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeading title={t('overlayManuals')} subtitle={t('uiManualsSubtitle')} icon="menu-book">
+        <ScreenAction label={editMode ? t('uiDone') : t('a11yEdit')} icon={editMode ? 'check' : 'edit'} selected={editMode} onPress={() => setEditMode(v => !v)} />
+      </ScreenHeading>
 
       {/* Airline selector */}
       <ScrollView
@@ -1066,10 +1056,10 @@ export default function ManualsScreen() {
         {airline ? (
           <>
             {/* Airline banner */}
-            <View style={[s.banner, { backgroundColor: airline.color }]}>
-              <Text style={[s.bannerCode, { color: airline.textColor }]}>{airline.code}</Text>
-              <Text style={[s.bannerName, { color: airline.textColor, opacity: 0.85 }]}>{airline.name}</Text>
-              <Text style={[s.bannerSub, { color: airline.textColor, opacity: 0.7 }]}>
+            <View style={[s.banner, { borderLeftColor: airline.color }]}>
+              <Text style={[s.bannerCode, { color: colors.textSub }]}>{airline.code}</Text>
+              <Text style={[s.bannerName, { color: colors.text }]}>{airline.name}</Text>
+              <Text style={[s.bannerSub, { color: colors.textSub }]}>
                 {airline.sections.length} sezioni · {airline.sections.reduce((n, s) => n + s.items.length, 0)} argomenti
                 {airline.commands ? ` · ${airline.commands.length} comandi` : ''}
               </Text>
@@ -1082,16 +1072,18 @@ export default function ManualsScreen() {
                   <TouchableOpacity
                     key={tab}
                     onPress={() => setActiveTab(tab)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeTab === tab }}
                     style={{
-                      paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm,
-                      backgroundColor: activeTab === tab ? colors.primary : 'transparent',
-                      borderWidth: activeTab === tab ? 0 : 1,
+                      flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: SPACING.xl, paddingVertical: SPACING.sm, borderRadius: 14,
+                      backgroundColor: activeTab === tab ? colors.primaryLight : colors.card,
+                      borderWidth: 1,
                       borderColor: colors.border,
                     }}
                   >
                     <Text style={{
                       fontSize: 12, fontWeight: activeTab === tab ? '700' : '600',
-                      color: activeTab === tab ? '#fff' : colors.textSub,
+                      color: activeTab === tab ? colors.primaryText : colors.textSub,
                     }}>
                       {tab === 'guides' ? 'Guide' : 'Comandi'}
                     </Text>

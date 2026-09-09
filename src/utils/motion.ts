@@ -6,8 +6,8 @@ export const motionDurations = {
   instant: 90,
   quick: 150,
   normal: 240,
-  board: 320,
-  panel: 420,
+  board: 220,
+  panel: 240,
 } as const;
 
 export const motionEasing = {
@@ -18,7 +18,7 @@ export const motionEasing = {
 
 export const motionSpring = {
   tactile: {
-    damping: 16,
+    damping: 24,
     stiffness: 260,
     mass: 0.72,
   },
@@ -80,23 +80,33 @@ export type MotionPatternId = typeof motionPatternIds[number];
 
 export type MotionHaptic = 'selection' | 'light' | 'medium' | 'success';
 
-export function getStaggerDelay(index: number, baseDelay = 42, maxDelay = 260): number {
-  return Math.min(index * baseDelay, maxDelay);
+export function getStaggerDelay(index: number, baseDelay = 28, maxDelay = 112): number {
+  return Math.max(0, Math.min(index * baseDelay, maxDelay));
 }
 
+let cachedReducedMotion = true;
+
 export function useReducedMotionPreference(): boolean {
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(cachedReducedMotion);
 
   useEffect(() => {
     let mounted = true;
+    let preferenceChanged = false;
+    const updatePreference = (value: boolean) => {
+      cachedReducedMotion = value;
+      if (mounted) setReducedMotion(value);
+    };
 
     AccessibilityInfo.isReduceMotionEnabled()
       .then(value => {
-        if (mounted) setReducedMotion(value);
+        if (mounted && !preferenceChanged) updatePreference(value);
       })
       .catch(() => {});
 
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReducedMotion);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', value => {
+      preferenceChanged = true;
+      updatePreference(value);
+    });
 
     return () => {
       mounted = false;

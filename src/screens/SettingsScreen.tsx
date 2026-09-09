@@ -1,3 +1,4 @@
+import ScreenHeading from '../components/ScreenHeading';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -136,15 +137,18 @@ function ThemeCard({ option, selected, onSelect, activeLabel }: {
       ]}
       onPress={onSelect}
       activeOpacity={0.8}
+      accessibilityRole="radio"
+      accessibilityLabel={option.label + (selected ? ' · ' + activeLabel : '')}
+      accessibilityState={{ checked: selected }}
     >
       {/* Anteprima miniatura */}
       <View style={[styles.preview, { backgroundColor: option.previewBg }]}>
-        <View style={[styles.previewBar, { backgroundColor: option.previewBg === '#F3F4F6' ? '#fff' : 'rgba(255,255,255,0.12)' }]} />
+        <View style={[styles.previewBar, { backgroundColor: option.id === 'light' ? '#fff' : 'rgba(255,255,255,0.12)' }]} />
         <View style={styles.previewContent}>
-          <View style={[styles.previewCard, { backgroundColor: option.previewBg === '#F3F4F6' ? '#fff' : 'rgba(255,255,255,0.15)' }]} />
-          <View style={[styles.previewCard, { backgroundColor: option.previewBg === '#F3F4F6' ? '#fff' : 'rgba(255,255,255,0.15)', width: '60%' }]} />
+          <View style={[styles.previewCard, { backgroundColor: option.id === 'light' ? '#fff' : 'rgba(255,255,255,0.15)' }]} />
+          <View style={[styles.previewCard, { backgroundColor: option.id === 'light' ? '#fff' : 'rgba(255,255,255,0.15)', width: '60%' }]} />
         </View>
-        <View style={[styles.previewTab, { backgroundColor: option.previewBg === '#F3F4F6' ? '#fff' : 'rgba(255,255,255,0.12)' }]}>
+        <View style={[styles.previewTab, { backgroundColor: option.id === 'light' ? '#fff' : 'rgba(255,255,255,0.12)' }]}>
           <View style={[styles.previewDot, { backgroundColor: option.previewAccent }]} />
         </View>
       </View>
@@ -156,14 +160,10 @@ function ThemeCard({ option, selected, onSelect, activeLabel }: {
           <Text style={[styles.themeLabel, { color: colors.text }, selected && { color: colors.primaryText }]}>
             {option.label}
           </Text>
-          {selected && (
-            <View style={[styles.activeBadge, { backgroundColor: colors.primary }]}>
-              <Text style={styles.activeBadgeTxt}>{activeLabel}</Text>
-            </View>
-          )}
         </View>
         <Text style={[styles.themeSub, { color: colors.textMuted }]}>{option.sublabel}</Text>
       </View>
+      <MaterialIcons name={selected ? 'check-circle' : 'radio-button-unchecked'} size={22} color={selected ? colors.primaryText : colors.textMuted} />
     </TouchableOpacity>
   );
 }
@@ -698,15 +698,7 @@ export default function SettingsScreen({
         showsVerticalScrollIndicator={false}
       >
       {/* Header */}
-      <View style={[styles.banner, { backgroundColor: colors.card, borderColor: colors.border }, colors.isDark ? { shadowOpacity: 0, elevation: 0, borderWidth: 1 } : { shadowColor: colors.primary }]}>
-        <View style={[styles.bannerIcon, { backgroundColor: colors.primaryLight }]}>
-          <MaterialIcons name="settings" size={28} color={colors.primary} />
-        </View>
-        <View>
-          <Text style={[styles.bannerTitle, { color: colors.primaryDark }]}>{t('settingsTitle')}</Text>
-          <Text style={[styles.bannerSub, { color: colors.textMuted }]}>AeroStaff Pro · v{APP_VERSION}</Text>
-        </View>
-      </View>
+      <ScreenHeading inset title={t('settingsTitle')} subtitle={'AeroStaff Pro · v' + APP_VERSION} icon="tune" />
 
       {/* ── Sezione Tema ── */}
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('sectionTheme')}</Text>
@@ -1949,14 +1941,6 @@ export default function SettingsScreen({
 const styles = StyleSheet.create({
   root:    { flex: 1 },
   content: { padding: SPACING.lg, paddingBottom: 96 },
-  banner: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    borderRadius: RADIUS.lg, padding: 18, marginBottom: SPACING.xl,
-    shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3,
-  },
-  bannerIcon:  { width: 52, height: 52, borderRadius: RADIUS.lg, justifyContent: 'center', alignItems: 'center' },
-  bannerTitle: { ...TYPE.headline },
-  bannerSub:   { fontSize: 12, marginTop: 2 },
 
   sectionTitle: { ...TYPE.overline, marginBottom: SPACING.sm, paddingLeft: SPACING.xs, marginTop: SPACING.xs },
 
@@ -1976,33 +1960,31 @@ const styles = StyleSheet.create({
   widgetSwitchSub: { ...TYPE.micro, marginTop: 2 },
 
   // Theme grid
-  themeGrid: { flexDirection: 'row', gap: 10, marginBottom: SPACING.xl, flexWrap: 'wrap' },
+  themeGrid: { gap: 10, marginBottom: SPACING.xl },
   themeCard: {
-    flex: 1, minWidth: 100,
+    flexDirection: 'row', alignItems: 'center', gap: 12, padding: 10, minHeight: 86,
     borderRadius: RADIUS.lg, borderWidth: 2,
     overflow: 'hidden',
   },
   themeCardSelected: {
-    shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 5,
+    shadowOpacity: 0, elevation: 0,
   },
-  preview: { height: 80, justifyContent: 'space-between' },
+  preview: { width: 62, height: 64, borderRadius: 9, overflow: 'hidden', justifyContent: 'space-between' },
   previewBar:     { height: 12, width: '100%' },
   previewContent: { flex: 1, padding: 6, gap: SPACING.xs },
   previewCard:    { height: 10, borderRadius: 4, width: '100%' },
   previewTab:     { height: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
   previewDot:     { width: 8, height: 8, borderRadius: 4 },
-  themeInfo:      { padding: 10 },
+  themeInfo:      { flex: 1 },
   themeInfoTop:   { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginBottom: 3, flexWrap: 'wrap' },
   themeLabel:     { fontSize: 13, fontWeight: '700' },
-  activeBadge:    { paddingHorizontal: 6, paddingVertical: 2, borderRadius: RADIUS.sm, flexShrink: 0 },
-  activeBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
-  themeSub:       { fontSize: 10, lineHeight: 14 },
+  themeSub:       { fontSize: 12, lineHeight: 17 },
 
   // Generic rows
   card: {
-    borderRadius: RADIUS.lg, marginBottom: SPACING.xl,
+    borderRadius: 20, borderWidth: 1, marginBottom: SPACING.xl,
     shadowColor: '#F47B16', shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2, overflow: 'hidden',
+    shadowOpacity: 0, shadowRadius: 0, elevation: 0, overflow: 'hidden',
   },
   divider: { height: 1, marginLeft: 56 },
   row:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.lg, paddingVertical: 13, gap: SPACING.md },

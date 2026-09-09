@@ -1,3 +1,4 @@
+import ScreenHeading, { ScreenAction } from '../components/ScreenHeading';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, Modal,
@@ -1748,40 +1749,17 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       {/* Page header */}
-      <View style={s.pageHeader}>
-        <View style={{ flex: 1 }}>
-          <Text style={s.pageTitle}>{t('flightTitle')}</Text>
-          <Text style={s.pageSub}>{formatAirportHeader(airport.code)}</Text>
-        </View>
-        <TouchableOpacity
-          style={[s.filterBtn, !allSelected && s.filterBtnActive]}
-          onPress={() => setFilterMenuVisible(true)}
-          activeOpacity={0.8}
-          accessibilityLabel={t('flightFilterTitle')}
-          accessibilityRole="button"
-        >
-          <MaterialIcons name="filter-list" size={20} color={!allSelected ? colors.primaryText : colors.textSub} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.notifBtn, notifsEnabled && s.notifBtnActive]}
-          onPress={() => setNotifSettingsVisible(true)}
-          activeOpacity={0.8}
-          accessible
+      <ScreenHeading title={t('flightTitle')} subtitle={formatAirportHeader(airport.code)} icon="flight-takeoff">
+        <ScreenAction label={t('uiFilters')} accessibilityLabel={t('flightFilterTitle')} icon="filter-list" selected={!allSelected} secondary onPress={() => setFilterMenuVisible(true)} />
+        <ScreenAction
+          label={t('uiAlerts') + (notifsEnabled && scheduledCount > 0 ? ' · ' + scheduledCount : '')}
           accessibilityLabel={t('flightNotifSettingsTitle')}
-          accessibilityRole="button"
-        >
-          <MaterialIcons
-            name={notifsEnabled ? 'notifications-active' : 'notifications-none'}
-            size={20}
-            color={notifsEnabled ? '#fff' : '#64748B'}
-          />
-          {notifsEnabled && scheduledCount > 0 && (
-            <View style={s.notifBadge}>
-              <Text style={s.notifBadgeTxt}>{scheduledCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
-      </View>
+          icon={notifsEnabled ? 'notifications-active' : 'notifications-none'}
+          selected={notifsEnabled}
+          secondary={!notifsEnabled}
+          onPress={() => setNotifSettingsVisible(true)}
+        />
+      </ScreenHeading>
 
       {/* Day selector: each row is an outbound operation with inbound context. */}
       <View style={s.controlsRow}>
@@ -1960,13 +1938,6 @@ function makeStyles(c: ThemeColors, isOperations = false) {
   const operationBorderSoft = c.border;
 
   return StyleSheet.create({
-    pageHeader: { backgroundColor: c.bg, paddingHorizontal: SPACING.lg, paddingTop: SPACING.xxl, paddingBottom: SPACING.md, flexDirection: 'row', alignItems: 'center' },
-    notifBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
-    notifBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
-    notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: RADIUS.sm, backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
-    notifBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
-    pageTitle: { ...TYPE.titleLg, color: c.text, letterSpacing: -0.6 },
-    pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
     controlsRow: { flexDirection: 'row', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, backgroundColor: c.bg },
     fr24ArrivalsBtn: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: isOperations ? 14 : 8, backgroundColor: isOperations ? 'rgba(125,211,252,0.10)' : c.primaryLight, borderWidth: 1, borderColor: isOperations ? 'rgba(125,211,252,0.28)' : c.primary },
     fr24ArrivalsBtnText: { fontSize: 10, lineHeight: 13, fontWeight: '900', color: c.primaryDark, letterSpacing: 0.25 },
@@ -2037,8 +2008,6 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     opsTime: { fontSize: 15, lineHeight: 19, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
     pinBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
-    filterBtn: { width: 42, height: 42, borderRadius: 14, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
-    filterBtnActive: { backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.primaryText },
     fr24FlightBtn: { minHeight: 28, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: RADIUS.pill, borderWidth: 1, borderColor: c.primary, backgroundColor: hexToRgba(c.primary, 0.1) },
     fr24FlightBtnDisabled: { borderColor: operationBorderSoft, backgroundColor: operationPanelStrong },
     fr24FlightBtnText: { fontSize: 10, lineHeight: 13, fontWeight: '900', color: c.primary, letterSpacing: 0.4 },

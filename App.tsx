@@ -1,8 +1,7 @@
 import React, { useState, useRef, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, Dimensions, BackHandler, ActivityIndicator, AppState } from 'react-native';
+import { View, Text, StyleSheet, StatusBar, PanResponder, Animated, useWindowDimensions, BackHandler, ActivityIndicator, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BlurView as ExpoBlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +25,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import AppTabBar, { type AppTabBarItem, type AppTabId } from './src/components/AppTabBar';
 import ProfileSwitcherModal from './src/components/ProfileSwitcherModal';
+import BoardReveal from './src/components/motion/BoardReveal';
 import TactilePressable from './src/components/motion/TactilePressable';
 import {
   installGlobalCrashHandler,
@@ -38,8 +38,6 @@ import { useAirport } from './src/context/AirportContext';
 import {
   motionDurations,
   motionEasing,
-  motionRecipeDurations,
-  motionRecipeSprings,
   useReducedMotionPreference,
 } from './src/utils/motion';
 import { ONBOARDING_SETUP_STORAGE_KEY, shouldShowOnboarding } from './src/utils/appSetup';
@@ -130,7 +128,7 @@ function AppInner() {
   }, [colors, mode]);
 
   // ─── Swipe con drag live tra tab ─────────────────────────────────────────────
-  const SCREEN_W = Dimensions.get('window').width;
+  const { width: SCREEN_W } = useWindowDimensions();
   const offsetX = useRef(new Animated.Value(0)).current;
   const activeIdxRef = useRef(0);
   const overlayRef = useRef(overlay);
@@ -146,35 +144,31 @@ function AppInner() {
     setActiveTab(TABS[newIdx].id);
   }, []);
 
-  const goToTabTransition = useCallback((targetOffset: number, animated = true, onComplete?: () => void) => {
-    if (!animated) {
+  const goToTabTransition = useCallback((targetOffset: number, animated = true) => {
+    offsetX.stopAnimation();
+    if (!animated || reducedMotion) {
       offsetX.setValue(targetOffset);
-      onComplete?.();
       return;
     }
-
-    if (reducedMotion) {
-      Animated.timing(offsetX, {
-        toValue: targetOffset,
-        duration: motionDurations.instant,
-        easing: motionEasing.board,
-        useNativeDriver: true,
-      }).start(({ finished }) => { if (finished) onComplete?.(); });
-      return;
-    }
-
-    Animated.spring(offsetX, {
+    Animated.timing(offsetX, {
       toValue: targetOffset,
-      ...motionRecipeSprings.panel,
+      duration: motionDurations.panel,
+      easing: motionEasing.board,
       useNativeDriver: true,
-    }).start(({ finished }) => { if (finished) onComplete?.(); });
+    }).start();
   }, [offsetX, reducedMotion]);
 
   const goToTab = useCallback((newIdx: number, animated = true) => {
+    const adjacent = Math.abs(newIdx - activeIdxRef.current) <= 1;
     setTabIndex(newIdx);
-    const targetOffset = -newIdx * SCREEN_W;
-    goToTabTransition(targetOffset, animated);
+    goToTabTransition(-newIdx * SCREEN_W, animated && adjacent);
   }, [SCREEN_W, goToTabTransition, setTabIndex]);
+
+  useEffect(() => {
+    offsetX.stopAnimation();
+    offsetX.setValue(-activeIdxRef.current * SCREEN_W);
+    return () => offsetX.stopAnimation();
+  }, [offsetX, reducedMotion, SCREEN_W]);
 
   // ─── Android back button: overlay/drawer → close, tab secondaria → home ─────
   useEffect(() => {
@@ -196,8 +190,9 @@ function AppInner() {
     onMoveShouldSetPanResponder: (_, g) =>
       Math.abs(g.dx) > FOOTER_SWIPE_START_DISTANCE &&
       Math.abs(g.dx) > Math.abs(g.dy) * FOOTER_SWIPE_DIRECTION_BIAS,
+    onPanResponderGrant: () => offsetX.stopAnimation(),
     onPanResponderMove: (_, g) => {
-      if (overlayRef.current) return;
+      if (overlayRef.current || reducedMotion) return;
       const idx = activeIdxRef.current;
       const base = -idx * SCREEN_W;
       if (g.dx > 0 && idx === 0) return offsetX.setValue(base);
@@ -212,23 +207,14 @@ function AppInner() {
       const shouldMovePrevious = g.dx > threshold || g.vx > FOOTER_SWIPE_SWITCH_VELOCITY;
 
       if (shouldMoveNext && idx < TABS.length - 1) {
-        Animated.timing(offsetX, {
-          toValue: -(idx + 1) * SCREEN_W,
-          duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.snap,
-          easing: motionEasing.board,
-          useNativeDriver: true,
-        }).start(() => goToTab(idx + 1, false));
+        goToTab(idx + 1);
       } else if (shouldMovePrevious && idx > 0) {
-        Animated.timing(offsetX, {
-          toValue: -(idx - 1) * SCREEN_W,
-          duration: reducedMotion ? motionDurations.instant : motionRecipeDurations.snap,
-          easing: motionEasing.board,
-          useNativeDriver: true,
-        }).start(() => goToTab(idx - 1, false));
+        goToTab(idx - 1);
       } else {
         settleCurrentTab(idx);
       }
     },
+    onPanResponderTerminate: () => settleCurrentTab(activeIdxRef.current),
   }), [goToTab, offsetX, reducedMotion, SCREEN_W, settleCurrentTab]);
 
   const renderOverlay = () => {
@@ -326,9 +312,12 @@ function AppInner() {
 
       {/* Screen Content */}
       <View style={[styles.content, { backgroundColor: colors.bg, overflow: 'hidden' }]}>
-        {overlay ? renderOverlay() : TABS.map((tab, i) => (
+        {overlay ? <BoardReveal key={overlay} style={{ flex: 1 }}>{renderOverlay()}</BoardReveal> : TABS.map((tab, i) => (
           <Animated.View
             key={tab.id}
+            pointerEvents={activeTab === tab.id ? 'auto' : 'none'}
+            accessibilityElementsHidden={activeTab !== tab.id}
+            importantForAccessibility={activeTab === tab.id ? 'auto' : 'no-hide-descendants'}
             style={[StyleSheet.absoluteFill, { transform: [{ translateX: Animated.add(offsetX, i * SCREEN_W) }] }]}
           >
             {(tab.id === 'TravelDoc'
@@ -352,7 +341,6 @@ function AppInner() {
             variant={surfaceVariant}
             navigationProgress={navigationProgress}
             onPress={(_, index) => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               goToTab(index);
             }}
           />

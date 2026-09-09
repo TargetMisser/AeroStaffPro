@@ -1,3 +1,4 @@
+import ScreenHeading, { ScreenAction } from '../components/ScreenHeading';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
@@ -431,27 +432,17 @@ export default function PasswordScreen() {
   return (
     <View style={s.root}>
       {/* Toolbar */}
-      <View style={s.toolbar}>
-        <View style={s.titleRow}>
-          <MaterialIcons name="lock" size={22} color={colors.primary} />
-          <Text style={s.title}>{t('passwordTitle')}</Text>
-        </View>
-        <View style={s.toolbarActions}>
-          <TouchableOpacity
-            onPress={togglePin}
-            style={[s.iconBtn, pinEnabled && s.iconBtnActive]}
-            accessible
-            accessibilityLabel={pinEnabled ? 'Disattiva protezione PIN' : 'Attiva protezione PIN'}
-            accessibilityRole="button"
-          >
-            <MaterialIcons name={pinEnabled ? 'lock' : 'lock-open'} size={20} color={pinEnabled ? '#fff' : colors.textSub} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={openAdd} style={s.addBtn}>
-            <MaterialIcons name="add" size={20} color="#fff" />
-            <Text style={s.addBtnTxt}>{t('passwordAdd')}</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <ScreenHeading title={t('passwordTitle')} subtitle={t('uiPasswordsSubtitle')} icon="lock-outline">
+        <ScreenAction label={t('passwordAdd')} icon="add" onPress={openAdd} />
+        <ScreenAction
+          label={pinEnabled ? t('uiPinOn') : t('uiPinOff')}
+          accessibilityLabel={pinEnabled ? t('uiPinDisable') : t('uiPinEnable')}
+          icon={pinEnabled ? 'lock' : 'lock-open'}
+          selected={pinEnabled}
+          secondary
+          onPress={togglePin}
+        />
+      </ScreenHeading>
 
       {/* List */}
       <FlatList
@@ -547,31 +538,24 @@ function makePinStyles(c: ThemeColors) {
 
 function makeRowStyles(c: ThemeColors) {
   return StyleSheet.create({
-    card:    { backgroundColor: c.card, borderRadius: RADIUS.lg, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: c.glassBorder, shadowColor: c.primary, shadowOpacity: c.isDark ? 0 : 0.08, shadowRadius: 8, elevation: c.isDark ? 0 : 3 },
+    card:    { backgroundColor: c.card, borderRadius: 20, padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderColor: c.border },
     cardLeft:{ flex: 1 },
     name:    { fontSize: 15, fontWeight: '700', color: c.primaryDark, marginBottom: 2 },
     username:{ fontSize: 12, color: c.textSub, marginBottom: SPACING.xs },
     pwRow:   { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
-    pw:      { fontSize: 13, color: c.text, letterSpacing: 1 },
-    eyeBtn:  { padding: 2 },
+    pw:      { fontSize: 13, color: c.text, letterSpacing: 1, flexShrink: 1 },
+    eyeBtn:  { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
     notes:   { fontSize: 11, color: c.textMuted, fontStyle: 'italic', marginTop: SPACING.xs },
     actions: { flexDirection: 'column', gap: 6, marginLeft: SPACING.sm },
-    editBtn: { width: 32, height: 32, borderRadius: 9, backgroundColor: c.primaryLight, justifyContent: 'center', alignItems: 'center' },
-    delBtn:  { width: 32, height: 32, borderRadius: 9, backgroundColor: '#FEF2F2', justifyContent: 'center', alignItems: 'center' },
+    editBtn: { width: 44, height: 44, borderRadius: 14, backgroundColor: c.primaryLight, justifyContent: 'center', alignItems: 'center' },
+    delBtn:  { width: 44, height: 44, borderRadius: 14, backgroundColor: c.dangerSoft, justifyContent: 'center', alignItems: 'center' },
   });
 }
 
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
     root:         { flex: 1, backgroundColor: c.bg },
-    toolbar:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.md, backgroundColor: c.card, borderBottomWidth: 1, borderBottomColor: c.border },
-    titleRow:     { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
     title:        { ...TYPE.headline, color: c.primaryDark },
-    toolbarActions:{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-    iconBtn:      { width: 36, height: 36, borderRadius: 10, backgroundColor: c.cardSecondary, justifyContent: 'center', alignItems: 'center' },
-    iconBtnActive:{ backgroundColor: c.primary },
-    addBtn:       { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.primary, borderRadius: 10, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm },
-    addBtnTxt:    { color: '#fff', fontWeight: '600', fontSize: 13 },
     empty:        { alignItems: 'center', marginTop: 80, gap: SPACING.sm },
     emptyTxt:     { fontSize: 16, fontWeight: '600', color: c.textSub },
     emptySubTxt:  { fontSize: 13, color: c.textMuted },

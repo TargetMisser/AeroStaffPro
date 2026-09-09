@@ -21,27 +21,33 @@ export default function BoardReveal({
   style,
 }: BoardRevealProps) {
   const reducedMotion = useReducedMotionPreference();
-  const progress = useRef(new Animated.Value(enabled ? 0 : 1)).current;
+  const progress = useRef(new Animated.Value(enabled && !reducedMotion ? 0 : 1)).current;
+  const wasEnabled = useRef(false);
 
   useEffect(() => {
-    if (!enabled) {
+    const entering = enabled && !wasEnabled.current;
+    wasEnabled.current = enabled;
+    progress.stopAnimation();
+    if (!entering || reducedMotion) {
       progress.setValue(1);
       return;
     }
 
     progress.setValue(0);
-    Animated.timing(progress, {
+    const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: reducedMotion ? motionDurations.quick : motionDurations.board,
-      delay: reducedMotion ? 0 : getStaggerDelay(index),
+      duration: motionDurations.board,
+      delay: getStaggerDelay(index),
       easing: motionEasing.board,
       useNativeDriver: true,
-    }).start();
+    });
+    animation.start();
+    return () => animation.stop();
   }, [enabled, index, progress, reducedMotion]);
 
   const translateY = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [reducedMotion ? 4 : 18, 0],
+    outputRange: [reducedMotion ? 0 : 8, 0],
   });
 
   return (

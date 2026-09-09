@@ -1,3 +1,4 @@
+import ScreenHeading from '../components/ScreenHeading';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -320,15 +321,7 @@ export default function PrintableCalendarScreen() {
       style={[styles.root, { backgroundColor: colors.bg }]}
       contentContainerStyle={styles.content}
     >
-      <View style={styles.hero}>
-        <View style={styles.heroIcon}>
-          <MaterialIcons name="print" size={24} color={colors.primary} />
-        </View>
-        <View style={styles.heroCopy}>
-          <Text style={styles.title}>{t('printCalTitle')}</Text>
-          <Text style={styles.subtitle}>{t('printCalSubtitle')}</Text>
-        </View>
-      </View>
+      <ScreenHeading inset title={t('printCalTitle')} subtitle={t('printCalSubtitle')} icon="print" />
 
       <View style={styles.monthCard}>
         <TouchableOpacity
@@ -556,12 +549,6 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: { flex: 1 },
     content: { padding: SPACING.lg, paddingBottom: 110 },
-    hero: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: SPACING.md,
-      marginBottom: SPACING.lg,
-    },
     heroIcon: {
       width: 48,
       height: 48,
@@ -570,9 +557,6 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: 'center',
       backgroundColor: colors.primaryLight,
     },
-    heroCopy: { flex: 1 },
-    title: { ...TYPE.title, color: colors.text },
-    subtitle: { ...TYPE.callout, color: colors.textSub, marginTop: 3 },
     monthCard: {
       flexDirection: 'row',
       alignItems: 'center',

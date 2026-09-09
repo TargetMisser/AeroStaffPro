@@ -148,14 +148,10 @@ const designLab = read('src/screens/DesignLabScreen.tsx');
 assert(designLab.includes('CinematicMotionBoard'), 'Design Lab should embed the Cinematic Motion Board prototype');
 
 const appTabBar = read('src/components/AppTabBar.tsx');
-assert(appTabBar.includes('motionRecipeSprings'), 'App tab bar should use centralized motion recipe springs');
-assert(appTabBar.includes('motionRecipeDurations'), 'App tab bar should use centralized motion recipe durations');
 assert(appTabBar.includes('useReducedMotionPreference'), 'App tab bar should respect reduced-motion settings');
-assert(appTabBar.includes('withMotionTokens'), 'App tab bar should label the real footer motion integration');
 
 const drawerMenu = read('src/components/DrawerMenu.tsx');
 assert(drawerMenu.includes('panelTranslateX'), 'Drawer menu should animate with transform translateX');
-assert(drawerMenu.includes('panelScale'), 'Drawer menu should add depth scale during reveal');
 assert(!drawerMenu.includes('{ left: slideAnim }'), 'Drawer menu should not animate layout left');
 assert(drawerMenu.includes('useNativeDriver: true'), 'Drawer menu reveal should stay on the native driver');
 assert(drawerMenu.includes('useReducedMotionPreference'), 'Drawer menu should respect reduced-motion settings');
@@ -188,10 +184,6 @@ for (const file of [
 }
 
 const valueChangeFlash = read('src/components/motion/ValueChangeFlash.tsx');
-assert(valueChangeFlash.includes('motionRecipeDurations'), 'ValueChangeFlash should use centralized live-update motion durations');
-assert(valueChangeFlash.includes('motionRecipeSprings'), 'ValueChangeFlash should use centralized live-update motion springs');
-assert(valueChangeFlash.includes('instrumentSheen'), 'ValueChangeFlash should render an instrument-style sheen');
-assert(valueChangeFlash.includes('flashScale'), 'ValueChangeFlash should scale changed values subtly');
 assert(valueChangeFlash.includes('accessibilityLiveRegion'), 'ValueChangeFlash should announce updated values politely');
 
 console.log('Smoke test passed.');
