@@ -138,7 +138,7 @@ assert(onboardingSource.includes('requestPermissionsAsync'), 'Onboarding should 
 const homeScreen = read('src/screens/HomeScreen.tsx');
 assert(homeScreen.includes("from '../utils/homeOperationalStatus'"), 'Home should use shared operational status helpers');
 assert(homeScreen.includes('buildHomeOperationalSummary'), 'Home should render an operational now/next summary');
-assert(homeScreen.includes('buildHomeHealthChips'), 'Home should render lightweight app health chips');
+assert(homeScreen.includes('buildHomeAttention'), 'Home should show actionable issues only');
 
 const settingsScreen = read('src/screens/SettingsScreen.tsx');
 assert(settingsScreen.includes('onOpenOnboarding'), 'Settings should expose guided setup again after first launch');

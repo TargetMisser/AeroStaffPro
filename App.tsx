@@ -261,7 +261,16 @@ function AppInner() {
 
   const renderTabScreen = (tab: Tab) => {
     switch (tab) {
-      case 'Shifts':    return <HomeScreen isFocused={activeTab === 'Shifts'} />;
+      case 'Shifts':    return (
+        <HomeScreen
+          isFocused={activeTab === 'Shifts' && !overlay}
+          onOpenFlights={() => goToTab(TABS.findIndex(item => item.id === 'Flights'))}
+          onOpenNotificationSettings={() => {
+            setSettingsInitialModal('debug');
+            setOverlay('Settings');
+          }}
+        />
+      );
       case 'Calendar':  return <CalendarScreen isFocused={activeTab === 'Calendar'} />;
       case 'Flights':   return <FlightScreen isFocused={activeTab === 'Flights'} />;
       case 'TravelDoc': return <TraveldocScreen isFocused={activeTab === 'TravelDoc'} />;

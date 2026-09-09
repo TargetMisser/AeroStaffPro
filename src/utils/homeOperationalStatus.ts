@@ -1,7 +1,6 @@
-import { formatFlightSourceLabel } from './flightSourceLabel';
+import { translations, type TranslationKey } from '../i18n/translations';
 
-export type HomeOperationalTone = 'active' | 'next' | 'rest' | 'empty' | 'loading';
-export type HomeHealthTone = 'ready' | 'attention' | 'missing';
+export type HomeOperationalTone = 'active' | 'next' | 'ended' | 'rest' | 'empty' | 'loading';
 
 export type HomeOperationalSummaryInput = {
   loadingShift: boolean;
@@ -11,7 +10,7 @@ export type HomeOperationalSummaryInput = {
   shiftStartMs?: number | null;
   shiftEndMs?: number | null;
   nowMs: number;
-  hasPinnedFlight: boolean;
+  locale?: string;
 };
 
 export type HomeOperationalSummary = {
@@ -19,131 +18,96 @@ export type HomeOperationalSummary = {
   title: string;
   detail: string;
   tone: HomeOperationalTone;
-  badges: string[];
 };
 
-export type HomeHealthInput = {
-  providerLabel?: string | null;
-  providerFetchedAt?: number | null;
-  notificationsEnabled: boolean;
-  pendingNotifications: number;
-  duplicateNotifications: number;
-  airportCode: string;
-  nowMs: number;
-};
-
-export type HomeHealthChip = {
-  id: 'airport' | 'flights' | 'notifications' | 'widget';
-  label: string;
-  value: string;
-  tone: HomeHealthTone;
-};
-
-function formatTimeRange(startMs?: number | null, endMs?: number | null): string {
-  if (!startMs || !endMs) {
-    return 'Orario non disponibile';
-  }
-
-  const fmt = (value: number) => new Date(value).toLocaleTimeString('it-IT', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-  return `${fmt(startMs)} - ${fmt(endMs)}`;
-}
-
-function minutesAgo(nowMs: number, thenMs: number): number {
-  return Math.max(0, Math.round((nowMs - thenMs) / 60000));
+function formatDuration(milliseconds: number): string {
+  const minutes = Math.max(1, Math.ceil(milliseconds / 60_000));
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours ? `${hours} h${remainder ? ` ${remainder} min` : ''}` : `${minutes} min`;
 }
 
 export function buildHomeOperationalSummary(input: HomeOperationalSummaryInput): HomeOperationalSummary {
-  const badges = input.hasPinnedFlight ? ['Volo pinnato'] : [];
-
+  const locale = input.locale ?? 'it-IT';
+  const t = (key: TranslationKey) => translations[locale.startsWith('en') ? 'en' : 'it'][key];
   if (input.loadingShift) {
-    return {
-      kicker: 'ADESSO',
-      title: 'Sincronizzo turni',
-      detail: 'Controllo calendario e widget.',
-      tone: 'loading',
-      badges,
-    };
+    return { kicker: t('homeToday'), title: t('homeShiftLoading'), detail: t('homeShiftLoadingDetail'), tone: 'loading' };
   }
 
-  if (input.isWork && input.shiftKind === 'today') {
-    return {
-      kicker: 'ADESSO',
-      title: 'Turno in corso',
-      detail: formatTimeRange(input.shiftStartMs, input.shiftEndMs),
-      tone: 'active',
-      badges,
-    };
-  }
-
-  if (input.isWork && input.shiftKind === 'next') {
-    return {
-      kicker: 'PROSSIMO',
-      title: 'Prossimo turno',
-      detail: formatTimeRange(input.shiftStartMs, input.shiftEndMs),
-      tone: 'next',
-      badges,
-    };
+  if (input.isWork) {
+    const start = input.shiftStartMs;
+    const end = input.shiftEndMs;
+    if (start == null || end == null || !Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+      return { kicker: t('homeToday'), title: t('homeShiftWork'), detail: t('homeShiftTimeUnavailable'), tone: 'empty' };
+    }
+    const fmt = (value: number) => new Date(value).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    const title = `${fmt(start)} – ${fmt(end)}`;
+    if (input.nowMs < start) {
+      return {
+        kicker: input.shiftKind === 'next' ? t('homeNextShift') : t('homeShiftToday'),
+        title,
+        detail: t('homeShiftStartsIn').replace('{time}', formatDuration(start - input.nowMs)),
+        tone: 'next',
+      };
+    }
+    if (input.nowMs < end) {
+      return {
+        kicker: t('homeInProgress'), title,
+        detail: t('homeShiftEndsIn').replace('{time}', formatDuration(end - input.nowMs)),
+        tone: 'active',
+      };
+    }
+    return { kicker: t('homeToday'), title, detail: t('homeShiftEnded'), tone: 'ended' };
   }
 
   if (input.isRest || input.shiftKind === 'rest') {
-    return {
-      kicker: 'OGGI',
-      title: 'Riposo',
-      detail: 'Nessun turno operativo previsto.',
-      tone: 'rest',
-      badges,
-    };
+    return { kicker: t('homeToday'), title: t('homeRestDay'), detail: t('homeRestDetail'), tone: 'rest' };
   }
-
-  return {
-    kicker: 'ADESSO',
-    title: 'Nessun turno attivo',
-    detail: 'Importa o aggiungi i turni per rendere utile la Home.',
-    tone: 'empty',
-    badges,
-  };
+  return { kicker: t('homeToday'), title: t('homeNoShift'), detail: t('homeNoShiftDetail'), tone: 'empty' };
 }
 
-export function buildHomeHealthChips(input: HomeHealthInput): HomeHealthChip[] {
-  const providerAgeMin = input.providerFetchedAt ? minutesAgo(input.nowMs, input.providerFetchedAt) : null;
-  const providerFresh = providerAgeMin !== null && providerAgeMin <= 20;
-  const providerValue = input.providerLabel
-    ? `${formatFlightSourceLabel(input.providerLabel)}${providerAgeMin !== null ? ` · ${providerAgeMin}m` : ''}`
-    : 'Nessun dato';
+export type HomeAttentionAction = 'calendar-permission' | 'calendar-setup' | 'notification-permission' | 'notification-settings' | 'flights';
+export type HomeAttention = {
+  titleKey: TranslationKey;
+  detailKey: TranslationKey;
+  actionKey: TranslationKey;
+  action: HomeAttentionAction;
+};
 
-  return [
-    {
-      id: 'airport',
-      label: 'Aeroporto',
-      value: input.airportCode,
-      tone: input.airportCode ? 'ready' : 'missing',
-    },
-    {
-      id: 'flights',
-      label: 'Voli',
-      value: providerValue,
-      tone: input.providerLabel ? (providerFresh ? 'ready' : 'attention') : 'missing',
-    },
-    {
-      id: 'notifications',
-      label: 'Notifiche',
-      value: input.notificationsEnabled
-        ? `${input.pendingNotifications} attive`
-        : 'Spente',
-      tone: input.duplicateNotifications > 0
-        ? 'missing'
-        : input.notificationsEnabled
-          ? 'ready'
-          : 'attention',
-    },
-    {
-      id: 'widget',
-      label: 'Widget',
-      value: 'Sync Home',
-      tone: 'ready',
-    },
-  ];
+export type HomeAttentionInput = {
+  calendarPermission: 'unknown' | 'granted' | 'denied';
+  calendarAvailable: boolean | null;
+  notificationsEnabled: boolean;
+  notificationPermissionGranted: boolean | null;
+  duplicateNotifications: number;
+  hasRelevantFlights: boolean;
+  flightStatusLoaded: boolean;
+  providerFetchedAt?: number | null;
+  nowMs: number;
+};
+
+// Surface one actionable issue at a time. Deliberately disabled notifications
+// and flight data outside a work shift do not need a warning on Home.
+export function buildHomeAttention(input: HomeAttentionInput): HomeAttention | null {
+  if (input.calendarPermission === 'denied') {
+    return { titleKey: 'homeCalendarAccessTitle', detailKey: 'homeCalendarAccessDetail', actionKey: 'homeAllowCalendar', action: 'calendar-permission' };
+  }
+  if (input.calendarPermission === 'granted' && input.calendarAvailable === false) {
+    return { titleKey: 'homeCalendarMissingTitle', detailKey: 'homeCalendarMissingDetail', actionKey: 'homeCreateCalendar', action: 'calendar-setup' };
+  }
+  if (input.notificationsEnabled && input.notificationPermissionGranted === false) {
+    return { titleKey: 'homeNotificationsBlockedTitle', detailKey: 'homeNotificationsBlockedDetail', actionKey: 'homeAllowNotifications', action: 'notification-permission' };
+  }
+  if (input.notificationsEnabled && input.duplicateNotifications > 0) {
+    return { titleKey: 'homeNotificationsCheckTitle', detailKey: 'homeNotificationsCheckDetail', actionKey: 'homeCheckNotifications', action: 'notification-settings' };
+  }
+  if (input.hasRelevantFlights && input.flightStatusLoaded) {
+    if (!input.providerFetchedAt) {
+      return { titleKey: 'homeFlightsMissingTitle', detailKey: 'homeFlightsMissingDetail', actionKey: 'homeOpenFlights', action: 'flights' };
+    }
+    if (input.nowMs - input.providerFetchedAt > 20 * 60_000) {
+      return { titleKey: 'homeFlightsStaleTitle', detailKey: 'homeFlightsStaleDetail', actionKey: 'homeOpenFlights', action: 'flights' };
+    }
+  }
+  return null;
 }

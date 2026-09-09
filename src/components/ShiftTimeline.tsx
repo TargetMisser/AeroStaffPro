@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity,
-  ActivityIndicator, Dimensions, LayoutAnimation, Platform,
+  ActivityIndicator, Dimensions, LayoutAnimation, Platform, useWindowDimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
@@ -71,6 +71,8 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
   const [error, setError] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nowSec, setNowSec] = useState(Date.now() / 1000);
+  const [rulerWidth, setRulerWidth] = useState(0);
+  const { fontScale } = useWindowDimensions();
 
   const startSec = shiftStart.getTime() / 1000;
   const endSec = shiftEnd.getTime() / 1000;
@@ -140,6 +142,8 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
     return result;
   }, [startSec, endSec]);
 
+  const labelStride = Math.max(1, Math.ceil((ticks.length - 1) / Math.max(1, Math.floor(rulerWidth / (40 * fontScale)))));
+
   const showNowLine = nowSec >= startSec && nowSec <= endSec;
   const fmtTime = (ts: number) => new Date(ts * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
@@ -199,11 +203,18 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
           {/* Righello orizzontale del tempo */}
           <View style={s.rulerWrap}>
             <View style={s.rulerLabelSpace} />
-            <View style={s.ruler}>
+            <View style={s.ruler} onLayout={event => setRulerWidth(event.nativeEvent.layout.width)}>
               {ticks.map((tick, i) => (
                 <View key={i} style={[s.rulerTick, { left: `${tick.pct}%` }]}>
                   <View style={[s.rulerTickMark, { backgroundColor: colors.border }]} />
-                  <Text style={[s.rulerTickLabel, { color: colors.textMuted }]}>{tick.label}</Text>
+                  {(i === 0 || i === ticks.length - 1 || (i % labelStride === 0 && i <= ticks.length - 1 - labelStride)) && (
+                    <Text style={[
+                      s.rulerTickLabel,
+                      { color: colors.textSub, width: 36 * fontScale, left: -18 * fontScale },
+                      i === 0 && { left: 0, textAlign: 'left' },
+                      i === ticks.length - 1 && { left: -36 * fontScale, textAlign: 'right' },
+                    ]}>{tick.label}</Text>
+                  )}
                 </View>
               ))}
               {/* Linea NOW */}
@@ -344,7 +355,7 @@ function makeStyles(c: ThemeColors) {
     ruler: { flex: 1, position: 'relative' },
     rulerTick: { position: 'absolute', top: 0, alignItems: 'center', transform: [{ translateX: -1 }] },
     rulerTickMark: { width: 1, height: 10 },
-    rulerTickLabel: { fontSize: 8, fontWeight: '700', marginTop: 2 },
+    rulerTickLabel: { position: 'absolute', top: 12, left: -18, width: 36, fontSize: 10, fontWeight: '700', textAlign: 'center' },
     nowMarker: { position: 'absolute', top: 0, alignItems: 'center', zIndex: 10, transform: [{ translateX: -1 }] },
     nowLabel: { fontSize: 7, fontWeight: '900', color: '#EF4444' },
     nowTick: { width: 2, height: 10, backgroundColor: '#EF4444', borderRadius: 1 },

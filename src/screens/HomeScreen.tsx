@@ -2,12 +2,13 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, Image, Modal, TextInput,
-  Platform,
+  Platform, Linking, AppState,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Calendar from 'expo-calendar';
+import * as Notifications from 'expo-notifications';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
@@ -23,14 +24,12 @@ import { getCachedFlightProviderDiagnostics, type FlightProviderDiagnosticsSnaps
 import { getNotificationDebugSnapshot, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
 import { cancelPinnedNotifications } from '../utils/flightNotificationScheduler';
 import { loadFlightScreenCache } from '../utils/flightScreenCache';
-import { checkEasyJetOverlap } from '../utils/easyjetOverlapMode';
-import { dismissPinnedFlightNotification, showOrUpdateEasyJetOverlapNotification } from '../utils/pinnedFlightOngoingNotification';
+import { dismissPinnedFlightNotification, dismissLegacyEasyJetOverlapNotification } from '../utils/pinnedFlightOngoingNotification';
 import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
 import {
-  buildHomeHealthChips,
+  buildHomeAttention,
   buildHomeOperationalSummary,
-  type HomeHealthChip,
-  type HomeHealthTone,
+  type HomeAttentionAction,
 } from '../utils/homeOperationalStatus';
 import { enableLegacyAndroidLayoutAnimation } from '../utils/layoutAnimation';
 import {
@@ -59,26 +58,6 @@ enableLegacyAndroidLayoutAnimation();
 const PINNED_FLIGHT_KEY = 'pinned_flight_v1';
 const HOME_REST_TIMING = { startHour: 12, startMinute: 0, endHour: 14, endMinute: 0, allDay: true };
 type HomeShiftKind = 'today' | 'next' | 'rest' | 'none';
-
-function healthToneColor(tone: HomeHealthTone, colors: ThemeColors): string {
-  if (tone === 'ready') return colors.success;
-  if (tone === 'missing') return colors.danger;
-  return colors.warning;
-}
-
-function healthIcon(id: HomeHealthChip['id']): keyof typeof MaterialIcons.glyphMap {
-  switch (id) {
-    case 'airport':
-      return 'local-airport';
-    case 'flights':
-      return 'radar';
-    case 'notifications':
-      return 'notifications-active';
-    case 'widget':
-    default:
-      return 'widgets';
-  }
-}
 
 // months comes from useLanguage() context
 
@@ -190,113 +169,13 @@ function PinnedFlightCardComponent({ item, colors, isOperations = false }: { ite
 // Performance optimization: memoize flatlist item to prevent unnecessary re-renders
 const PinnedFlightCard = React.memo(PinnedFlightCardComponent);
 
-function EasyJetOverlapMonitor({ overlappingFlights, tickerMs, colors, t, locale }: {
-  overlappingFlights: any[];
-  tickerMs: number;
-  colors: ThemeColors;
-  t: any;
-  locale: string;
-}) {
-  const formatTimeWithSeconds = (ts?: number) => {
-    if (!ts) return 'N/A';
-    return new Date(ts * 1000).toLocaleTimeString(locale, {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-  };
+type HomeScreenProps = {
+  isFocused?: boolean;
+  onOpenFlights: () => void;
+  onOpenNotificationSettings: () => void;
+};
 
-  const formatCountdown = (ts?: number) => {
-    if (!ts) return '';
-    const diffMs = ts * 1000 - tickerMs;
-    if (diffMs <= 0) {
-      return 'Arrivato';
-    }
-    const diffSecs = Math.floor(diffMs / 1000);
-    const hrs = Math.floor(diffSecs / 3600);
-    const mins = Math.floor((diffSecs % 3600) / 60);
-    const secs = diffSecs % 60;
-
-    if (hrs > 0) {
-      return `Tra ${hrs}h ${mins}m ${secs}s`;
-    }
-    return `Tra ${mins}m ${secs}s`;
-  };
-
-  return (
-    <View style={{
-      marginHorizontal: SPACING.lg, marginTop: SPACING.lg,
-      borderRadius: 24, overflow: 'hidden',
-      backgroundColor: colors.isDark ? 'rgba(255, 102, 0, 0.08)' : 'rgba(255, 102, 0, 0.04)',
-      borderWidth: 1.5, borderColor: '#FF660055',
-      padding: SPACING.lg,
-    }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.md }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, flexShrink: 1 }}>
-          <MaterialCommunityIcons name="radar" size={20} color="#FF6600" />
-          <Text style={{ fontSize: 13, fontWeight: '800', color: colors.warning, letterSpacing: 0.4, flexShrink: 1 }}>
-            easyJet Overlap Active
-          </Text>
-        </View>
-        <View style={{ backgroundColor: '#FF660022', paddingHorizontal: SPACING.sm, paddingVertical: 3, borderRadius: RADIUS.md }}>
-          <Text style={{ fontSize: 10, fontWeight: '800', color: '#FF6600' }}>Aggiornato al secondo</Text>
-        </View>
-      </View>
-
-      <Text style={{ fontSize: 12, color: colors.textSub, marginBottom: SPACING.lg, lineHeight: 18 }}>
-        Rilevata fascia oraria con più voli easyJet in arrivo sovrapposti. Monitoraggio in tempo reale attivo.
-      </Text>
-
-      {/* Flight rows */}
-      <View style={{ gap: SPACING.md }}>
-        {overlappingFlights.map((item, idx) => {
-          const flightNumber = item.flight?.identification?.number?.default || 'N/A';
-          const origin = getFlightAirportLabel(item.flight?.airport?.origin, 'N/A');
-          
-          const scheduledTs = item.flight?.time?.scheduled?.arrival;
-          const estimatedTs = item.flight?.time?.estimated?.arrival;
-          const realTs = item.flight?.time?.real?.arrival;
-          const when = realTs || estimatedTs || scheduledTs;
-
-          const landed = !!realTs;
-          const countdown = landed ? 'Atterrato' : formatCountdown(when);
-          const timeStr = formatTimeWithSeconds(when);
-
-          return (
-            <View key={idx} style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-              backgroundColor: colors.isDark ? 'rgba(2,8,12,0.48)' : colors.card,
-              borderRadius: RADIUS.lg, padding: SPACING.md,
-              borderWidth: 1, borderColor: colors.isDark ? 'rgba(255, 102, 0, 0.2)' : 'rgba(255, 102, 0, 0.1)',
-            }}>
-              <View style={{ flex: 1, gap: SPACING.xs }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <View style={{ backgroundColor: '#FF6600', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900' }}>{flightNumber}</Text>
-                  </View>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: colors.textMuted }}>da {origin}</Text>
-                </View>
-                <Text style={{ fontSize: 10, color: colors.textSub }}>
-                  {landed ? 'Atterrato' : 'Stima arrivo'}
-                </Text>
-              </View>
-
-              <View style={{ alignItems: 'flex-end', gap: 2 }}>
-                <Text style={{ fontSize: 18, fontWeight: '900', color: colors.text }}>{timeStr}</Text>
-                <Text style={{ fontSize: 11, fontWeight: '800', color: landed ? colors.success : '#FF6600', textTransform: 'uppercase' }}>
-                  {countdown}
-                </Text>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }) {
+export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNotificationSettings }: HomeScreenProps) {
   const { colors, mode } = useAppTheme();
   const { airportCode } = useAirport();
   const { t, locale, weatherMap } = useLanguage();
@@ -319,8 +198,11 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
   const [flightProviderStatus, setFlightProviderStatus] = useState<FlightProviderDiagnosticsSnapshot | null>(null);
   const [notificationStatus, setNotificationStatus] = useState<NotificationDebugSnapshot | null>(null);
   const [statusNow, setStatusNow] = useState(Date.now());
-  const [easyJetOverlap, setEasyJetOverlap] = useState<{ isActive: boolean; overlappingFlights: any[] }>({ isActive: false, overlappingFlights: [] });
-  const [secondsTicker, setSecondsTicker] = useState(Date.now());
+  const [calendarPermission, setCalendarPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [calendarAvailable, setCalendarAvailable] = useState<boolean | null>(null);
+  const [notificationPermissionGranted, setNotificationPermissionGranted] = useState<boolean | null>(null);
+  const [flightStatusLoaded, setFlightStatusLoaded] = useState(false);
+  const [attentionBusy, setAttentionBusy] = useState(false);
 
   const hasLoadedShiftRef = useRef(false);
 
@@ -402,24 +284,20 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
     if (!isFocused) return;
     let mounted = true;
     const refreshHomeStatus = async () => {
-      const [provider, notifications, cache] = await Promise.all([
+      const [provider, notifications, permission] = await Promise.all([
         getCachedFlightProviderDiagnostics(airportCode).catch(() => null),
         getNotificationDebugSnapshot().catch(() => null),
-        loadFlightScreenCache(airportCode).catch(() => null),
+        Platform.OS === 'web' ? Promise.resolve(null) : Notifications.getPermissionsAsync().catch(() => null),
       ]);
       if (!mounted) return;
       setFlightProviderStatus(provider);
       setNotificationStatus(notifications);
       setStatusNow(Date.now());
-      if (cache) {
-        const overlapResult = checkEasyJetOverlap(cache.arrivals);
-        setEasyJetOverlap(overlapResult);
-        if (overlapResult.isActive) {
-          showOrUpdateEasyJetOverlapNotification(overlapResult.overlappingFlights, true).catch(() => {});
-        }
-      }
+      setNotificationPermissionGranted(permission ? permission.granted : null);
+      setFlightStatusLoaded(true);
     };
 
+    setFlightStatusLoaded(false);
     refreshHomeStatus().catch(() => {});
     const interval = setInterval(() => { refreshHomeStatus().catch(() => {}); }, 60_000);
     return () => {
@@ -429,14 +307,22 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
   }, [airportCode, isFocused]);
 
   useEffect(() => {
-    if (!isFocused || !easyJetOverlap.isActive) return;
+    dismissLegacyEasyJetOverlapNotification().catch(() => {});
+  }, []);
 
-    const tickerInterval = setInterval(() => {
-      setSecondsTicker(Date.now());
-    }, 1000);
-
-    return () => clearInterval(tickerInterval);
-  }, [easyJetOverlap.isActive, isFocused]);
+  // Refresh immediately after returning from the phone's permission settings.
+  useEffect(() => {
+    if (!isFocused) return;
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') return;
+      setStatusNow(Date.now());
+      fetchShift(true);
+      if (Platform.OS !== 'web') {
+        Notifications.getPermissionsAsync().then(permission => setNotificationPermissionGranted(permission.granted)).catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, [isFocused]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -592,10 +478,17 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
       const { status } = silent
         ? await Calendar.getCalendarPermissionsAsync()
         : await Calendar.requestCalendarPermissionsAsync();
-      if (status !== 'granted') { setLoadingShift(false); return; }
+      setCalendarPermission(status === 'granted' ? 'granted' : 'denied');
+      if (status !== 'granted') {
+        setShiftEvent(null);
+        setShiftKind('none');
+        setCalendarAvailable(null);
+        return;
+      }
       const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
       const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);
-      if (!cal) { setLoadingShift(false); return; }
+      setCalendarAvailable(Boolean(cal));
+      if (!cal) { setShiftEvent(null); setShiftKind('none'); return; }
       const now = new Date();
       const yesterdayStart = new Date(now); yesterdayStart.setDate(yesterdayStart.getDate() - 1); yesterdayStart.setHours(0, 0, 0, 0);
       const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
@@ -634,7 +527,7 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
         if (todayWorkEnded && tomorrowWork) {
           selectedEvent = tomorrowWork;
           selectedKind = 'next';
-        } else if (!todayWorkEnded) {
+        } else {
           selectedEvent = todayWork;
           selectedKind = 'today';
         }
@@ -687,7 +580,6 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
 
   const isRest = shiftEvent?.title?.includes('Riposo');
   const isWork = shiftEvent?.title?.includes('Lavoro');
-  const isNextShift = isWork && shiftKind === 'next';
   const operationalSummary = useMemo(() => buildHomeOperationalSummary({
     loadingShift,
     shiftKind,
@@ -696,17 +588,46 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
     shiftStartMs: shiftEvent ? new Date(shiftEvent.startDate).getTime() : null,
     shiftEndMs: shiftEvent ? new Date(shiftEvent.endDate).getTime() : null,
     nowMs: statusNow,
-    hasPinnedFlight: Boolean(pinnedFlight),
-  }), [isRest, isWork, loadingShift, pinnedFlight, shiftEvent, shiftKind, statusNow]);
-  const healthChips = useMemo(() => buildHomeHealthChips({
-    providerLabel: flightProviderStatus?.sourceLabel,
-    providerFetchedAt: flightProviderStatus?.fetchedAt,
+    locale,
+  }), [isRest, isWork, loadingShift, locale, shiftEvent, shiftKind, statusNow]);
+  const attention = buildHomeAttention({
+    calendarPermission,
+    calendarAvailable,
     notificationsEnabled: notificationStatus?.enabled ?? false,
-    pendingNotifications: notificationStatus?.pendingAeroStaff ?? 0,
+    notificationPermissionGranted,
     duplicateNotifications: notificationStatus?.possibleDuplicates.length ?? 0,
-    airportCode,
+    hasRelevantFlights: Boolean(pinnedFlight) || Boolean(isWork && shiftEvent && new Date(shiftEvent.endDate).getTime() > statusNow),
+    flightStatusLoaded,
+    providerFetchedAt: flightProviderStatus?.fetchedAt,
     nowMs: statusNow,
-  }), [airportCode, flightProviderStatus, notificationStatus, statusNow]);
+  });
+
+  const handleAttention = async (action: HomeAttentionAction) => {
+    if (attentionBusy) return;
+    setAttentionBusy(true);
+    try {
+      if (action === 'flights') onOpenFlights();
+      else if (action === 'calendar-setup') {
+        const calendarId = await getWritableCalendarId();
+        if (calendarId) await fetchShift(true);
+        else Alert.alert(t('error'), t('homeNoWritableCalendar'));
+      }
+      else if (action === 'notification-settings') onOpenNotificationSettings();
+      else if (action === 'calendar-permission') {
+        const permission = await Calendar.requestCalendarPermissionsAsync();
+        if (permission.granted) await fetchShift(true);
+        else if (!permission.canAskAgain) await Linking.openSettings();
+      } else if (action === 'notification-permission') {
+        const permission = await Notifications.requestPermissionsAsync();
+        setNotificationPermissionGranted(permission.granted);
+        if (!permission.granted && !permission.canAskAgain) await Linking.openSettings();
+      }
+    } catch (error) {
+      Alert.alert(t('error'), getErrorMessage(error, t('error')));
+    } finally {
+      setAttentionBusy(false);
+    }
+  };
   const s = useMemo(() => makeStyles(colors, isOperations), [colors, isOperations]);
 
   return (
@@ -725,11 +646,7 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
       <BoardReveal index={2} enabled={isOperations}>
         <View style={s.operationalCard}>
           <View style={s.operationalHeader}>
-            <View style={s.operationalTitleBlock}>
-              <Text style={s.operationalKicker}>{operationalSummary.kicker}</Text>
-              <Text style={s.operationalTitle}>{operationalSummary.title}</Text>
-              <Text style={s.operationalDetail}>{operationalSummary.detail}</Text>
-            </View>
+            <Text style={s.operationalKicker}>{operationalSummary.kicker}</Text>
             <View style={[
               s.operationalBeacon,
               operationalSummary.tone === 'active' && s.operationalBeaconActive,
@@ -743,16 +660,8 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
               />
             </View>
           </View>
-          {operationalSummary.badges.length > 0 && (
-            <View style={s.summaryBadgeRow}>
-              {operationalSummary.badges.map(badge => (
-                <View key={badge} style={s.summaryBadge}>
-                  <MaterialIcons name="push-pin" size={12} color="#DCE8EF" />
-                  <Text style={s.summaryBadgeText}>{badge}</Text>
-                </View>
-              ))}
-            </View>
-          )}
+          <Text style={[s.operationalTitle, isWork && s.operationalTime]}>{operationalSummary.title}</Text>
+          <Text style={s.operationalDetail}>{operationalSummary.detail}</Text>
           <View style={s.weatherStrip}>
             {weather ? (
               <>
@@ -766,25 +675,28 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
         </View>
       </BoardReveal>
 
-      <Text accessibilityRole="header" style={s.sectionTitle}>{t('homeOverviewStatus')}</Text>
-      <View style={s.healthGrid}>
-        {healthChips.map(chip => {
-          const tone = healthToneColor(chip.tone, colors);
-          return (
-            <View key={chip.id} style={s.healthChip}>
-              <View style={[s.healthIcon, { backgroundColor: colors.cardSecondary }]}>
-                <MaterialIcons name={healthIcon(chip.id)} size={18} color={tone} />
-              </View>
-              <View style={s.healthText}>
-                <Text style={[s.healthLabel, { color: colors.textSub }]}>{chip.label}</Text>
-                <Text style={[s.healthValue, { color: chip.tone === 'missing' ? tone : colors.text }]}>
-                  {chip.value}
-                </Text>
-              </View>
+      {attention && (
+        <View style={s.attentionCard}>
+          <View style={s.attentionCopy}>
+            <MaterialIcons name="info-outline" size={20} color={colors.primaryText} />
+            <View style={s.attentionText}>
+              <Text style={s.attentionTitle}>{t(attention.titleKey)}</Text>
+              <Text style={s.attentionDetail}>{t(attention.detailKey)}</Text>
             </View>
-          );
-        })}
-      </View>
+          </View>
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={t(attention.actionKey)}
+            accessibilityState={{ disabled: attentionBusy, busy: attentionBusy }}
+            disabled={attentionBusy}
+            onPress={() => handleAttention(attention.action)}
+            style={s.attentionAction}
+          >
+            <Text style={s.attentionActionText}>{t(attention.actionKey)}</Text>
+            {attentionBusy ? <ActivityIndicator size="small" color={colors.primaryText} /> : <MaterialIcons name="arrow-forward" size={18} color={colors.primaryText} />}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Pinned flight */}
       {pinnedFlight && (
@@ -792,54 +704,6 @@ export default function HomeScreen({ isFocused = true }: { isFocused?: boolean }
           <PinnedFlightCard item={pinnedFlight} colors={colors} isOperations={isOperations} />
         </BoardReveal>
       )}
-
-      {/* EasyJet Overlap Monitor */}
-      {easyJetOverlap.isActive && (
-        <BoardReveal index={3} enabled={isOperations}>
-          <EasyJetOverlapMonitor
-            overlappingFlights={easyJetOverlap.overlappingFlights}
-            tickerMs={secondsTicker}
-            colors={colors}
-            t={t}
-            locale={locale}
-          />
-        </BoardReveal>
-      )}
-
-      {/* Turno Attuale */}
-      <Text style={s.sectionTitle}>{isNextShift ? t('homeNextShift') : t('homeCurrentShift')}</Text>
-
-      <BoardReveal index={pinnedFlight ? 4 : 3} enabled={isOperations}>
-        <View style={s.shiftCard}>
-          {loadingShift ? (
-            <ActivityIndicator color={colors.primary} />
-          ) : isWork ? (
-            <>
-              <View style={s.shiftStrip} />
-              <View style={{ flex: 1 }}>
-                <View style={s.shiftBadgeRow}>
-                  <View style={s.inProgressBadge}>
-                    <Text style={s.inProgressText}>{isNextShift ? t('homeNextShiftBadge') : t('homeInProgress')}</Text>
-                  </View>
-                </View>
-                <Text style={s.shiftTitle}>{isNextShift ? t('homeNextShift') : t('homeShiftWork')}</Text>
-                <Text style={s.shiftTime}>
-                  {new Date(shiftEvent.startDate).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})} – {new Date(shiftEvent.endDate).toLocaleTimeString(locale,{hour:'2-digit',minute:'2-digit'})}
-                </Text>
-              </View>
-            </>
-          ) : isRest ? (
-            <View style={s.restRow}>
-              <View style={s.restIconWrap}>
-                <MaterialIcons name="hotel" size={22} color={colors.success} />
-              </View>
-              <Text style={s.restText}>{t('homeRestDay')}</Text>
-            </View>
-          ) : (
-            <Text style={s.emptyShift}>{t('homeNoShift')}</Text>
-          )}
-        </View>
-      </BoardReveal>
 
       {/* Timeline voli nel turno — inline */}
       {shiftEvent && isWork && (
@@ -870,41 +734,27 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     airportBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 9, backgroundColor: c.primaryLight, borderRadius: RADIUS.md },
     airportCode: { ...TYPE.caption, fontWeight: '800', color: c.primaryText, letterSpacing: 0.6 },
     operationalCard: { marginHorizontal: SPACING.lg, backgroundColor: c.isDark ? '#193340' : '#193747', borderRadius: 24, padding: SPACING.xl, borderWidth: 1, borderColor: c.isDark ? '#315261' : '#244858', gap: 16 },
-    operationalHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-    operationalTitleBlock: { flex: 1, minWidth: 0, gap: 8 },
-    operationalKicker: { ...TYPE.overline, color: c.isDark ? '#99F6E4' : '#FFD4B3', letterSpacing: 1.8 },
+    operationalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    operationalKicker: { ...TYPE.overline, color: c.isDark ? '#99F6E4' : '#FFD4B3', letterSpacing: 1.8, flex: 1 },
     operationalTitle: { fontSize: 26, lineHeight: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.6 },
+    operationalTime: { fontSize: 32, lineHeight: 40, fontVariant: ['tabular-nums'] },
     operationalDetail: { fontSize: 15, lineHeight: 22, color: '#D0DFE7', fontVariant: ['tabular-nums'] },
-    operationalBeacon: { width: 44, height: 44, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
+    operationalBeacon: { width: 32, height: 32, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.08)' },
     operationalBeaconActive: { backgroundColor: 'rgba(52,211,153,0.14)' },
     operationalBeaconNext: { backgroundColor: 'rgba(255,255,255,0.10)' },
     operationalBeaconRest: { backgroundColor: 'rgba(96,165,250,0.14)' },
-    summaryBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
-    summaryBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: RADIUS.pill, backgroundColor: 'rgba(255,255,255,0.10)', paddingHorizontal: 10, paddingVertical: 6 },
-    summaryBadgeText: { ...TYPE.caption, color: '#DCE8EF' },
     weatherStrip: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACING.sm, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.16)', paddingTop: SPACING.lg },
     weatherTemp: { fontSize: 18, fontWeight: '700', color: '#FFFFFF', fontVariant: ['tabular-nums'] },
     weatherDesc: { ...TYPE.caption, color: '#D0DFE7', flexShrink: 1 },
     weatherPlace: { ...TYPE.caption, color: '#D0DFE7', marginLeft: 'auto', flexShrink: 1 },
-    healthGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginHorizontal: SPACING.lg },
-    healthChip: { flexBasis: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: c.glassBorder, backgroundColor: c.card, padding: SPACING.md },
-    healthIcon: { width: 32, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-    healthText: { flex: 1, minWidth: 0, gap: 3 },
-    healthLabel: { fontSize: 11, fontWeight: '500' },
-    healthValue: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
-    sectionTitle: { ...TYPE.subhead, color: c.text, marginHorizontal: SPACING.lg, marginTop: SPACING.xxl, marginBottom: SPACING.md },
-    shiftCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: SPACING.lg, padding: isOperations ? 18 : 16, flexDirection: 'row', gap: 14, shadowColor: '#172B3A', shadowOpacity: isOperations ? 0 : 0.04, shadowRadius: 12, elevation: 0, minHeight: isOperations ? 104 : 90, borderWidth: 1, borderColor: operationBorder },
-    shiftStrip: { width: isOperations ? 5 : 4, borderRadius: RADIUS.pill, backgroundColor: c.primary, marginRight: 2 },
-    shiftBadgeRow: { flexDirection: 'row', marginBottom: SPACING.sm },
-    inProgressBadge: { backgroundColor: c.successSoft, paddingHorizontal: 10, paddingVertical: 3, borderRadius: RADIUS.xl, borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorder : 'transparent' },
-    inProgressText: { ...TYPE.micro, color: isOperations ? c.primaryDark : c.success, letterSpacing: isOperations ? 1 : 0 },
-    shiftTitle: { ...TYPE.headline, color: isOperations ? c.text : c.primaryDark, marginBottom: SPACING.xs },
-    shiftTime: { fontSize: isOperations ? 28 : 22, fontWeight: '900', color: c.text, marginBottom: SPACING.xs, fontVariant: ['tabular-nums'] },
+    attentionCard: { marginHorizontal: SPACING.lg, marginTop: SPACING.lg, padding: SPACING.md, backgroundColor: c.card, borderRadius: RADIUS.lg, borderWidth: 1, borderColor: c.glassBorder, gap: SPACING.sm },
+    attentionCopy: { flexDirection: 'row', gap: SPACING.sm, alignItems: 'flex-start' },
+    attentionText: { flex: 1, minWidth: 0, gap: 4 },
+    attentionTitle: { fontSize: 14, fontWeight: '700', lineHeight: 20, color: c.text },
+    attentionDetail: { fontSize: 13, lineHeight: 19, color: c.textSub },
+    attentionAction: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, minHeight: 44, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.md, backgroundColor: c.primaryLight, maxWidth: '100%' },
+    attentionActionText: { fontSize: 13, fontWeight: '700', lineHeight: 19, color: c.primaryText, flexShrink: 1 },
     timelineCard: { backgroundColor: operationPanel, borderRadius: isOperations ? 22 : 18, marginHorizontal: SPACING.lg, marginTop: SPACING.md, padding: SPACING.lg, shadowColor: '#172B3A', shadowOpacity: isOperations ? 0 : 0.04, shadowRadius: 10, elevation: 0, borderWidth: 1, borderColor: operationBorder },
-    restRow: { flexDirection: 'row', alignItems: 'center' },
-    restIconWrap: { width: 40, height: 40, borderRadius: RADIUS.md, backgroundColor: c.success + '22', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
-    restText: { fontSize: 18, fontWeight: '700', color: c.success },
-    emptyShift: { ...TYPE.body, color: c.textSub, textAlign: 'center', flex: 1 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xl },
     modalContent: { backgroundColor: c.isDark ? c.bg : c.card, width: '100%', borderRadius: RADIUS.xl, padding: SPACING.xl, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 14, elevation: 8, borderWidth: 1, borderColor: c.glassBorder },
     modalTitle: { fontSize: 17, fontWeight: '700', color: c.primaryDark, marginBottom: 14 },

@@ -101,6 +101,41 @@ function handleFailure(err) {
 
 async function main() {
 
+  // Retiring the automatic easyJet monitor must preserve user-selected pins.
+  {
+    const dismissed = [];
+    const ongoing = loadTsModule('src/utils/pinnedFlightOngoingNotification.ts', {
+      'expo-notifications': {
+        getPresentedNotificationsAsync: async () => [
+          { request: { identifier: 'old-overlap', content: { data: { type: 'easyjet_overlap_ongoing' } } } },
+          { request: { identifier: 'user-pin', content: { data: { type: 'pinned_flight_ongoing' } } } },
+          { request: { identifier: 'shift', content: { data: { type: 'shift_ongoing' } } } },
+        ],
+        dismissNotificationAsync: async id => { dismissed.push(id); },
+      },
+    });
+    await ongoing.dismissLegacyEasyJetOverlapNotification();
+    assert(dismissed.length === 1 && dismissed[0] === 'old-overlap', 'cleanup must dismiss only the retired overlap notification');
+  }
+  {
+    let finishReading;
+    const calls = [];
+    const ongoing = loadTsModule('src/utils/pinnedFlightOngoingNotification.ts', {
+      'expo-notifications': {
+        AndroidImportance: { HIGH: 4 },
+        getPresentedNotificationsAsync: () => new Promise(resolve => { finishReading = resolve; }),
+        dismissNotificationAsync: async () => { calls.push('dismiss old'); },
+        setNotificationChannelAsync: async () => {},
+        scheduleNotificationAsync: async request => { calls.push(request.content.data.type); },
+      },
+    });
+    const cleanup = ongoing.dismissLegacyEasyJetOverlapNotification();
+    const pin = ongoing.showOrUpdatePinnedFlightNotification({ flight: { identification: { number: { default: 'U21234' } } } }, 'arrivals');
+    finishReading([{ request: { identifier: 'aerostaff-pinned-flight-ongoing', content: { data: { type: 'easyjet_overlap_ongoing' } } } }]);
+    await Promise.all([cleanup, pin]);
+    assert(calls.join(',') === 'dismiss old,pinned_flight_ongoing', 'a new pin must wait for legacy cleanup when both share the notification slot');
+  }
+
   // Startup must use the same saved preferences as the Flights tab.
   async function startupScenario(settingsRaw, selectedAirlines = ['ryanair']) {
     const nowMs = new Date(2026, 8, 5, 8, 0, 0).getTime();

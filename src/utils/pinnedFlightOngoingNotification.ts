@@ -6,6 +6,7 @@ import type { CurrentRequestCheck } from './currentRequestEffects';
 const PINNED_ONGOING_ID = 'aerostaff-pinned-flight-ongoing';
 const PINNED_ONGOING_CHANNEL = 'pinned-flight-ongoing';
 const ALWAYS_CURRENT: CurrentRequestCheck = () => true;
+let legacyOverlapCleanup: Promise<void> | null = null;
 
 async function setupPinnedChannel() {
   try {
@@ -35,6 +36,8 @@ export async function showOrUpdatePinnedFlightNotification(
   sticky = true,
   isCurrent: CurrentRequestCheck = ALWAYS_CURRENT,
 ) {
+  if (!isCurrent()) return;
+  await dismissLegacyEasyJetOverlapNotification().catch(() => {});
   if (!isCurrent()) return;
   await setupPinnedChannel();
   if (!isCurrent()) return;
@@ -78,36 +81,25 @@ export async function showOrUpdatePinnedFlightNotification(
   }
 }
 
-export async function showOrUpdateEasyJetOverlapNotification(
-  overlappingFlights: any[],
-  sticky = true,
-) {
-  await setupPinnedChannel();
-
-  const lines = overlappingFlights.map(item => {
-    const flightNumber = item?.flight?.identification?.number?.default || 'N/A';
-    const scheduledTs = item?.flight?.time?.scheduled?.arrival;
-    const estimatedTs = item?.flight?.time?.estimated?.arrival;
-    const realTs = item?.flight?.time?.real?.arrival;
-    const when = realTs || estimatedTs || scheduledTs;
-    const place = getFlightAirportLabel(item?.flight?.airport?.origin, 'N/A');
-    return `${flightNumber}: ${fmtTime(when, true)} (da ${place})`;
-  });
-
-  await Notifications.scheduleNotificationAsync({
-    identifier: PINNED_ONGOING_ID,
-    content: {
-      title: `✈️ Monitor EasyJet Attivo (${overlappingFlights.length} Voli)`,
-      body: lines.join(' · '),
-      data: { type: 'easyjet_overlap_ongoing', count: overlappingFlights.length },
-      sticky,
-      autoDismiss: !sticky,
-      priority: 'max',
-      color: '#FF6600',
-      vibrate: [],
-    },
-    trigger: null,
-  });
+// Older versions used the pinned notification slot for the automatic monitor.
+// Only dismiss that retired notification type; a user-selected flight stays.
+export function dismissLegacyEasyJetOverlapNotification(): Promise<void> {
+  if (!legacyOverlapCleanup) {
+    // Pin updates await the same cleanup, since both notification types used
+    // the same identifier. A late cleanup must never erase a newer pin.
+    legacyOverlapCleanup = (async () => {
+      const presented = await Notifications.getPresentedNotificationsAsync();
+      for (const notification of presented) {
+        if (notification.request.content.data?.type === 'easyjet_overlap_ongoing') {
+          await Notifications.dismissNotificationAsync(notification.request.identifier);
+        }
+      }
+    })().catch(error => {
+      legacyOverlapCleanup = null;
+      throw error;
+    });
+  }
+  return legacyOverlapCleanup;
 }
 
 export async function dismissPinnedFlightNotification(isCurrent: CurrentRequestCheck = ALWAYS_CURRENT) {

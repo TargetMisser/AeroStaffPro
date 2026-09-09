@@ -95,43 +95,51 @@ assert(!noCalendarChecklist.requiredComplete, 'denied calendar should keep core 
 assert(noCalendarChecklist.readyCount < noCalendarChecklist.totalCount, 'setup progress should expose incomplete items');
 
 const homeStatus = loadTsModule('src/utils/homeOperationalStatus.ts');
-const currentShift = homeStatus.buildHomeOperationalSummary({
-  loadingShift: false,
-  shiftKind: 'today',
-  isWork: true,
-  isRest: false,
-  shiftStartMs: Date.UTC(2026, 4, 18, 8, 0),
-  shiftEndMs: Date.UTC(2026, 4, 18, 13, 0),
-  nowMs: Date.UTC(2026, 4, 18, 10, 30),
-  hasPinnedFlight: false,
+const shiftInput = {
+  loadingShift: false, shiftKind: 'today', isWork: true, isRest: false,
+  shiftStartMs: new Date(2026, 4, 18, 8).getTime(),
+  shiftEndMs: new Date(2026, 4, 18, 13).getTime(),
+  nowMs: new Date(2026, 4, 18, 10, 30).getTime(),
+};
+const currentShift = homeStatus.buildHomeOperationalSummary(shiftInput);
+assert(currentShift.title === '08:00 – 13:00', 'the single shift card should lead with the complete time range');
+assert(currentShift.tone === 'active' && currentShift.detail === 'Finisce tra 2 h 30 min', 'active shifts should show time remaining');
+const upcoming = homeStatus.buildHomeOperationalSummary({ ...shiftInput, nowMs: shiftInput.shiftStartMs - 45 * 60_000 });
+assert(upcoming.tone === 'next' && upcoming.detail === 'Inizia tra 45 min', 'a later shift today must not appear in progress');
+assert(homeStatus.buildHomeOperationalSummary({ ...shiftInput, nowMs: shiftInput.shiftStartMs }).tone === 'active', 'shift starts at its exact start boundary');
+const ended = homeStatus.buildHomeOperationalSummary({ ...shiftInput, nowMs: shiftInput.shiftEndMs });
+assert(ended.tone === 'ended' && ended.detail === 'Turno concluso', 'shift ends at its exact end boundary without a negative countdown');
+const night = homeStatus.buildHomeOperationalSummary({
+  ...shiftInput,
+  shiftStartMs: new Date(2026, 4, 18, 22).getTime(), shiftEndMs: new Date(2026, 4, 19, 6).getTime(),
+  nowMs: new Date(2026, 4, 19, 2).getTime(),
 });
-assert(currentShift.title === 'Turno in corso', 'current work shift should become the primary now status');
-assert(currentShift.tone === 'active', 'current work shift should use active tone');
+assert(night.tone === 'active' && night.detail === 'Finisce tra 4 h', 'overnight shifts must use full dates for remaining time');
+const nextShift = homeStatus.buildHomeOperationalSummary({ ...shiftInput, shiftKind: 'next', nowMs: shiftInput.shiftStartMs - 12 * 3_600_000 });
+assert(nextShift.kicker === 'Turno di domani' && nextShift.detail === 'Inizia tra 12 h', 'tomorrow shifts should retain their day label');
+assert(homeStatus.buildHomeOperationalSummary({ ...shiftInput, locale: 'en-GB' }).detail === 'Ends in 2 h 30 min', 'shift countdown should follow the app language');
+assert(homeStatus.buildHomeOperationalSummary({ ...shiftInput, isWork: false, isRest: true, shiftKind: 'rest' }).tone === 'rest', 'rest days should retain a single rest summary');
+assert(homeStatus.buildHomeOperationalSummary({ ...shiftInput, isWork: false, shiftKind: 'none' }).tone === 'empty', 'missing shifts should have an empty summary');
+assert(homeStatus.buildHomeOperationalSummary({ ...shiftInput, shiftEndMs: NaN }).tone === 'empty', 'invalid shift times must not render a countdown');
 
-const nextShift = homeStatus.buildHomeOperationalSummary({
-  loadingShift: false,
-  shiftKind: 'next',
-  isWork: true,
-  isRest: false,
-  shiftStartMs: Date.UTC(2026, 4, 19, 8, 0),
-  shiftEndMs: Date.UTC(2026, 4, 19, 13, 0),
-  nowMs: Date.UTC(2026, 4, 18, 22, 0),
-  hasPinnedFlight: true,
-});
-assert(nextShift.title === 'Prossimo turno', 'next shift should surface after the current day is done');
-assert(nextShift.badges.includes('Volo pinnato'), 'home summary should expose pinned flight context');
-
-const health = homeStatus.buildHomeHealthChips({
-  providerLabel: 'FlightRadar24 API + Cache giornaliera',
-  providerFetchedAt: Date.UTC(2026, 4, 18, 12, 0),
-  notificationsEnabled: true,
-  pendingNotifications: 4,
-  duplicateNotifications: 0,
-  airportCode: 'PSA',
-  nowMs: Date.UTC(2026, 4, 18, 12, 5),
-});
-assert(health.some(chip => chip.id === 'flights' && chip.tone === 'ready'), 'fresh provider data should render as ready');
-assert(health.some(chip => chip.id === 'notifications' && chip.value === '4 attive'), 'notification chip should expose scheduled count');
+const healthyHome = {
+  calendarPermission: 'granted', calendarAvailable: true,
+  notificationsEnabled: true, notificationPermissionGranted: true, duplicateNotifications: 0,
+  hasRelevantFlights: true, flightStatusLoaded: true,
+  providerFetchedAt: shiftInput.nowMs - 5 * 60_000, nowMs: shiftInput.nowMs,
+};
+assert(homeStatus.buildHomeAttention(healthyHome) === null, 'a healthy Home should show no status panels or warnings');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, notificationsEnabled: false, notificationPermissionGranted: false }) === null, 'deliberately disabled notifications should not nag the user');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, hasRelevantFlights: false, providerFetchedAt: null }) === null, 'missing flights outside a shift should not clutter Home');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, flightStatusLoaded: false, providerFetchedAt: null }) === null, 'unknown flight status should not flash a false missing-data warning');
+const stale = homeStatus.buildHomeAttention({ ...healthyHome, providerFetchedAt: shiftInput.nowMs - 21 * 60_000 });
+assert(stale.action === 'flights', 'stale shift data should offer to open Flights');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, providerFetchedAt: null }).action === 'flights', 'a shift with no loaded flights should offer to open Flights');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, notificationPermissionGranted: false }).action === 'notification-permission', 'blocked enabled notifications should offer the permission action');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, duplicateNotifications: 2 }).action === 'notification-settings', 'duplicate alerts should link to the notification review');
+assert(homeStatus.buildHomeAttention({ ...healthyHome, calendarAvailable: false }).action === 'calendar-setup', 'missing calendars should link to setup');
+const denied = homeStatus.buildHomeAttention({ ...healthyHome, calendarPermission: 'denied', providerFetchedAt: null, notificationPermissionGranted: false });
+assert(denied.action === 'calendar-permission', 'calendar access takes priority over other issues so only one actionable warning is shown');
 
 const flightRefreshPolicy = loadTsModule('src/utils/flightRefreshPolicy.ts');
 assert(flightRefreshPolicy.FLIGHT_AUTO_REFRESH_INTERVAL_MS === 120_000, 'flight auto refresh should stay at two minutes');
