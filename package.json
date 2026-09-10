@@ -1,6 +1,6 @@
 {
   "name": "aerostaff-pro",
-  "version": "2.7.51",
+  "version": "2.7.52",
   "main": "index.ts",
   "scripts": {
     "postinstall": "node scripts/sync-pdfjs-assets.cjs",
