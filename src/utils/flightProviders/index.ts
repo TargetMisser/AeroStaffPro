@@ -574,9 +574,38 @@ export async function fetchFlightScheduleFromProviders(
   const useParallelCore = coreProviders.length >= 2;
   const attemptedCoreIds = new Set<FlightScheduleProviderId>();
 
+  const publishProgress = (payload: FlightSchedulePayload) => {
+    if (context.signal?.aborted) return;
+    // Rendering a preview must never fail a provider or trigger a fallback.
+    try { context.onProgress?.(payload); } catch {}
+  };
+
   if (useParallelCore) {
+    const completed = new Map<FlightScheduleProviderId, ProviderAttempt>();
     const attempts = await Promise.all(
-      coreProviders.map(provider => runProviderAttempt(provider, null)),
+      coreProviders.map(async provider => {
+        const attempt = await runProviderAttempt(provider, null);
+        completed.set(provider.id, attempt);
+        if (attempt.diagnostic.contributed && context.onProgress) {
+          // Rebuild in provider order, never network completion order: a fast
+          // fallback must not change which source wins when another arrives.
+          let preview: FlightScheduleProviderResult | null = null;
+          let previewSource: FlightScheduleProviderId | null = null;
+          const labels: string[] = [];
+          const statuses: FlightScheduleProviderStatus[] = [];
+          for (const candidate of coreProviders) {
+            const ready = completed.get(candidate.id);
+            if (!ready) continue;
+            statuses.push(ready.diagnostic);
+            if (!ready.result || !ready.diagnostic.contributed) continue;
+            preview = mergeProviderResults(preview, ready.result);
+            previewSource ??= candidate.id;
+            labels.push(candidate.label);
+          }
+          if (preview && previewSource) publishProgress(buildPayload(preview, previewSource, labels, statuses));
+        }
+        return attempt;
+      }),
     );
     for (const attempt of attempts) {
       attemptedCoreIds.add(attempt.provider.id);
@@ -590,7 +619,11 @@ export async function fetchFlightScheduleFromProviders(
   for (const provider of providers) {
     if (attemptedCoreIds.has(provider.id)) continue;
     const attempt = await runProviderAttempt(provider, aggregate);
-    if (applyProviderAttempt(attempt) && aggregate && source) {
+    const complete = applyProviderAttempt(attempt);
+    if (aggregate && source && attempt.diagnostic.contributed) {
+      publishProgress(buildPayload(aggregate, source, sourceLabels, [...diagnostics]));
+    }
+    if (complete && aggregate && source) {
       return buildPayload(aggregate, source, sourceLabels, diagnostics);
     }
   }

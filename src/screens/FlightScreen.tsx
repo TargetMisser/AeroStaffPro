@@ -126,6 +126,7 @@ type FlightDataSourceState = {
 type FetchAllOptions = {
   markLoading?: boolean;
   markRefreshing?: boolean;
+  reuseRecent?: boolean;
 };
 
 async function openFlightradar24Arrival(
@@ -798,6 +799,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
   const airportCodeRef = useRef(airportCode);
   const isFocusedRef = useRef(isFocused);
+  const activeProfileRef = useRef(activeProfile);
+  const applySelectedAirlinesRef = useRef(applySelectedAirlines);
   const fetchInFlightRef = useRef<{ airportCode: string; requestId: number } | null>(null);
   const flightRequestIdRef = useRef(0);
   const freshSnapshotAirportRef = useRef<string | null>(null);
@@ -805,8 +808,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const liveEtaAbortRef = useRef<AbortController | null>(null);
   airportCodeRef.current = airportCode;
   isFocusedRef.current = isFocused;
+  activeProfileRef.current = activeProfile;
+  applySelectedAirlinesRef.current = applySelectedAirlines;
 
   useEffect(() => () => {
+    flightRequestIdRef.current += 1;
+    fetchInFlightRef.current = null;
     liveEtaAbortRef.current?.abort();
   }, [airportCode, isFocused]);
 
@@ -920,6 +927,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
     const isCurrentNotificationRequest = createNotificationScheduleCheck(isCurrentRequest);
     fetchInFlightRef.current = { airportCode: requestAirportCode, requestId };
+    liveEtaAbortRef.current?.abort();
     lastFlightRefreshAttemptAtRef.current = Date.now();
     if (options.markLoading) setLoading(true);
     if (options.markRefreshing) setRefreshing(true);
@@ -933,7 +941,24 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         sourceLabel,
         fetchedAt,
         providerDiagnostics,
-      } = await fetchAirportScheduleRaw(requestAirportCode);
+      } = await fetchAirportScheduleRaw(requestAirportCode, {
+        maxAgeMs: options.reuseRecent ? 30_000 : 0,
+        onProgress: schedule => {
+          if (!isCurrentRequest()) return;
+          freshSnapshotAirportRef.current = requestAirportCode;
+          setAllArrivalsFull(schedule.allArrivals);
+          setAllDeparturesFull(schedule.allDepartures);
+          setFlightSnapshotAirportCode(requestAirportCode);
+          setFlightDataSource({
+            airportCode: requestAirportCode,
+            sourceLabel: `${schedule.sourceLabel ?? 'Voli'} · aggiornamento in corso`,
+            fetchedAt: schedule.fetchedAt ?? Date.now(),
+            providerDiagnostics: schedule.providerDiagnostics,
+          });
+          setLoading(false);
+          setRefreshing(false);
+        },
+      });
       if (!isCurrentRequest()) return;
 
       const nextAirportAirlines = getAirportAirlines(requestAirportCode);
@@ -943,12 +968,12 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       // in automatico: restano deselezionate nel filtro finché l'utente non le
       // spunta, così in bacheca non compaiono voli che non gestisce.
       const reconciledSelection = reconcileSelectedAirlines({
-        savedProfileAirlines: activeProfile?.airportCode === requestAirportCode ? activeProfile.airlines : [],
+        savedProfileAirlines: activeProfileRef.current?.airportCode === requestAirportCode ? activeProfileRef.current.airlines : [],
         previousSelectedAirlines: selectedAirlinesRef.current,
         nextAirportAirlines,
       });
       if (reconciledSelection) {
-        applySelectedAirlines(reconciledSelection);
+        applySelectedAirlinesRef.current(reconciledSelection);
       }
       // Accumula lo storico minimo della rotazione per arrivi e partenze. Le
       // partenze concluse verranno nascoste dalla lista, ma restano disponibili
@@ -1004,6 +1029,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       setDepartures(fetchedDepartures);
       setLoading(false);
       setRefreshing(false);
+      // Optional overlays and notification work must not swallow another pull
+      // to refresh after the primary schedule has finished. Request IDs guard
+      // their late results if the user starts a newer refresh.
+      if (fetchInFlightRef.current?.requestId === requestId) fetchInFlightRef.current = null;
       saveFlightScreenCache({
         airportCode: requestAirportCode,
         arrivals: mergedArrs.filter(isPersistable),
@@ -1420,11 +1449,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         setRefreshing(false);
       }
     }
-  }, [activeProfile, airportCode, airportLoading, applySelectedAirlines, isFocused]);
+  }, [airportCode, airportLoading, isFocused, locale]);
 
   useEffect(() => {
     if (airportLoading || !isFocused) return;
-    fetchAll({ markLoading: true });
+    fetchAll({ markLoading: true, reuseRecent: true });
   }, [airportLoading, fetchAll, isFocused]);
 
   // Auto-refresh flight data every 2 minutes so status/times stay current
@@ -1481,7 +1510,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
   // staffMonitor: poll stand / gate / belt every 60 s
   useEffect(() => {
-    if (!isFocused) return;
+    if (!isFocused || airportCode !== 'PSA') return;
     let active = true;
     let activeController: AbortController | null = null;
     const load = async () => {
@@ -1515,7 +1544,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       activeController?.abort();
       activeController = null;
     };
-  }, [isFocused]);
+  }, [airportCode, isFocused]);
 
   const showNotifDialog = useCallback((title: string, message: string, tone: FlightAlertTone) => {
     setNotifDialog({ title, message, tone });
@@ -1690,6 +1719,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
 
   const userShift = activeDay === 'today' ? shifts.today : shifts.tomorrow;
   const selectedDate = activeDay === 'today' ? new Date() : (() => { const d = new Date(); d.setDate(d.getDate() + 1); return d; })();
+  const selectedDayMs = selectedDate.setHours(0, 0, 0, 0);
   const useStaffMonitorRegistrationHints = airportCode === 'PSA' && activeDay === 'today';
   const visibleStaffMonitorDepartures = useStaffMonitorRegistrationHints
     ? staffMonitorDeps
@@ -1699,15 +1729,15 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const snapshotMatchesAirport = flightSnapshotAirportCode === airportCode;
   const visibleFlightDataSource = flightDataSource?.airportCode === airportCode ? flightDataSource : null;
 
-  const currentDayRotationData = snapshotMatchesAirport
+  const currentDayRotationData = useMemo(() => snapshotMatchesAirport
     ? buildUnifiedFlightList(
         allArrivalsFull,
         allDeparturesFull,
-        selectedDate,
+        new Date(selectedDayMs),
         useStaffMonitorRegistrationHints ? staffMonitorArrs : [],
         useStaffMonitorRegistrationHints ? staffMonitorDeps : [],
       )
-    : [];
+    : [], [snapshotMatchesAirport, allArrivalsFull, allDeparturesFull, selectedDayMs, useStaffMonitorRegistrationHints, staffMonitorArrs, staffMonitorDeps]);
   const currentDayRawData = filterActiveUnifiedFlights(currentDayRotationData);
   const currentData = filterUnifiedFlightsByAirlines(currentDayRawData, selectedAirlines);
   const hasFlightSnapshot = snapshotMatchesAirport

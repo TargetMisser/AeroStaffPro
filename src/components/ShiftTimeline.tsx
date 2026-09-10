@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, Modal, ScrollView, TouchableOpacity,
   ActivityIndicator, Dimensions, LayoutAnimation, Platform, useWindowDimensions,
@@ -73,6 +73,8 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [nowSec, setNowSec] = useState(Date.now() / 1000);
   const [rulerWidth, setRulerWidth] = useState(0);
+  const lastRefreshKey = useRef(refreshKey);
+  const flightRequestVersion = useRef(0);
   const { fontScale } = useWindowDimensions();
 
   const startSec = shiftStart.getTime() / 1000;
@@ -80,28 +82,37 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
   const totalSec = Math.max(1, endSec - startSec); // Evita divisione per zero
   const SCREEN_H = Dimensions.get('window').height;
 
-  const fetchFlights = useCallback(async () => {
+  const fetchFlights = useCallback(async (reuseRecent = false) => {
     if (airportLoading) return;
+    const version = ++flightRequestVersion.current;
+    const isCurrent = () => flightRequestVersion.current === version;
     setLoading(true);
     setError(false);
     try {
-      const [{ departures }, filterRaw] = await Promise.all([
-        fetchAirportScheduleRaw(airportCode),
-        AsyncStorage.getItem('aerostaff_flight_filter_v1'),
-      ]);
+      const filterRaw = await AsyncStorage.getItem('aerostaff_flight_filter_v1');
+      if (!isCurrent()) return;
       const selectedAirlines: string[] = filterRaw ? JSON.parse(filterRaw) : [];
-      const filtered = filterFlightsByAirlines(departures, selectedAirlines)
-        .map(parseFlight)
-        .filter((f): f is Flight => {
-          if (!f || f.scheduledDepartureTs < startSec || f.scheduledDepartureTs > endSec) return false;
-          return true;
-        })
-        .sort((a, b) => a.scheduledDepartureTs - b.scheduledDepartureTs);
-      setFlights(filtered);
+      const publish = (departures: any[]) => {
+        if (!isCurrent()) return;
+        const filtered = filterFlightsByAirlines(departures, selectedAirlines)
+          .map(parseFlight)
+          .filter((f): f is Flight => {
+            if (!f || f.scheduledDepartureTs < startSec || f.scheduledDepartureTs > endSec) return false;
+            return true;
+          })
+          .sort((a, b) => a.scheduledDepartureTs - b.scheduledDepartureTs);
+        setFlights(filtered);
+        setLoading(false);
+      };
+      const schedule = await fetchAirportScheduleRaw(airportCode, {
+        maxAgeMs: reuseRecent ? 30_000 : 0,
+        onProgress: partial => publish(partial.departures),
+      });
+      publish(schedule.departures);
     } catch {
-      setError(true);
+      if (isCurrent()) setError(true);
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }, [airportCode, airportLoading, startSec, endSec, refreshKey]);
 
@@ -109,11 +120,13 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
   useEffect(() => {
     if (airportLoading) return;
     if ((inline && active) || visible) {
-      fetchFlights();
+      const reuseRecent = lastRefreshKey.current === refreshKey;
+      lastRefreshKey.current = refreshKey;
+      fetchFlights(reuseRecent);
       setExpandedId(null);
       setNowSec(Date.now() / 1000);
       const interval = setInterval(() => setNowSec(Date.now() / 1000), 60000);
-      return () => clearInterval(interval);
+      return () => { flightRequestVersion.current += 1; clearInterval(interval); };
     }
   }, [inline, active, visible, airportLoading, fetchFlights]);
 
@@ -191,7 +204,7 @@ export default function ShiftTimeline({ visible, onClose, shiftStart, shiftEnd, 
       ) : error ? (
         <View style={[s.center, inline && { minHeight: 80 }]}>
           <Text style={{ color: colors.textSub, fontSize: 14, marginBottom: SPACING.md }}>Errore nel caricamento</Text>
-          <TouchableOpacity onPress={fetchFlights} style={[s.retryBtn, { backgroundColor: colors.primary }]}>
+          <TouchableOpacity onPress={() => fetchFlights()} style={[s.retryBtn, { backgroundColor: colors.primary }]}>
             <Text style={{ color: '#fff', fontWeight: '700' }}>Riprova</Text>
           </TouchableOpacity>
         </View>

@@ -35,6 +35,7 @@ export type FlightScheduleProviderContext = {
   signal?: AbortSignal;
   now?: Date;
   preference?: FlightProviderPreference;
+  onProgress?: (payload: FlightSchedulePayload) => void;
 };
 
 export type FlightScheduleProviderResult = {

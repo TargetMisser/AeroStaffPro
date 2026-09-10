@@ -11,6 +11,8 @@ import {
 import {
   fetchFlightScheduleFromProviders,
   getFlightScheduleProviders,
+  type FlightScheduleProviderContext,
+  type FlightSchedulePayload,
   type FlightScheduleProviderId,
   type FlightScheduleProviderStatus,
 } from './flightProviders';
@@ -55,6 +57,23 @@ export type FR24ScheduleRaw = FR24Schedule & {
   allArrivals: any[];
   allDepartures: any[];
 };
+
+export type FlightScheduleFetchOptions = {
+  onProgress?: (schedule: FR24ScheduleRaw) => void;
+  maxAgeMs?: number;
+};
+
+type ScheduleRequest = {
+  promise: Promise<FR24ScheduleRaw>;
+  listeners: Set<(schedule: FR24ScheduleRaw) => void>;
+  latest?: FR24ScheduleRaw;
+};
+const scheduleRequests = new Map<string, ScheduleRequest>();
+let recentSchedule: { key: string; schedule: FR24ScheduleRaw } | undefined;
+
+function notifySchedule(listener: (schedule: FR24ScheduleRaw) => void, schedule: FR24ScheduleRaw) {
+  try { listener(schedule); } catch {}
+}
 
 async function resolveAirportCode(code?: string): Promise<string> {
   const normalized = normalizeAirportCode(code);
@@ -241,34 +260,92 @@ async function saveCachedSchedule(entry: ScheduleCacheEntry): Promise<void> {
   } catch {}
 }
 
-async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
-  const airportCode = await resolveAirportCode(code);
+async function fetchScheduleRawData(code?: string, options: FlightScheduleFetchOptions = {}): Promise<FR24ScheduleRaw> {
+  const [airportCode, airLabsApiKey, fr24ApiKey, aeroDataBoxApiKey, aeroDataBoxGateway, preference] = await Promise.all([
+    resolveAirportCode(code), getAirLabsApiKey(), getFr24ApiKey(), getAeroDataBoxApiKey(),
+    getAeroDataBoxGateway(), getFlightProviderPreference(),
+  ]);
+  // Coalesce concurrent work with identical settings. Only screen navigation
+  // may reuse the last result; a manual refresh always checks sources again.
+  const key = JSON.stringify([airportCode, airLabsApiKey, fr24ApiKey, aeroDataBoxApiKey, aeroDataBoxGateway, preference]);
+  let request = scheduleRequests.get(key);
+  if (!request && recentSchedule?.key === key && (options.maxAgeMs ?? 0) > 0) {
+    const age = Date.now() - (recentSchedule.schedule.fetchedAt ?? 0);
+    if (age >= 0 && age < Math.min(options.maxAgeMs!, 30_000)) return recentSchedule.schedule;
+  }
+  if (!request) {
+    const current: ScheduleRequest = {
+      listeners: new Set(),
+      promise: runScheduleRequest({
+        airportCode, airport: getAirportInfo(airportCode), airLabsApiKey, fr24ApiKey,
+        aeroDataBoxApiKey, aeroDataBoxGateway, preference,
+      }, schedule => {
+        current.latest = schedule;
+        current.listeners.forEach(listener => notifySchedule(listener, schedule));
+      }).then(schedule => {
+        if (!schedule.providerDiagnostics?.some(item => item.mode === 'fallback')) {
+          recentSchedule = { key, schedule };
+        } else if (recentSchedule?.key === key) {
+          recentSchedule = undefined;
+        }
+        return schedule;
+      }).catch(error => {
+        if (recentSchedule?.key === key) recentSchedule = undefined;
+        throw error;
+      }).finally(() => {
+        if (scheduleRequests.get(key) === current) scheduleRequests.delete(key);
+        current.listeners.clear();
+      }),
+    };
+    request = current;
+    scheduleRequests.set(key, current);
+  }
+  const listener = options.onProgress;
+  if (listener) {
+    request.listeners.add(listener);
+    if (request.latest) notifySchedule(listener, request.latest);
+  }
+  try {
+    return await request.promise;
+  } finally {
+    if (listener) request.listeners.delete(listener);
+  }
+}
+
+function toRawSchedule(payload: FlightSchedulePayload, airportCode: string, airport: AirportInfo): FR24ScheduleRaw {
+  const { allArrivals, allDepartures } = payload;
+  const visibleNowSeconds = Date.now() / 1000;
+  const airlines = getAirportAirlines(airportCode);
+  return {
+    allArrivals, allDepartures,
+    arrivals: filterFlightsByAirlines(pruneExpiredFlights(allArrivals, 'arrival', visibleNowSeconds), airlines),
+    departures: filterFlightsByAirlines(pruneExpiredFlights(allDepartures, 'departure', visibleNowSeconds), airlines),
+    airportCode, airport, source: payload.source, sourceLabel: payload.sourceLabel,
+    providerDiagnostics: payload.diagnostics, fetchedAt: payload.fetchedAt,
+  };
+}
+
+async function runScheduleRequest(context: FlightScheduleProviderContext, onProgress: (schedule: FR24ScheduleRaw) => void): Promise<FR24ScheduleRaw> {
+  const { airportCode } = context;
   const airport = getAirportInfo(airportCode);
+  const cachedDay = await loadCachedScheduleWithin(airportCode, SCHEDULE_DAY_CACHE_TTL_MS);
   const now = new Date();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
   let payload: Awaited<ReturnType<typeof fetchFlightScheduleFromProviders>>;
   try {
-    const airLabsApiKey = await getAirLabsApiKey();
-    const fr24ApiKey = await getFr24ApiKey();
-    const aeroDataBoxApiKey = await getAeroDataBoxApiKey();
-    const aeroDataBoxGateway = await getAeroDataBoxGateway();
-    const providerPreference = await getFlightProviderPreference();
     payload = dedupeSchedulePayload(await fetchFlightScheduleFromProviders({
-      airportCode,
-      airport,
-      aeroDataBoxApiKey,
-      aeroDataBoxGateway,
-      airLabsApiKey,
-      fr24ApiKey,
+      ...context,
       signal: controller.signal,
       now,
-      preference: providerPreference,
-    }, getFlightScheduleProviders(providerPreference)));
+      onProgress: partial => onProgress(toRawSchedule(
+        dedupeSchedulePayload(withActiveDayCache(partial, cachedDay)), airportCode, airport,
+      )),
+    }, getFlightScheduleProviders(context.preference)));
     payload = dedupeSchedulePayload(withActiveDayCache(
       payload,
-      await loadCachedScheduleWithin(airportCode, SCHEDULE_DAY_CACHE_TTL_MS),
+      cachedDay,
     ));
     await saveCachedSchedule({
       airportCode,
@@ -281,8 +358,7 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
       savedAt: Date.now(),
     });
   } catch (error) {
-    const cached = await loadCachedScheduleWithin(airportCode, SCHEDULE_DAY_CACHE_TTL_MS)
-      ?? await loadCachedSchedule(airportCode);
+    const cached = cachedDay ?? await loadCachedSchedule(airportCode);
     if (!cached) throw error;
 
     const fallbackNowMs = Date.now();
@@ -310,23 +386,8 @@ async function fetchScheduleRawData(code?: string): Promise<FR24ScheduleRaw> {
   }
 
   const { allArrivals, allDepartures } = payload;
-  const visibleNowSeconds = Date.now() / 1000;
-  const visibleArrivals = pruneExpiredFlights(allArrivals, 'arrival', visibleNowSeconds);
-  const visibleDepartures = pruneExpiredFlights(allDepartures, 'departure', visibleNowSeconds);
   await storeDetectedAirportAirlines(airportCode, allArrivals, allDepartures);
-  const airlines = getAirportAirlines(airportCode);
-  return {
-    allArrivals,
-    allDepartures,
-    arrivals: filterFlightsByAirlines(visibleArrivals, airlines),
-    departures: filterFlightsByAirlines(visibleDepartures, airlines),
-    airportCode,
-    airport,
-    source: payload.source,
-    sourceLabel: payload.sourceLabel,
-    providerDiagnostics: payload.diagnostics,
-    fetchedAt: payload.fetchedAt,
-  };
+  return toRawSchedule(payload, airportCode, airport);
 }
 
 /**
@@ -352,8 +413,8 @@ export async function fetchAirportSchedule(code?: string): Promise<FR24Schedule>
  * Fetch raw (unfiltered) schedule - needed when callers also use non-allowed airline data
  * (e.g. inbound arrival map by registration).
  */
-export async function fetchAirportScheduleRaw(code?: string): Promise<FR24ScheduleRaw> {
-  return fetchScheduleRawData(code);
+export async function fetchAirportScheduleRaw(code?: string, options?: FlightScheduleFetchOptions): Promise<FR24ScheduleRaw> {
+  return fetchScheduleRawData(code, options);
 }
 
 // Legacy aliases kept to avoid breaking older imports.
