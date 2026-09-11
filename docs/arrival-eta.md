@@ -13,11 +13,11 @@ An unmatched observation never creates a synthetic STA/STD. Confirmed real
 times and operational fields remain intact; ambiguous rotations are skipped.
 
 While Flights / Today is visible and the app is active, a separate updater
-checks up to six selected arrivals within the next 90 minutes (including
+checks up to six selected arrivals within the next three hours (including
 overdue arrivals up to three hours). It runs every 30 seconds. Official FR24
 requests are limited to once per minute and those flight numbers, use the
-configured key in Auto/FR24 mode, and back off for 30 minutes after auth/quota
-errors. Recent official observations avoid redundant calls. This is separate
+configured key regardless of the preferred timetable provider, and back off
+for 30 minutes after auth/quota errors. Recent official observations avoid redundant calls. This is separate
 from the existing two-minute full-board refresh and is not a background widget
 or Home polling loop.
 
@@ -40,3 +40,15 @@ flight-number filters, and charge per returned flight; see the
 Validation: `npm run qa:release`, plus a controlled browser check with blocked
 public FR24, a StaffMonitor timetable, changing official ETA and stale data.
 Real-world accuracy still requires comparison on the user's configured device.
+
+The controlled U22129 Manchester regression uses the photo's flight and times
+(11 September 2026, STA 18:50 vs FR24 ETA 18:33, Europe/Rome), with a mocked
+API response and observation clock. It reproduces a possible failure, not the
+unavailable response received on the user's device. It covers a second,
+timetable-only refresh: a cached live
+observation younger than three minutes must retain its ETA, source and original
+observation time. A newer live observation or actual landing takes precedence;
+expired observations, aircraft substitutions and conflicting FR24 leg IDs must
+not restore the old prediction. This applies to the shared schedule cache and
+the Flights screen cache. Unchanged timetable rows returned by an empty live
+poll must never acquire an FR24 source label.

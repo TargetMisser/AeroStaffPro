@@ -1,3 +1,6 @@
+import { preserveFreshArrivalEta } from './flightLiveUpdates';
+import type { FlightDirection } from './flightScheduleAdapter';
+
 function normalizeFlightradar24Id(value: unknown): string | null {
   const normalized = String(value ?? '').trim().toLowerCase();
   return /^[a-f0-9]{6,16}$/.test(normalized) ? normalized : null;
@@ -21,8 +24,9 @@ export function getFlightradar24ArrivalTarget(
   return direction === 'arrival' ? item ?? null : linkedArrival ?? null;
 }
 
-/** Keep an exact FR24 leg id through cache/provider refreshes that lack one. */
-export function mergeFlightExternalLinkMetadata(cachedItem: any, freshItem: any): any {
+/** Keep tracking metadata and fresh ETA through timetable-only refreshes. */
+export function mergeFlightExternalLinkMetadata(cachedItem: any, freshItem: any, direction?: FlightDirection): any {
+  if (direction === 'arrival') freshItem = preserveFreshArrivalEta(cachedItem, freshItem);
   const fr24Id = getFlightradar24FlightId(freshItem) ?? getFlightradar24FlightId(cachedItem);
   const cachedDeparture = cachedItem?.flight?.time?.real?.departure;
   const freshDeparture = freshItem?.flight?.time?.real?.departure;

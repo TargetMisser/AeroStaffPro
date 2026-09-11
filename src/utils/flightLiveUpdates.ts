@@ -9,6 +9,34 @@ export function isLiveEtaFresh(item: any, nowMs = Date.now()): boolean {
     && observedAt <= nowMs + 30_000 && nowMs - observedAt <= LIVE_ETA_MAX_AGE_MS;
 }
 
+function shouldApplyArrivalEta(current: any, update: any): boolean {
+  const incoming = update?.flight ?? {};
+  const existing = current?.flight ?? {};
+  // Refresh snapshots also contain unchanged timetable rows. They are not
+  // observations and must never be relabelled as FR24 or replace a live ETA.
+  return (incoming._etaSource === 'fr24_api' || incoming._etaSource === 'adsb')
+    && typeof incoming.time?.estimated?.arrival === 'number' && Number.isFinite(incoming.time.estimated.arrival)
+    && !(incoming._etaSource === 'adsb' && existing._etaSource === 'fr24_api' && isLiveEtaFresh(current))
+    && ((incoming._etaSource === 'fr24_api' && existing._etaSource !== 'fr24_api' && isLiveEtaFresh(update))
+      || !existing._etaObservedAt || (incoming._etaObservedAt ?? 0) >= existing._etaObservedAt);
+}
+
+/** Preserve a recent observation across a timetable-only refresh of the same service. */
+export function preserveFreshArrivalEta(cached: any, fresh: any): any {
+  if (fresh?.flight?.time?.real?.arrival || !isLiveEtaFresh(cached) || !shouldApplyArrivalEta(fresh, cached)) return fresh;
+  const previous = cached.flight;
+  const next = fresh.flight;
+  const registration = (value: unknown) => String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (previous._fr24Id && next._fr24Id && previous._fr24Id !== next._fr24Id) return fresh;
+  if (registration(previous.aircraft?.registration) && registration(next.aircraft?.registration)
+    && registration(previous.aircraft.registration) !== registration(next.aircraft.registration)) return fresh;
+  return { ...fresh, flight: { ...next,
+    time: { ...next.time, estimated: { ...next.time?.estimated, arrival: previous.time.estimated.arrival } },
+    _etaSource: previous._etaSource,
+    _etaObservedAt: previous._etaObservedAt,
+  } };
+}
+
 // Live positions carry ETA/observation times, never an airport timetable.
 // Apply them only to an identified scheduled service, retaining its STA/STD.
 export function applyFlightLiveUpdates(schedule: any[], live: any[], direction: FlightDirection): any[] {
@@ -40,10 +68,7 @@ export function applyFlightLiveUpdates(schedule: any[], live: any[], direction: 
     const { item, index } = matches[0];
     const flight = item.flight;
     const eta = direction === 'arrival' ? incoming.time?.estimated?.arrival : undefined;
-    const newerEta = typeof eta === 'number' && Number.isFinite(eta)
-      && !(incoming._etaSource === 'adsb' && flight._etaSource === 'fr24_api' && isLiveEtaFresh(item))
-      && ((incoming._etaSource === 'fr24_api' && flight._etaSource !== 'fr24_api' && isLiveEtaFresh(update))
-        || !flight._etaObservedAt || (incoming._etaObservedAt ?? 0) >= flight._etaObservedAt);
+    const newerEta = direction === 'arrival' && shouldApplyArrivalEta(item, update);
     result[index] = {
       ...item,
       flight: {
@@ -54,7 +79,7 @@ export function applyFlightLiveUpdates(schedule: any[], live: any[], direction: 
         _fr24Id: incoming._fr24Id ?? flight._fr24Id,
         ...(newerEta ? {
           time: { ...flight.time, estimated: { ...flight.time?.estimated, arrival: eta } },
-          _etaSource: incoming._etaSource ?? 'fr24_api',
+          _etaSource: incoming._etaSource,
           _etaObservedAt: incoming._etaObservedAt,
         } : {}),
       },

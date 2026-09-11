@@ -14,7 +14,7 @@ export function selectLiveArrivals(arrivals: any[], nowMs = Date.now()): any[] {
     const eta = reference(item);
     return !item.flight?.time?.real?.arrival && !/cancel|divert/i.test(item.flight?.status?.text ?? '')
       && typeof eta === 'number' && eta * 1000 >= nowMs - 3 * 60 * 60 * 1000
-      && eta * 1000 <= nowMs + 90 * 60 * 1000;
+      && eta * 1000 <= nowMs + 3 * 60 * 60 * 1000;
   }).sort((a, b) => Math.abs(reference(a) * 1000 - nowMs) - Math.abs(reference(b) * 1000 - nowMs))
     .slice(0, MAX_TRACKED_ARRIVALS);
 }

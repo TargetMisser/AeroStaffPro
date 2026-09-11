@@ -192,7 +192,7 @@ async function freshnessRegression() {
   assert.equal(merge.applyFlightLiveUpdates([landed], [old], 'arrival')[0], landed);
 }
 
-async function lifecycleRegression() {
+async function lifecycleRegression(preference = 'auto') {
   const effects = [];
   const snapshots = [];
   let interval, appChange, release, requestSignal;
@@ -204,8 +204,9 @@ async function lifecycleRegression() {
     react: { useMemo: fn => fn(), useState: () => [null, value => snapshots.push(value)],
       useRef: current => ({ current }), useEffect: fn => effects.push(fn) },
     'react-native': { AppState: appState }, '../utils/airportSettings': { getAirportInfo: () => airport },
-    '../utils/flightProviderSettings': { getFr24ApiKey: async () => 'test-only', getFlightProviderPreference: async () => 'auto' },
+    '../utils/flightProviderSettings': { getFr24ApiKey: async () => 'test-only', getFlightProviderPreference: async () => preference },
     '../utils/liveArrivalRefresh': { LIVE_ARRIVAL_REFRESH_MS: 30_000, createLiveArrivalRefresher: () => async request => {
+      assert.equal(request.apiKey, 'test-only', `${preference} is a timetable preference, not a switch disabling live ETA`);
       requestSignal = request.signal;
       await new Promise(resolve => { release = resolve; });
       request.onProgress([arrival()]);
@@ -230,6 +231,7 @@ async function lifecycleRegression() {
 
 async function cachedBoardRegression() {
   const now = Date.now();
+  let calls = 0;
   const board = { ...arrival(), _seenAtMs: now };
   const live = { ...board, flight: { ...board.flight, _etaSource: 'fr24_api', _etaObservedAt: now,
     time: { scheduled: { arrival: now / 1000 + 1200 }, estimated: { arrival: now / 1000 + 1200 }, real: {} } } };
@@ -244,26 +246,91 @@ async function cachedBoardRegression() {
       getAirLabsApiKey: async () => null, getAeroDataBoxApiKey: async () => null, getAeroDataBoxGateway: async () => 'apiMarket' },
     './flightProviders/fr24Provider': {},
     './flightProviders': { getFlightScheduleProviders: () => [], fetchFlightScheduleFromProviders: async context => {
-      const payload = { ...empty, liveUpdates: { arrivals: [live], departures: [] }, source: 'fr24Api',
+      const payload = { ...empty,
+        allArrivals: calls++ ? [board] : [],
+        liveUpdates: { arrivals: calls === 1 ? [live] : [], departures: [] }, source: 'fr24Api',
         sourceLabel: 'FR24', fetchedAt: now, diagnostics: [] };
       context.onProgress(payload);
       return payload;
     } },
   });
   const previews = [];
-  const result = await load('src/utils/fr24api.ts').fetchAirportScheduleRaw('PSA', { onProgress: p => previews.push(p) });
+  const facade = load('src/utils/fr24api.ts');
+  const result = await facade.fetchAirportScheduleRaw('PSA', { onProgress: p => previews.push(p) });
   assert.equal(result.allArrivals[0].flight.time.estimated.arrival, live.flight.time.estimated.arrival);
   assert.equal(previews[0].allArrivals[0].flight.time.estimated.arrival, live.flight.time.estimated.arrival);
   const saved = JSON.parse(storage.get('aerostaff_schedule_provider_cache_v1')).PSA;
   assert.equal(saved.allArrivals[0].flight.time.scheduled.arrival, board.flight.time.scheduled.arrival);
   assert.equal(saved.allArrivals[0].flight.time.estimated.arrival, live.flight.time.estimated.arrival);
+  previews.length = 0;
+  const next = await facade.fetchAirportScheduleRaw('PSA', { onProgress: p => previews.push(p) });
+  assert.equal(calls, 2, 'exercise an actual second provider refresh');
+  assert.equal(next.allArrivals[0].flight.time.estimated.arrival, live.flight.time.estimated.arrival);
+  assert.equal(previews[0].allArrivals[0].flight._etaSource, 'fr24_api', 'progress previews also retain a fresh observation');
+  assert.equal(JSON.parse(storage.get('aerostaff_schedule_provider_cache_v1')).PSA.allArrivals[0].flight._etaObservedAt, now);
+}
+
+async function manchesterPhotoRegression() {
+  // Photo identifiers/times with a controlled observation clock and API response;
+  // this does not assert which response the user's device actually received.
+  let now = Date.parse('2026-09-11T17:00:00+02:00');
+  const sta = Date.parse('2026-09-11T18:50:00+02:00') / 1000;
+  const eta = Date.parse('2026-09-11T18:33:00+02:00') / 1000;
+  class Clock extends Date { static now() { return now; } }
+  const board = arrival('U22129', sta);
+  board.flight.aircraft.registration = 'G-UZMJ';
+  board.flight.airport.origin = { name: 'Manchester', code: {} };
+  board.flight.time.estimated.arrival = sta;
+  const load = loader(baseMocks, { Date: Clock, fetch: async url => ({ ok: true,
+    text: async () => JSON.stringify({ data: url.includes('outbound') ? [] : [{
+      flight: 'U22129', reg: 'G-UZMJ', orig_iata: 'MAN', dest_iata: 'PSA',
+      fr24_id: 'abcdef12', timestamp: new Date(now).toISOString(), eta: new Date(eta * 1000).toISOString(),
+    }] }),
+  }) });
+  const fr24 = load('src/utils/flightProviders/fr24Provider.ts');
+  const observations = await fr24.fetchFr24ArrivalUpdates('PSA', airport, 'test-only', ['U22129']);
+  const adapter = load('src/utils/flightScheduleAdapter.ts');
+  const live = load('src/utils/flightLiveUpdates.ts');
+  const observed = live.applyFlightLiveUpdates([board], observations, 'arrival')[0];
+  assert.equal(observed.flight.time.estimated.arrival, eta, 'U22129 / Manchester matches U22129 / MAN');
+  const departure = { flight: { identification: { number: { default: 'U22130' } },
+    aircraft: { registration: 'GUZMJ' }, airport: { destination: { name: 'Manchester' } },
+    time: { scheduled: { departure: sta + 45 * 60 }, estimated: {}, real: {} },
+  } };
+  const rotation = load('src/utils/unifiedFlightList.ts').buildUnifiedFlightList(
+    [observed], [departure], new Date(now));
+  assert.equal(rotation[0].linkedArrival.flight.time.estimated.arrival, eta, 'linked inbound retains 18:33');
+  const { mergeFlightExternalLinkMetadata } = load('src/utils/flightExternalLinks.ts');
+  const refreshed = adapter.mergeFlightLists([observed], [board], 'arrival', now + 60_000, mergeFlightExternalLinkMetadata)[0];
+  assert.equal(refreshed.flight.time.estimated.arrival, eta,
+    'a new timetable with 18:50 must not erase a still-fresh FR24 observation of 18:33');
+  assert.equal(refreshed.flight._etaObservedAt, now, 'a timetable refresh must not renew the observation age');
+  const refresh = (cached, fresh) => adapter.mergeFlightLists([cached], [fresh], 'arrival', now, mergeFlightExternalLinkMetadata)[0];
+  const newer = { ...observed, flight: { ...observed.flight, _etaObservedAt: now + 1000,
+    time: { ...observed.flight.time, estimated: { arrival: eta + 60 } } } };
+  assert.equal(refresh(observed, newer).flight.time.estimated.arrival, eta + 60, 'newer official ETA wins');
+  const landed = { ...board, flight: { ...board.flight, time: { ...board.flight.time, real: { arrival: eta - 60 } } } };
+  assert.equal(refresh(observed, landed).flight.time.real.arrival, eta - 60, 'actual touchdown wins');
+  assert.equal(refresh(observed, landed).flight._etaSource, undefined, 'landed rows do not inherit an obsolete ETA source');
+  const swapped = { ...board, flight: { ...board.flight, aircraft: { registration: 'G-OTHER' } } };
+  assert.equal(refresh(observed, swapped).flight.time.estimated.arrival, sta, 'aircraft swaps invalidate the old observation');
+  const otherLeg = { ...board, flight: { ...board.flight, _fr24Id: 'abcdef13' } };
+  assert.equal(refresh(observed, otherLeg).flight.time.estimated.arrival, sta, 'different tracking legs must not share a cached ETA');
+  const unknownSource = live.applyFlightLiveUpdates([board], [board], 'arrival')[0];
+  assert.equal(unknownSource.flight._etaSource, undefined, 'an empty live poll must never label the timetable as FR24');
+  assert.equal(live.applyFlightLiveUpdates([newer], [board], 'arrival')[0].flight.time.estimated.arrival, eta + 60);
+  assert.equal(load('src/utils/liveArrivalRefresh.ts').selectLiveArrivals([board], now).length, 1,
+    'a Manchester inbound within three hours must not be excluded by the old 90-minute cutoff');
+  now += 181_000;
+  assert.equal(refresh(observed, board).flight.time.estimated.arrival, sta, 'expired observations must not override a new timetable indefinitely');
 }
 
 (async () => {
+  await manchesterPhotoRegression();
   await providerRegression();
   await trackingRegression();
   await freshnessRegression();
-  await lifecycleRegression();
+  for (const preference of ['auto', 'fr24', 'staffMonitor', 'aeroDataBox', 'airlabs']) await lifecycleRegression(preference);
   await cachedBoardRegression();
-  console.log('Live arrival regressions passed: public outage, provider order, ETA freshness, targeted polling, quota backoff and lifecycle.');
+  console.log('Live arrival regressions passed: U22129 timetable refresh, source provenance, public outage, provider order, ETA freshness, targeted polling, quota backoff and lifecycle.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

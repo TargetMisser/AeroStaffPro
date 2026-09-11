@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { getAirportInfo } from '../utils/airportSettings';
-import { getFr24ApiKey, getFlightProviderPreference } from '../utils/flightProviderSettings';
+import { getFr24ApiKey } from '../utils/flightProviderSettings';
 import { applyFlightLiveUpdates } from '../utils/flightLiveUpdates';
 import { createLiveArrivalRefresher, LIVE_ARRIVAL_REFRESH_MS } from '../utils/liveArrivalRefresh';
 
@@ -22,11 +22,13 @@ export function useLiveArrivals(arrivals: any[], airportCode: string, enabled: b
       controller = request;
       const timeout = setTimeout(() => request.abort(), 8_000);
       try {
-        const [apiKey, preference] = await Promise.all([getFr24ApiKey(), getFlightProviderPreference()]);
+        const apiKey = await getFr24ApiKey();
         if (!active || request.signal.aborted) return;
         await refresh.current({
           arrivals: latest.current, airport: getAirportInfo(airportCode),
-          apiKey: preference === 'auto' || preference === 'fr24' ? apiKey : null,
+          // The preferred timetable source does not disable other providers;
+          // a configured FR24 key must keep updating airborne arrivals too.
+          apiKey,
           signal: request.signal,
           onProgress: items => {
             if (active && !request.signal.aborted) setSnapshot({ airport: airportCode, items });
