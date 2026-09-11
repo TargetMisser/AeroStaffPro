@@ -29,6 +29,7 @@ import {
 } from './flightScheduleAdapter';
 import { mergeFlightExternalLinkMetadata } from './flightExternalLinks';
 import { TURNAROUND_MATCH_WINDOW_SECONDS } from './unifiedFlightList';
+import { applyFlightLiveUpdates, type FlightLiveUpdates } from './flightLiveUpdates';
 import { getErrorMessage } from './errorUtils';
 export {
   enrichFlightScheduleWithFr24Ids,
@@ -143,24 +144,25 @@ function pruneActiveDayFlights(items: any[], direction: FlightDirection, nowMs =
 function withActiveDayCache<T extends {
   allArrivals: any[];
   allDepartures: any[];
+  liveUpdates?: FlightLiveUpdates;
   sourceLabel?: string;
   diagnostics?: FlightScheduleProviderStatus[];
 }>(payload: T, cached: ScheduleCacheEntry | null): T {
   const mergeNowMs = Date.now();
-  const allArrivals = pruneActiveDayFlights(
+  const allArrivals = applyFlightLiveUpdates(pruneActiveDayFlights(
     cached
       ? mergeFlightLists(cached.allArrivals, payload.allArrivals, 'arrival', mergeNowMs, mergeFlightExternalLinkMetadata)
       : payload.allArrivals,
     'arrival',
     mergeNowMs,
-  );
-  const allDepartures = pruneActiveDayFlights(
+  ), payload.liveUpdates?.arrivals ?? [], 'arrival');
+  const allDepartures = applyFlightLiveUpdates(pruneActiveDayFlights(
     cached
       ? mergeFlightLists(cached.allDepartures, payload.allDepartures, 'departure', mergeNowMs, mergeFlightExternalLinkMetadata)
       : payload.allDepartures,
     'departure',
     mergeNowMs,
-  );
+  ), payload.liveUpdates?.departures ?? [], 'departure');
   if (!cached) {
     return { ...payload, allArrivals, allDepartures };
   }

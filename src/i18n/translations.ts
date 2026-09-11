@@ -2,6 +2,12 @@ export type Lang = 'it' | 'en';
 export type WeatherDescriptor = { text: string; iconName: string };
 
 const it = {
+  flightEtaUnavailable: 'ETA live non disponibile',
+  flightEtaApproximate: 'Stima approssimativa',
+  flightEtaAirport: 'Orario del tabellone',
+  flightEtaJustUpdated: 'ora',
+  flightEtaAge: '{minutes} min fa',
+  flightEtaStale: 'dato vecchio · {minutes} min fa',
   uiNotesTitle: 'Note e consegne',
   uiNotesSubtitle: 'Appunti e informazioni per il prossimo turno.',
   uiContactsSubtitle: 'I numeri utili, sempre a portata di mano.',
@@ -353,6 +359,12 @@ const it = {
 };
 
 const en: typeof it = {
+  flightEtaUnavailable: 'Live ETA unavailable',
+  flightEtaApproximate: 'Approximate estimate',
+  flightEtaAirport: 'Airport board time',
+  flightEtaJustUpdated: 'just now',
+  flightEtaAge: '{minutes} min ago',
+  flightEtaStale: 'stale · {minutes} min ago',
   uiNotesTitle: 'Notes & handover',
   uiNotesSubtitle: 'Notes and information for the next shift.',
   uiContactsSubtitle: 'Useful numbers, always within reach.',

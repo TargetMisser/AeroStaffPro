@@ -2,6 +2,7 @@ import { aeroDataBoxProvider } from './aeroDataBoxProvider';
 import { airLabsProvider } from './airLabsProvider';
 import { fr24ApiProvider, fr24PublicProvider } from './fr24Provider';
 import { staffMonitorProvider } from './staffMonitorProvider';
+import { applyFlightLiveUpdates } from '../flightLiveUpdates';
 import { getFlightBestTs, getFlightScheduledTs, mergeFlightLists, type FlightDirection } from '../flightScheduleAdapter';
 import type { FlightProviderPreference } from '../flightProviderSettings';
 import { getErrorMessage } from '../errorUtils';
@@ -330,13 +331,14 @@ function mergeProviderResults(
   previous: FlightScheduleProviderResult | null,
   next: FlightScheduleProviderResult,
 ): FlightScheduleProviderResult {
-  if (!previous) {
-    return next;
-  }
-
+  const liveUpdates = {
+    arrivals: [...(previous?.liveUpdates?.arrivals ?? []), ...(next.liveUpdates?.arrivals ?? [])],
+    departures: [...(previous?.liveUpdates?.departures ?? []), ...(next.liveUpdates?.departures ?? [])],
+  };
   return {
-    allArrivals: mergeFlightLists(previous.allArrivals, next.allArrivals, 'arrival', Date.now(), mergeProviderFlightItems),
-    allDepartures: mergeFlightLists(previous.allDepartures, next.allDepartures, 'departure', Date.now(), mergeProviderFlightItems),
+    allArrivals: applyFlightLiveUpdates(mergeFlightLists(previous?.allArrivals ?? [], next.allArrivals, 'arrival', Date.now(), mergeProviderFlightItems), liveUpdates.arrivals, 'arrival'),
+    allDepartures: applyFlightLiveUpdates(mergeFlightLists(previous?.allDepartures ?? [], next.allDepartures, 'departure', Date.now(), mergeProviderFlightItems), liveUpdates.departures, 'departure'),
+    liveUpdates,
   };
 }
 
@@ -506,7 +508,11 @@ export async function fetchFlightScheduleFromProviders(
 
       const result = await fetchProviderWithTimeout(provider, providerContext);
       const durationMs = Date.now() - startedAt;
-      const contributed = hasUsefulCoverage(result);
+      const contributed = hasUsefulCoverage(result)
+        || Boolean(result.liveUpdates?.arrivals.length || result.liveUpdates?.departures.length);
+      if (result.liveUpdates) {
+        messages.push(`${result.liveUpdates.arrivals.length} arrivi live, ${result.liveUpdates.departures.length} partenze live; abbinamento al tabellone indipendente da FR24 public`);
+      }
       clearProviderCooldown(provider, context);
       return {
         provider,

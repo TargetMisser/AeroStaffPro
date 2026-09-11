@@ -23,6 +23,8 @@ import { EmptyFlightState, FlightLoadingState } from '../components/flights/Flig
 import { SwipeableFlightCard } from '../components/flights/SwipeableFlightCard';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
+import { useLiveArrivals } from '../hooks/useLiveArrivals';
+import { isLiveEtaFresh } from '../utils/flightLiveUpdates';
 import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils/airlineOps';
 import { statusToToken, delayToToken } from '../utils/statusColors';
 import {
@@ -275,6 +277,18 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
     : null;
   const pulseAnim = useRef(new Animated.Value(0)).current;
   const [nowTs, setNowTs] = useState(() => Date.now() / 1000);
+  const etaSourceLabel = (arrival: any) => {
+    if (arrival?.flight?.time?.real?.arrival) return t('flightLanded');
+    if (!arrival?.flight?.time?.estimated?.arrival) return t('flightEtaUnavailable');
+    const source = arrival.flight._etaSource === 'fr24_api' ? 'FR24'
+      : arrival.flight._etaSource === 'adsb' ? t('flightEtaApproximate') : t('flightEtaAirport');
+    const observedAt = arrival.flight._etaObservedAt;
+    if (typeof observedAt !== 'number') return source;
+    const age = Math.max(0, Math.floor((nowTs * 1000 - observedAt) / 60_000));
+    return `${source} · ${isLiveEtaFresh(arrival, nowTs * 1000)
+      ? age < 1 ? t('flightEtaJustUpdated') : t('flightEtaAge').replace('{minutes}', String(age))
+      : t('flightEtaStale').replace('{minutes}', String(age))}`;
+  };
 
   const pinnedDirection: FlightDirection = pinnedFlight?._pinTab === 'arrivals' ? 'arrival' : 'departure';
   const primaryIsPinned = pinnedFlight != null
@@ -508,10 +522,26 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
               >
                 <Text style={[s.compactStatusText, { color: compactStatusToken }]}>{compactStatusLabel}</Text>
               </ValueChangeFlash>
-              {compactLiveTs && compactLiveTs !== ts && (
+              {compactLiveTs && (isArrival || compactLiveTs !== ts) && (
                 <Text style={s.compactLiveTime}>{compactLivePrefix} {fmtTs(compactLiveTs)}</Text>
               )}
             </View>
+            {!isArrival && linkedArrival && (
+              <View style={s.compactArrivalRow}>
+                <View style={s.compactArrivalIdentity}>
+                  <Text numberOfLines={1} style={s.compactOpsText}>
+                    {t('flightArrival')} {linkedArrivalNumber} · {linkedArrivalOrigin.compactLabel}
+                  </Text>
+                  <Text style={s.etaFreshness}>{etaSourceLabel(linkedArrival)}</Text>
+                </View>
+                <ValueChangeFlash valueKey={String(linkedArrivalCurrentTs)} enabled={isOperations}>
+                  <Text style={[s.compactLiveTime, { color: linkedArrivalColor }]}>
+                    {linkedArrivalRealTs ? t('flightAta') : t('flightEta')} {linkedArrival?.flight?._etaSource === 'adsb' && !linkedArrivalRealTs ? '~' : ''}{fmtOptionalTs(linkedArrivalCurrentTs)}
+                  </Text>
+                </ValueChangeFlash>
+              </View>
+            )}
+            {isArrival && <Text style={s.etaFreshness}>{etaSourceLabel(item)}</Text>}
             <View style={s.compactOpsRow}>
               <Text style={s.compactOpsText}>{t('flightStand')} <Text style={s.compactOpsValue}>{standLabel}</Text></Text>
               {!isArrival ? (
@@ -564,6 +594,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
             )}
           </View>
         )}
+        {arrivalLinkItem && <Text style={[s.etaFreshness, { paddingHorizontal: 16, paddingTop: 6 }]}>{etaSourceLabel(arrivalLinkItem)}</Text>}
         {/* Body */}
         <View style={s.cardBody}>
           {!isArrival && ops ? (
@@ -1042,7 +1073,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         providerDiagnostics: sourceState.providerDiagnostics,
       }).catch(() => {});
 
-      // Overlay ETA live dai dati ADS-B aperti (stessa fonte grezza di FR24):
+      // Stima approssimativa dai dati ADS-B aperti:
       // incrocia gli arrivi per registrazione/callsign con gli aerei in volo
       // e sostituisce la stima con distanza/velocità reali. Best-effort: se
       // l'ADS-B non risponde restano gli orari del FIDS.
@@ -1063,6 +1094,8 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
               adsbController.signal,
             );
             mergedArrs = applyLiveArrivalEtas(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            if (!isCurrentRequest()) return;
+            setAllArrivalsFull(mergedArrs);
             // Estimate the inbound's origin-departure time from its route + how far
             // it has flown, but only for arrivals no schedule provider gave a
             // departure time for (a key-backed exact time always wins).
@@ -1728,16 +1761,20 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
   const allSelected = airportAirlines.length > 0 && airportAirlines.every(k => selectedAirlines.includes(k));
   const snapshotMatchesAirport = flightSnapshotAirportCode === airportCode;
   const visibleFlightDataSource = flightDataSource?.airportCode === airportCode ? flightDataSource : null;
+  const selectedArrivalCandidates = useMemo(() => filterFlightsByAirlines(allArrivalsFull, selectedAirlines), [allArrivalsFull, selectedAirlines]);
+  const liveArrivals = useLiveArrivals(selectedArrivalCandidates, airportCode,
+    snapshotMatchesAirport && isFocused && activeDay === 'today');
+  const arrivalsWithLiveUpdates = useMemo(() => mergeFlightLists(allArrivalsFull, liveArrivals, 'arrival'), [allArrivalsFull, liveArrivals]);
 
   const currentDayRotationData = useMemo(() => snapshotMatchesAirport
     ? buildUnifiedFlightList(
-        allArrivalsFull,
+        arrivalsWithLiveUpdates,
         allDeparturesFull,
         new Date(selectedDayMs),
         useStaffMonitorRegistrationHints ? staffMonitorArrs : [],
         useStaffMonitorRegistrationHints ? staffMonitorDeps : [],
       )
-    : [], [snapshotMatchesAirport, allArrivalsFull, allDeparturesFull, selectedDayMs, useStaffMonitorRegistrationHints, staffMonitorArrs, staffMonitorDeps]);
+    : [], [snapshotMatchesAirport, arrivalsWithLiveUpdates, allDeparturesFull, selectedDayMs, useStaffMonitorRegistrationHints, staffMonitorArrs, staffMonitorDeps]);
   const currentDayRawData = filterActiveUnifiedFlights(currentDayRotationData);
   const currentData = filterUnifiedFlightsByAirlines(currentDayRawData, selectedAirlines);
   const hasFlightSnapshot = snapshotMatchesAirport
@@ -2019,6 +2056,9 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     linkedArrivalTime: { marginTop: 2, fontSize: 14, lineHeight: 17, fontWeight: '900', color: c.primaryDark, fontVariant: ['tabular-nums'] },
     cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 12 : 14, paddingHorizontal: 16, backgroundColor: operationPanel },
     compactBody: { paddingHorizontal: 14, paddingVertical: 9, gap: 8, backgroundColor: operationPanel },
+    compactArrivalRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 6, borderTopWidth: 1, borderTopColor: operationBorderSoft },
+    compactArrivalIdentity: { flex: 1, minWidth: 0, gap: 3 },
+    etaFreshness: { fontSize: 10, lineHeight: 14, color: c.textSub, fontWeight: '600' },
     compactStatusRow: { minHeight: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
     compactStatusPill: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 4, borderRadius: RADIUS.pill },
     compactStatusText: { ...TYPE.micro, fontWeight: '900' },

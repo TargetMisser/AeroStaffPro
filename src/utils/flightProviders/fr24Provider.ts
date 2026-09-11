@@ -40,10 +40,6 @@ function airportEndpoint(name: string, iata?: string, icao?: string) {
   };
 }
 
-function publicScheduleCounts(result: { allArrivals: any[]; allDepartures: any[] }): number {
-  return result.allArrivals.length + result.allDepartures.length;
-}
-
 async function fetchPublicFr24Schedule(airportCode: string, signal?: AbortSignal): Promise<PublicFr24Schedule> {
   const res = await fetch(buildFr24ScheduleUrl(airportCode), {
     headers: {
@@ -103,11 +99,12 @@ async function loadPublicFr24IdentitySchedule(airportCode: string): Promise<Publ
   }
 }
 
-function buildOfficialLiveUrl(airportCode: string, direction: Direction): string {
+function buildOfficialLiveUrl(airportCode: string, direction: Direction, flights?: string[]): string {
   const params = new URLSearchParams({
     airports: `${direction === 'arrivals' ? 'inbound' : 'outbound'}:${airportCode}`,
-    limit: '300',
+    limit: flights ? String(flights.length) : '300',
   });
+  if (flights) params.set('flights', flights.join(','));
   return `${FR24_API_BASE}?${params.toString()}`;
 }
 
@@ -120,8 +117,9 @@ async function fetchOfficialLiveDirection(
   direction: Direction,
   apiKey: string,
   signal?: AbortSignal,
+  flights?: string[],
 ): Promise<any[]> {
-  const res = await fetch(buildOfficialLiveUrl(airportCode, direction), {
+  const res = await fetch(buildOfficialLiveUrl(airportCode, direction, flights), {
     headers: {
       Accept: 'application/json',
       'Accept-Version': 'v1',
@@ -254,6 +252,7 @@ function officialLiveFlightToScheduleItem(
       _scheduledSynthetic: true,
       ...(fr24Id ? { _fr24Id: fr24Id } : {}),
       ...(authoritativeArrivalEtaTs ? { _etaSource: 'fr24_api' as const } : {}),
+      ...(positionTs ? { _etaObservedAt: positionTs * 1000 } : {}),
     },
   };
 }
@@ -289,6 +288,15 @@ async function fetchOfficialFr24LiveSchedule(
   }
 
   return { allArrivals, allDepartures };
+}
+
+export async function fetchFr24ArrivalUpdates(
+  airportCode: string, airport: AirportInfo, apiKey: string, flights: string[], signal?: AbortSignal,
+): Promise<any[]> {
+  if (!flights.length || signal?.aborted) return [];
+  const items = await fetchOfficialLiveDirection(airportCode, 'arrivals', apiKey, signal, flights);
+  return items.map(item => officialLiveFlightToScheduleItem(item, 'arrivals', airportCode, airport))
+    .filter(item => item !== null);
 }
 
 function flightNumberKey(item: any): string {
@@ -371,83 +379,6 @@ export async function resolveFlightradar24IdForFlight(
   return normalizeFr24Id(findMatchingFr24Item(item, candidates, direction)?.flight?._fr24Id) ?? null;
 }
 
-function mergeLiveIntoScheduleItem(scheduleItem: any, liveItem: any, timeField: 'arrival' | 'departure'): any {
-  const scheduleFlight = scheduleItem.flight ?? {};
-  const liveFlight = liveItem.flight ?? {};
-  const scheduleTime = scheduleFlight.time ?? {};
-  const liveTime = liveFlight.time ?? {};
-  const estimatedTs = timeField === 'arrival' ? liveTime.estimated?.arrival : undefined;
-  const realTs = liveTime.real?.[timeField];
-
-  return {
-    ...scheduleItem,
-    flight: {
-      ...scheduleFlight,
-      airline: {
-        ...(scheduleFlight.airline ?? {}),
-        code: {
-          ...(scheduleFlight.airline?.code ?? {}),
-          ...(liveFlight.airline?.code ?? {}),
-        },
-        name: normalizeAirlineLabel(
-          scheduleFlight.airline?.name,
-          scheduleFlight.airline?.code?.iata,
-          scheduleFlight.airline?.code?.icao,
-          liveFlight.airline?.name,
-          liveFlight.airline?.code?.iata,
-          liveFlight.airline?.code?.icao,
-          scheduleFlight.identification?.number?.default,
-          liveFlight.identification?.number?.default,
-        ),
-      },
-      aircraft: {
-        ...(scheduleFlight.aircraft ?? {}),
-        ...(liveFlight.aircraft ?? {}),
-      },
-      time: {
-        ...scheduleTime,
-        estimated: estimatedTs
-          ? { ...(scheduleTime.estimated ?? {}), [timeField]: estimatedTs }
-          : (scheduleTime.estimated ?? {}),
-        real: realTs
-          ? { ...(scheduleTime.real ?? {}), [timeField]: realTs }
-          : (scheduleTime.real ?? {}),
-      },
-      status: liveFlight.status ?? scheduleFlight.status,
-      _source: 'fr24_api_merged',
-      _fr24Id: scheduleFlight._fr24Id ?? liveFlight._fr24Id,
-      _etaSource: estimatedTs ? 'fr24_api' : scheduleFlight._etaSource,
-    },
-  };
-}
-
-function mergeScheduleWithLive(schedule: any[], live: any[], timeField: 'arrival' | 'departure'): any[] {
-  const result = [...schedule];
-
-  for (const item of live) {
-    const key = flightNumberKey(item);
-    const candidateIndexes = key
-      ? result.reduce<number[]>((indexes, candidate, index) => {
-          if (flightNumberKey(candidate) === key) indexes.push(index);
-          return indexes;
-        }, [])
-      : [];
-    const exactIndex = candidateIndexes.find(index =>
-      isFlightServiceMatch(result[index], item, timeField),
-    );
-    const existingIndex = exactIndex;
-    if (existingIndex === undefined) {
-      // Live timestamps are observations/estimates, never STA/STD. A live row
-      // is therefore valid only as an overlay on a concrete public schedule.
-      continue;
-    }
-
-    result[existingIndex] = mergeLiveIntoScheduleItem(result[existingIndex], item, timeField);
-  }
-
-  return result;
-}
-
 export const fr24ApiProvider: FlightScheduleProvider = {
   id: 'fr24Api',
   label: 'FlightRadar24 API',
@@ -456,32 +387,12 @@ export const fr24ApiProvider: FlightScheduleProvider = {
   fetch: async ({ airportCode, airport, fr24ApiKey, signal }) => {
     if (!fr24ApiKey) throw new Error('FR24_API_KEY_MISSING');
 
-    const [publicResult, liveResult] = await Promise.allSettled([
-      fetchPublicFr24Schedule(airportCode, signal),
-      fetchOfficialFr24LiveSchedule(airportCode, airport, fr24ApiKey, signal),
-    ]);
-
-    if (publicResult.status === 'fulfilled' && publicScheduleCounts(publicResult.value) > 0) {
-      if (liveResult.status === 'fulfilled') {
-        return {
-          allArrivals: mergeScheduleWithLive(publicResult.value.allArrivals, liveResult.value.allArrivals, 'arrival'),
-          allDepartures: mergeScheduleWithLive(publicResult.value.allDepartures, liveResult.value.allDepartures, 'departure'),
-        };
-      }
-
-      return publicResult.value;
-    }
-
-    if (liveResult.status === 'fulfilled') {
-      return {
-        allArrivals: [],
-        allDepartures: [],
-      };
-    }
-
-    const publicMessage = publicResult.status === 'rejected' ? String(publicResult.reason) : 'FR24_PUBLIC_EMPTY_SCHEDULE';
-    const liveMessage = liveResult.status === 'rejected' ? String(liveResult.reason) : 'FR24_API_EMPTY_LIVE_POSITIONS';
-    throw new Error(`FR24_API_AND_PUBLIC_FAILED API:${liveMessage} PUBLIC:${publicMessage}`);
+    const live = await fetchOfficialFr24LiveSchedule(airportCode, airport, fr24ApiKey, signal);
+    return {
+      allArrivals: [],
+      allDepartures: [],
+      liveUpdates: { arrivals: live.allArrivals, departures: live.allDepartures },
+    };
   },
 };
 

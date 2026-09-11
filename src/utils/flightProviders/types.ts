@@ -41,6 +41,7 @@ export type FlightScheduleProviderContext = {
 export type FlightScheduleProviderResult = {
   allArrivals: any[];
   allDepartures: any[];
+  liveUpdates?: import('../flightLiveUpdates').FlightLiveUpdates;
 };
 
 export type FlightSchedulePayload = FlightScheduleProviderResult & {

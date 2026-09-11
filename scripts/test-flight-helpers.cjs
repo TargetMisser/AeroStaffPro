@@ -2511,12 +2511,18 @@ async function runProviderLayerTests() {
       && repeatedIdentityOverlay.allDepartures[1].flight._fr24Id === '333ca4d2',
     'FR24 identity enrichment should match repeated flight numbers by concrete route and service time',
   );
-  const fr24MergedEasyJetVariants = await fr24Module.fr24ApiProvider.fetch({
+  const fr24LiveUpdates = await fr24Module.fr24ApiProvider.fetch({
     airportCode: 'PSA',
     airport: { code: 'PSA', name: 'Pisa International', city: 'Pisa', icao: 'LIRP', isCustom: false },
     fr24ApiKey: 'fr24-key',
     now,
   });
+  const publicFr24Schedule = await fr24Module.fr24PublicProvider.fetch({ airportCode: 'PSA' });
+  const liveMerger = loadTsModule('src/utils/flightLiveUpdates.ts');
+  const fr24MergedEasyJetVariants = {
+    allArrivals: liveMerger.applyFlightLiveUpdates(publicFr24Schedule.allArrivals, fr24LiveUpdates.liveUpdates.arrivals, 'arrival'),
+    allDepartures: liveMerger.applyFlightLiveUpdates(publicFr24Schedule.allDepartures, fr24LiveUpdates.liveUpdates.departures, 'departure'),
+  };
   assert(
     fr24MergedEasyJetVariants.allDepartures.length === 1,
     'FR24 provider should overlay numeric live callsigns only onto real public departure schedule rows',
@@ -2548,7 +2554,10 @@ async function runProviderLayerTests() {
     fr24ApiKey: 'fr24-key',
     now,
   });
+
   fr24PublicUnavailable = false;
+  assert(fr24LiveOnlySchedule.liveUpdates.arrivals.length === 1,
+    'a blocked public FR24 schedule must not discard the official inbound ETA');
   assert(
     fr24LiveOnlySchedule.allDepartures.length === 0,
     'FR24 live positions without a public schedule must not fabricate outbound STD rows',

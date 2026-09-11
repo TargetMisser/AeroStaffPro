@@ -2,9 +2,9 @@
  * Live arrival ETA + departure status overlay from open ADS-B data
  * (adsb.lol / airplanes.live).
  *
- * StaffMonitor's estimated times update only when the airport FIDS does; the
- * actual aircraft position tells the truth much earlier (it's the same raw
- * data FlightRadar24 uses). We match airport flights to live aircraft by
+ * StaffMonitor's estimated times update only when the airport FIDS does.
+ * Open ADS-B positions provide an approximate fallback, with independent
+ * coverage and no guarantee of FR24 prediction accuracy. We match flights by
  * registration (primary, exact airframe) or callsign (fallback) and, for
  * arrivals, replace the estimated arrival with distance/groundspeed plus an
  * approach allowance. For departures we detect the wheels-up moment: an
@@ -14,7 +14,10 @@
  * No API key, no scraping: both endpoints are public ADS-B aggregators.
  */
 
+import { isLiveEtaFresh } from './flightLiveUpdates';
+
 export type AdsbAircraft = {
+  observedAt?: number;
   registration?: string;
   callsign?: string;
   lat?: number;
@@ -226,6 +229,8 @@ export function applyLiveArrivalEtas(
   const byRegistration = new Map<string, AdsbAircraft>();
   const byFlightNumber = new Map<string, AdsbAircraft>();
   for (const aircraft of aircraftList) {
+    if (aircraft.observedAt != null && (nowSeconds * 1000 - aircraft.observedAt > 90_000
+      || aircraft.observedAt > nowSeconds * 1000 + 30_000)) continue;
     const reg = normalizeRegistration(aircraft.registration);
     if (reg && !byRegistration.has(reg)) byRegistration.set(reg, aircraft);
     const flightNumber = normalizeCallsignToFlightNumber(aircraft.callsign);
@@ -257,7 +262,8 @@ export function applyLiveArrivalEtas(
 
     const estimatedArrival = nowSeconds + etaSeconds;
     const preserveAuthoritativeEta = item?.flight?._etaSource === 'fr24_api'
-      && typeof item?.flight?.time?.estimated?.arrival === 'number';
+      && typeof item?.flight?.time?.estimated?.arrival === 'number'
+      && (item.flight._etaObservedAt == null || isLiveEtaFresh(item, nowSeconds * 1000));
     const scheduled = item?.flight?.time?.scheduled?.arrival;
     const officialEta = preserveAuthoritativeEta
       ? item.flight.time.estimated.arrival
@@ -286,12 +292,14 @@ export function applyLiveArrivalEtas(
   });
 
   const overlayByIndex = new Map<number, number>();
-  for (const candidate of bestByAircraft.values()) {
+  const observedAtByIndex = new Map<number, number | undefined>();
+  for (const [aircraft, candidate] of bestByAircraft) {
     // An official FR24 ETA wins over public ADS-B, but still participates in
     // the per-aircraft rotation contest so the same aircraft is not attached
     // to a later scheduled row.
     if (!candidate.preserveAuthoritativeEta) {
       overlayByIndex.set(candidate.index, candidate.estimatedArrival);
+      observedAtByIndex.set(candidate.index, aircraft.observedAt);
     }
   }
 
@@ -311,6 +319,7 @@ export function applyLiveArrivalEtas(
           },
         },
         _etaSource: 'adsb',
+        _etaObservedAt: observedAtByIndex.get(index),
       },
     };
   });
@@ -377,8 +386,10 @@ export function applyLiveDepartureStatus(
   });
 }
 
-function toAdsbAircraft(raw: any): AdsbAircraft {
+function toAdsbAircraft(raw: any, responseTimeMs: number): AdsbAircraft {
   return {
+    observedAt: typeof raw?.seen_pos === 'number' && raw.seen_pos >= 0
+      ? responseTimeMs - raw.seen_pos * 1000 : undefined,
     registration: typeof raw?.r === 'string' ? raw.r : undefined,
     callsign: typeof raw?.flight === 'string' ? raw.flight : undefined,
     lat: typeof raw?.lat === 'number' ? raw.lat : undefined,
@@ -398,17 +409,27 @@ export async function fetchAdsbAircraft(
 ): Promise<AdsbAircraft[]> {
   let lastError: unknown = new Error('ADSB_NO_ENDPOINT');
   for (const base of ADSB_ENDPOINTS) {
+    if (signal?.aborted) throw new Error('ADSB_ABORTED');
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    const timer = setTimeout(abort, 3_500);
     try {
       const res = await fetch(`${base}/${airportLat}/${airportLon}/${radiusNm}`, {
         headers: ADSB_FETCH_HEADERS,
-        signal,
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`ADSB_HTTP_${res.status}`);
       const json = await res.json();
-      const list = Array.isArray(json?.ac) ? json.ac : [];
-      return list.map(toAdsbAircraft);
+      if (!Array.isArray(json?.ac)) throw new Error('ADSB_INVALID_RESPONSE');
+      const responseTimeMs = typeof json.now === 'number'
+        ? json.now > 1e12 ? json.now : json.now * 1000 : Date.now();
+      return json.ac.map((raw: any) => toAdsbAircraft(raw, responseTimeMs));
     } catch (error) {
       lastError = error;
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
     }
   }
   throw lastError;
