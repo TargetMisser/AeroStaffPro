@@ -69,7 +69,9 @@ function selectObservation(capture, target, readAt = new Date().toISOString()) {
   const status = row.fields.STATUS?.text ?? '';
   const scheduled = timeValue(row.fields.STA);
   if (!scheduled) throw new Error('Ora programmata assente o incoerente con il testo visibile.');
-  const isEstimated = /^Estimated\s+\d/i.test(status);
+  // The airport board says "Estimated", while the same delayed arrival's
+  // flight history can say "Delayed 14:33". A bare "Delayed" has no ETA.
+  const isEstimated = /^(?:Estimated|Delayed)\s+\d{1,2}:\d{2}\b/i.test(status);
   const isLanded = /^Landed\s+\d/i.test(status);
   const statusTime = (isEstimated || isLanded) ? timeValue(row.fields.STATUS) : null;
   if ((isEstimated || isLanded) && !statusTime) throw new Error('Orario di stato non leggibile con certezza.');

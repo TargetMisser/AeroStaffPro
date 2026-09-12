@@ -17,6 +17,17 @@ stato **Estimated 12:16**. La scheda esponeva nelle celle i timestamp
 leggere l'orario visibile, non la sua accuratezza rispetto all'atterraggio reale
 né l'affidabilità di una raccolta prolungata. Gold non è stato usato.
 
+Una seconda consultazione puntuale, alle 13:48–13:50 italiane, ha verificato
+FR6937 Lamezia Terme → Pisa, tratta `41a057b6`, del 12 settembre: STA **13:45**,
+ETA **14:33**. Il tabellone mostrava `Estimated 14:33`, la scheda del volo
+`Delayed 14:33`. La funzione `readVisibleFlightRows` del prototipo è stata
+eseguita direttamente sulla pagina e il risultato salvato localmente.
+Questa prova ha riprodotto e corretto un errore del lettore: ignorava l'ETA
+quando preceduta da `Delayed`. Il caso ora ha un test di regressione; un
+semplice stato `Delayed` senza orario continua a non produrre un'ETA.
+Le immagini `live-fr6937-board.png` e `live-fr6937-detail.png` documentano
+le due schermate; `live-fr6937-result.json` contiene il risultato normalizzato.
+
 **Il servizio non è stato avviato:** il controllo automatico di approvazione
 ha respinto il tentativo di avvio del processo con il solo motivo
 `blocked by policy`. Nessun tentativo alternativo di avvio è stato effettuato.

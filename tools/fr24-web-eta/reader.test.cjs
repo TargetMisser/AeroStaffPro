@@ -61,6 +61,26 @@ test('landing time is actual, never estimated', () => {
   assert.equal(result.estimatedArrival, null);
 });
 
+test('reads the live FR6937 Delayed 14:33 status as an arrival estimate', () => {
+  const row = capturedRow();
+  row.legIds = ['41a057b6'];
+  row.fields.DATE = cell('12 Sep 2026', '1789208400');
+  row.fields.FROM.text = 'Lamezia Terme (SUF)';
+  row.fields.STA = cell('13:45', '1789213500');
+  row.fields.STATUS = cell('Delayed 14:33', '1789216411');
+  const liveTarget = { ...target, flight: 'FR6937', legId: '41a057b6' };
+  const liveCapture = { url: 'https://www.flightradar24.com/data/flights/fr6937#41a057b6', rows: [row] };
+  const result = selectObservation(liveCapture, liveTarget);
+  assert.equal(result.scheduledArrival.clock, '13:45');
+  assert.equal(result.estimatedArrival.clock, '14:33');
+  assert.equal(result.estimatedArrival.iso, '2026-09-12T12:33:31.000Z');
+  assert.equal(result.actualArrival, null);
+  row.fields.STATUS.timestamp = null;
+  assert.throws(() => selectObservation(liveCapture, liveTarget), /certezza/);
+  row.fields.STATUS = cell('Delayed 48 minutes', '1789216411');
+  assert.equal(selectObservation(liveCapture, liveTarget).estimatedArrival, null);
+});
+
 test('rejects missing or inconsistent timestamp attributes', () => {
   const row = capturedRow(); row.fields.STATUS.timestamp = null;
   assert.throws(() => selectObservation(capture([row]), target), /certezza/);
