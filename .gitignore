@@ -68,3 +68,7 @@ emulator-*.png
 
 # local scratch/smoke scripts and QA output
 tmp/
+
+# Local browser experiments (snapshots and browser diagnostics)
+.playwright-cli/
+output/playwright/

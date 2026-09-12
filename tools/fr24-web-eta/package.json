@@ -1,0 +1,12 @@
+{
+  "name": "aerostaff-fr24-web-eta-experiment",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bounded local experiment reading one FR24 flight page",
+  "scripts": {
+    "start": "node server.cjs",
+    "test": "node --test reader.test.cjs"
+  },
+  "dependencies": { "playwright": "1.63.0" },
+  "engines": { "node": ">=20" }
+}

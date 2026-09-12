@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="it"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Prova ETA · AeroStaff</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f5f2ec;color:#25322e;font:16px/1.5 system-ui,sans-serif}main{max-width:840px;margin:64px auto;padding:24px}.eyebrow{color:#9b4c20;font-weight:700;letter-spacing:.1em;font-size:12px}h1{font-size:38px;letter-spacing:-.04em;margin:8px 0}p{color:#66716c}.card{background:white;border:1px solid #dedfd6;border-radius:20px;padding:28px;margin:24px 0}.times{display:flex;gap:64px;flex-wrap:wrap}.time{font-size:48px;font-weight:700;letter-spacing:-.05em}small,label{color:#66716c;display:block}#eta{color:#ac4e20}dl{display:grid;grid-template-columns:1fr 1.5fr;gap:12px}dt{color:#66716c}dd{margin:0}a{color:#975023}#error{color:#a32522}#badge{font-weight:650}footer{font-size:13px;color:#66716c}body.stale .time{opacity:.45}@media(max-width:550px){main{margin:12px auto}h1{font-size:30px}.times{gap:32px}dl{display:block}dd{margin-bottom:14px}}
+</style>
+<main><div class="eyebrow">AEROSTAFF · PROVA LOCALE</div><h1 id="title">Lettura dell’arrivo</h1>
+<p>Un volo, letto dalla pagina web FR24. Nessuna chiamata all’API a pagamento.</p>
+<div class="card"><div id="badge">Avvio…</div><p id="route"></p><div class="times"><div><label>Programmato</label><div class="time" id="sta">—</div></div><div><label id="etaLabel">Arrivo stimato sul sito</label><div class="time" id="eta">—</div></div></div><p id="status"></p><p id="error"></p></div>
+<div class="card"><dl><dt>Ultima lettura riuscita</dt><dd id="read">—</dd><dt>Ultimo cambiamento osservato</dt><dd id="change">—</dd><dt>Aggiornamento della fonte</dt><dd>Non dichiarato dalla pagina</dd><dt>Letture effettuate</dt><dd id="count">—</dd></dl><a id="source" target="_blank" rel="noopener noreferrer">Apri il volo su FR24 ↗</a></div>
+<footer>Gli orari usano il fuso indicato nelle celle FR24. Una lettura recente non garantisce che FR24 abbia ricalcolato la stima. Alla fine della prova il browser si chiude; questo riepilogo rimane disponibile. La versione Android non è collegata a questo esperimento.</footer></main>
+<script>
+const set=(id,value)=>document.getElementById(id).textContent=value;
+const format=value=>value?new Date(value).toLocaleString('it-IT',{timeZone:'Europe/Rome'}):'—';
+async function refresh(){try{const response=await fetch('/api/eta',{cache:'no-store'});if(!response.ok)throw Error('Servizio locale non disponibile');const data=await response.json(),o=data.observation;set('title',data.target.flight+' · '+data.target.date);set('badge',data.state==='error'?'Lettura interrotta':data.state==='stale'?'Lettura da aggiornare':data.finished?'Prova conclusa':'Prova in corso');set('error',data.error||'');set('count',data.samplesCompleted+' / '+data.samplesRequested);set('change',format(data.lastChangedAt));document.body.classList.toggle('stale',!data.readable);if(o){set('route',(o.origin||'')+' → '+o.destination);set('sta',o.scheduledArrival.clock);set('eta',(o.actualArrival||o.estimatedArrival)?.clock||'—');set('etaLabel',o.actualArrival?'Atterrato sul sito':'Arrivo stimato sul sito');set('status',o.status);set('read',format(o.readAt));document.getElementById('source').href=o.sourceUrl;}}catch(error){set('badge','Servizio locale non raggiungibile');set('error',error.message);document.body.classList.add('stale');}}
+refresh();setInterval(refresh,5000);
+</script></html>
