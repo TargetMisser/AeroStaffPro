@@ -88,6 +88,40 @@ test('rejects missing or inconsistent timestamp attributes', () => {
   assert.throws(() => selectObservation(capture([row]), target), /certezza/);
 });
 
+test('keeps TO3848 estimated departure separate from the scheduled arrival', () => {
+  const row = capturedRow();
+  row.legIds = [];
+  row.fields.DATE = cell('13 Sep 2026', '1789313700');
+  row.fields.FROM = cell('Paris (ORY)', null, null, ['https://www.flightradar24.com/data/airports/ory']);
+  row.fields.AIRCRAFT = cell('B738 (F-HTVR)', null);
+  row.fields.STD = cell('17:35', '1789313700');
+  row.fields.ATD = cell('—', '');
+  row.fields.STA = cell('19:25', '1789320300');
+  row.fields.STATUS = cell('Estimated departure 17:55', '1789314900');
+  const liveTarget = { flight: 'TO3848', date: '2026-09-13', airport: 'PSA' };
+  const liveCapture = { url: 'https://www.flightradar24.com/data/flights/to3848', rows: [row] };
+  const result = selectObservation(liveCapture, liveTarget);
+  assert.equal(result.scheduledDeparture.clock, '17:35');
+  assert.equal(result.estimatedDeparture.clock, '17:55');
+  assert.equal(result.actualDeparture, null);
+  assert.equal(result.scheduledArrival.clock, '19:25');
+  assert.equal(result.estimatedArrival, null);
+  assert.equal(result.actualArrival, null);
+  row.fields.STATUS.timestamp = null;
+  assert.throws(() => selectObservation(liveCapture, liveTarget), /certezza/);
+});
+
+test('actual departure comes only from a visible ATD time', () => {
+  const row = capturedRow();
+  row.fields.ATD = cell('11:10', '1789204200');
+  const result = selectObservation(capture([row]), target);
+  assert.equal(result.actualDeparture.clock, '11:10');
+  assert.equal(result.estimatedDeparture, null);
+  assert.equal(result.estimatedArrival.clock, '12:16');
+  row.fields.ATD.text = '—';
+  assert.equal(selectObservation(capture([row]), target).actualDeparture, null);
+});
+
 test('preserves next-day arrival and timezone offsets, including a winter offset', () => {
   const nextDay = Date.parse('2026-09-12T22:20:00Z') / 1000;
   const time = timeValue(cell('Estimated 00:20', String(nextDay)));

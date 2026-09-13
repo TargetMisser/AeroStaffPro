@@ -72,13 +72,20 @@ function selectObservation(capture, target, readAt = new Date().toISOString()) {
   // The airport board says "Estimated", while the same delayed arrival's
   // flight history can say "Delayed 14:33". A bare "Delayed" has no ETA.
   const isEstimated = /^(?:Estimated|Delayed)\s+\d{1,2}:\d{2}\b/i.test(status);
+  const isEstimatedDeparture = /^Estimated departure\s+\d{1,2}:\d{2}\b/i.test(status);
   const isLanded = /^Landed\s+\d/i.test(status);
-  const statusTime = (isEstimated || isLanded) ? timeValue(row.fields.STATUS) : null;
-  if ((isEstimated || isLanded) && !statusTime) throw new Error('Orario di stato non leggibile con certezza.');
+  const statusTime = (isEstimated || isEstimatedDeparture || isLanded) ? timeValue(row.fields.STATUS) : null;
+  if ((isEstimated || isEstimatedDeparture || isLanded) && !statusTime) throw new Error('Orario di stato non leggibile con certezza.');
+  // Departure columns can retain a timestamp while displaying a dash. Require
+  // a visible clock value, and never infer an arrival from a departure delay.
+  const departureTime = field => /\b\d{1,2}:\d{2}\b/.test(field?.text ?? '') ? timeValue(field) : null;
   return {
     flight: target.flight, serviceDate: target.date, destination: target.airport,
     origin: row.fields.FROM?.text ?? null, aircraft: row.fields.AIRCRAFT?.text ?? null,
     legId: target.legId ?? row.legIds[0] ?? null, status,
+    scheduledDeparture: departureTime(row.fields.STD),
+    estimatedDeparture: isEstimatedDeparture ? statusTime : null,
+    actualDeparture: departureTime(row.fields.ATD),
     scheduledArrival: scheduled,
     estimatedArrival: isEstimated ? statusTime : null,
     actualArrival: isLanded ? statusTime : null,

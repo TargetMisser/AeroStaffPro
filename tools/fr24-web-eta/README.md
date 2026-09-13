@@ -37,6 +37,28 @@ locali sotto `output/playwright/fr24-eta`, esclusi da Git.
 
 ## Comportamento implementato, da validare in esecuzione
 
+### Preparazione prova TO3848, 13 settembre 2026
+
+La consultazione puntuale dal PC alle 16:34–16:36 italiane ha identificato
+**TO3848, Parigi Orly → Pisa**, del 13 settembre, aeromobile indicato F-HTVR.
+La scheda mostrava partenza programmata **17:35**, `Estimated departure 17:55`
+e arrivo programmato **19:25**. Non era ancora presente una stima di arrivo.
+Il lettore ora conserva partenza programmata, stimata ed effettiva in campi
+separati: il ritardo alla partenza non diventa automaticamente un'ETA d'arrivo.
+I timestamp della riga realmente osservata sono coperti da un test di regressione.
+
+Evidenze locali: `output/playwright/fr24-eta/live-to3848-capture.json`,
+`live-to3848-row.png` e `live-to3848-result.json`. La lettura è un campione
+istantaneo; non è una raccolta periodica né un risultato della prova serale.
+Il precedente blocco dell'avvio automatico resta irrisolto. L'app Android
+non riceve questi dati e nessun servizio è stato avviato per la serata.
+
+Per confrontare gli orari in campo, annotare l'ora di osservazione, l'ETA
+visibile su FR24, l'ETA mostrata dall'app e l'atterraggio effettivo, mantenendo
+distinto l'arrivo allo stand. Il valore programmato 19:25 non è una previsione.
+
+### Limiti del prototipo
+
 - Configurazione obbligatoria: volo e data del servizio; destinazione predefinita
   PSA, identificativo della tratta facoltativo. Data del servizio = data della
   partenza usata dalla tabella FR24, anche quando l'arrivo è il giorno seguente.
