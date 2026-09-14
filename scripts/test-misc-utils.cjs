@@ -399,6 +399,35 @@ async function testBackupManager() {
     });
   }
 
+  // Export/import must preserve the user's notification lead times and categories.
+  {
+    const key = 'aerostaff_notif_settings_v1';
+    const settings = JSON.stringify({ onlyTrackedAirlines: false, includeArrivals: true,
+      includeDepartures: true, includeShiftEnd: false, sticky: true,
+      arrivalLeadMinutes: 25, departureLeadMinutes: 7 });
+    const storage = makeAsyncStorageMock({ [key]: settings, aerostaff_notif_enabled: 'true' });
+    let exported;
+    const fileSystem = makeFileSystemMock({});
+    fileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync = async () => ({ granted: true, directoryUri: 'content://test' });
+    fileSystem.writeAsStringAsync = async (_uri, payload) => { exported = payload; };
+    fileSystem.readAsStringAsync = async () => exported;
+    const mod = makeBackupModule({ pickerResult: { canceled: false, assets: [{ uri: 'file://test' }] },
+      fileSystemMock: fileSystem, asyncStorage: storage, secureStore: makeSecureStoreMock() });
+    assert((await mod.exportBackup()).ok, 'notification settings backup should export');
+    assert(JSON.parse(exported).data[key] === settings, 'backup must include custom notification settings');
+    delete storage._store[key];
+    assert((await mod.importBackup()).ok, 'notification settings backup should import');
+    assert(storage._store[key] === settings, 'notification preferences must round-trip on a clean install');
+    exported = JSON.stringify({ version: 2, data: { [key]: JSON.stringify({ arrivalLeadMinutes: 999, departureLeadMinutes: -5 }), aerostaff_notepad_v1: { invalid: true } } });
+    assert((await mod.importBackup()).ok, 'out-of-range notification settings should be sanitized');
+    const normalized = JSON.parse(storage._store[key]);
+    assert(normalized.arrivalLeadMinutes === 90 && normalized.departureLeadMinutes === 1, 'restored lead times must respect supported limits');
+    assert(!Object.hasOwn(storage._store, 'aerostaff_notepad_v1'), 'non-string storage values must be ignored');
+    exported = JSON.stringify({ version: 2, data: { [key]: '{invalid', aerostaff_theme_mode: 'dark' } });
+    assert((await mod.importBackup()).ok, 'one invalid setting must not prevent other safe preferences from restoring');
+    assert(JSON.parse(storage._store[key]).arrivalLeadMinutes === 90, 'invalid notification JSON must not erase existing preferences');
+  }
+
   // Cancelled picker
   {
     const mod = makeBackupModule({
@@ -975,6 +1004,7 @@ async function testWidgetCacheFirstPaint() {
     ['widget_data_cache_v1', JSON.stringify({
       state: 'work',
       shiftLabel,
+      context: { airportCode: 'PSA', start: shiftStart, end: shiftEnd },
       updatedAt: '08:00',
       flights: [{
         flightNumber: 'FR1234',
@@ -1054,6 +1084,51 @@ async function testWidgetCacheFirstPaint() {
   );
 }
 
+async function testWidgetSnapshotIdentity() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = today.getTime() / 1000, end = start + 24 * 3600;
+  const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const context = { airportCode: 'PSA', start, end };
+  let airportCode = 'PSA';
+  const storage = makeAsyncStorageMock({
+    widget_shift_v1: JSON.stringify({ date, shiftToday: { start, end }, isRestDay: false }),
+    aerostaff_widget_preferences_v2: JSON.stringify({ mode: 'pinned', showDataAge: false }),
+  });
+  const handler = loadTsModule('src/widgets/widgetTaskHandler.tsx', {
+    '@react-native-async-storage/async-storage': storage,
+    'expo-calendar': { getCalendarPermissionsAsync: async () => ({ status: 'denied' }) },
+    '../utils/airportSettings': { getStoredAirportCode: async () => airportCode },
+    './ShiftWidget': { ShiftWidget: () => null },
+    './widgetTheme': { getStoredWidgetThemeProps: async () => ({ themeMode: 'light' }) },
+    'react-native-android-widget': {}, react: require('react'),
+  });
+  const flights = [{ flightNumber: 'FIRST', departureTs: end - 3600 },
+    { flightNumber: 'PINNED', departureTs: end - 1800, isPinned: true }];
+  const cache = { state: 'work', shiftLabel: '00:00 – 00:00', context,
+    updatedAt: '12:00', updatedAtTs: Date.now(), flights };
+  const empty = { state: 'work_empty', shiftLabel: cache.shiftLabel, context, updatedAt: '' };
+  const yesterday = { ...cache, context: { ...context, start: start - 86400, end: end - 86400 } };
+  assert(handler.preserveCachedWidgetFlights(empty, yesterday).state === 'work_empty', 'same hours on different dates must not reuse yesterday flights');
+  assert(handler.preserveCachedWidgetFlights(empty, { ...cache, context: { ...context, airportCode: 'FLR' } }).state === 'work_empty', 'different airports must not share widget flights');
+  assert(handler.preserveCachedWidgetFlights(empty, { ...cache, context: undefined }).state === 'work_empty', 'legacy cache without identity must not be assumed current');
+  const renamed = handler.preserveCachedWidgetFlights({ ...empty, shiftLabel: 'Today' }, cache);
+  assert(renamed.state === 'work' && renamed.shiftLabel === 'Today', 'a midnight label change must retain the same actual shift');
+  storage._store.widget_data_cache_v1 = JSON.stringify(yesterday);
+  assert((await handler.getWidgetData()).state === 'work_empty', 'widget reads must reject a previous-day snapshot');
+  const presented = await handler.storeWidgetDataPreservingFlights(cache);
+  assert(presented.flights.length === 1 && presented.flights[0].flightNumber === 'PINNED', 'foreground pushes must respect pinned mode');
+  assert(presented.presentation.freshness === 'fresh' && presented.presentation.showDataAge === false, 'foreground pushes must apply age preferences');
+  assert(JSON.parse(storage._store.widget_data_cache_v1).flights.length === 2, 'presentation must not trim the persisted full shift');
+  assert((await handler.getWidgetData()).flights[0].flightNumber === 'PINNED', 'foreground and background must select the same flight');
+  airportCode = 'FLR';
+  assert((await handler.getWidgetData()).state === 'work_empty', 'changing airports must hide the old airport snapshot');
+  airportCode = 'PSA';
+  delete storage._store.widget_shift_v1;
+  assert((await handler.getWidgetData()).state === 'work', 'an unexpired identified shift remains available when the calendar is unavailable');
+  storage._store.widget_data_cache_v1 = JSON.stringify(yesterday);
+  assert((await handler.getWidgetData()).state === 'no_shift', 'missing calendar data must not resurrect an expired shift');
+}
+
 async function testWidgetOperationalWindowsStayScheduled() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1114,6 +1189,7 @@ async function main() {
   await testWidgetRefreshAfterImportRollback();
   await testWidgetShiftSelfHeal();
   await testWidgetKeepsPreviousDayNightShiftAfterMidnight();
+  await testWidgetSnapshotIdentity();
   await testWidgetCacheFirstPaint();
   await testWidgetOperationalWindowsStayScheduled();
   await testThemeMode();

@@ -330,8 +330,8 @@ assert(
 );
 assert(
   flightScreenSource.includes('const arrivalLinkItem = getFlightradar24ArrivalTarget(item, linkedArrival, direction)')
-    && flightScreenSource.includes('openFlightradar24Arrival(arrivalLinkItem, airportCode)')
-    && flightScreenSource.includes("resolveFlightradar24IdForFlight(airportCode, arrivalItem, 'arrival')")
+    && flightScreenSource.includes('openFlightradar24Arrival(arrivalLinkItem)')
+    && !flightScreenSource.includes('resolveFlightradar24IdForFlight')
     && flightScreenSource.includes('buildFlightradar24FlightPageUrl(flightNumber, fr24Id)')
     && flightScreenSource.includes("buildFlightradar24AirportBoardUrl(airportCode, 'arrival')")
     && flightScreenSource.includes('openFlightradar24AirportArrivals(airportCode)')

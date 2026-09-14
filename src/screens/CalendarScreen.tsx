@@ -261,9 +261,11 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
       
       let noFlightData: WidgetData;
       if (shiftToday && now <= shiftToday.end) {
-        noFlightData = { state: 'work_empty', shiftLabel: `${fmt(shiftToday.start)} – ${fmt(shiftToday.end)}`, updatedAt: '' };
+        noFlightData = { state: 'work_empty', shiftLabel: `${fmt(shiftToday.start)} – ${fmt(shiftToday.end)}`,
+          context: { airportCode, start: shiftToday.start, end: shiftToday.end }, updatedAt: '' };
       } else if ((!shiftToday || now > shiftToday.end) && nextShift && nextShift.start > now) {
-        noFlightData = { state: 'work_empty', shiftLabel: `Domani ${fmt(nextShift.start)} – ${fmt(nextShift.end)}`, updatedAt: '' };
+        noFlightData = { state: 'work_empty', shiftLabel: `Domani ${fmt(nextShift.start)} – ${fmt(nextShift.end)}`,
+          context: { airportCode, start: nextShift.start, end: nextShift.end }, updatedAt: '' };
       } else if (isRestDay) {
         noFlightData = { state: 'rest' };
       } else {

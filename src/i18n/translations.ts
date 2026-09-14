@@ -191,6 +191,7 @@ const it = {
   calNoEmployees: 'Nessun dipendente trovato nei PDF selezionati',
   // Home
   homeToday: 'OGGI', homeCurrentShift: 'Turno Attuale',
+  homeFlightOperations: 'Check-in, gate e voli seguiti',
   homeDayOverview: 'La tua giornata', homeOverviewStatus: 'A colpo d’occhio', a11yOpenProfile: 'Apri profilo',
   homeShiftLoading: 'Carico il turno', homeShiftLoadingDetail: 'Leggo il tuo calendario.',
   homeShiftToday: 'Il turno di oggi', homeShiftTimeUnavailable: 'Controlla l’orario nel calendario.',
@@ -548,6 +549,7 @@ const en: typeof it = {
   calNoEmployees: 'No employees found in the selected PDF files',
   // Home
   homeToday: 'TODAY', homeCurrentShift: 'Current Shift',
+  homeFlightOperations: 'Check-in, gates and tracked flights',
   homeDayOverview: 'Your day ahead', homeOverviewStatus: 'At a glance', a11yOpenProfile: 'Open profile',
   homeShiftLoading: 'Loading your shift', homeShiftLoadingDetail: 'Reading your calendar.',
   homeShiftToday: 'Your shift today', homeShiftTimeUnavailable: 'Check the times in your calendar.',

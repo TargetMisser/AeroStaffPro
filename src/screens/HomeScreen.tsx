@@ -9,11 +9,11 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import * as Calendar from 'expo-calendar';
 import * as Notifications from 'expo-notifications';
-import { requestWidgetUpdate } from 'react-native-android-widget';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import BoardReveal from '../components/motion/BoardReveal';
 import ShiftTimeline from '../components/ShiftTimeline';
+import HomeFlightActions from '../components/HomeFlightActions';
 
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { statusToToken } from '../utils/statusColors';
@@ -44,7 +44,7 @@ import {
   type WidgetShiftData,
   type WidgetShiftWindow,
 } from '../widgets/widgetTaskHandler';
-import { ShiftWidget } from '../widgets/ShiftWidget';
+import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { useLanguage } from '../context/LanguageContext';
 import { TYPE } from '../theme/typography';
 import { SPACING, RADIUS } from '../theme/spacing';
@@ -248,12 +248,14 @@ export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNoti
         widgetData = {
           state: 'work_empty',
           shiftLabel: formatWidgetShiftLabel(currentShift, false),
+          context: { airportCode, start: currentShift.start, end: currentShift.end },
           updatedAt: '',
         };
       } else if ((!currentShift || now > currentShift.end) && nextShift && nextShift.start > now) {
         widgetData = {
           state: 'work_empty',
           shiftLabel: formatWidgetShiftLabel(nextShift, true),
+          context: { airportCode, start: nextShift.start, end: nextShift.end },
           updatedAt: '',
         };
       } else if (isRestDay) {
@@ -262,7 +264,7 @@ export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNoti
 
       const dataToRender = await storeWidgetDataPreservingFlights(widgetData);
       if (Platform.OS === 'android') {
-        requestWidgetUpdate({ widgetName: 'ShiftFlights', renderWidget: () => (<ShiftWidget data={dataToRender} />) as any }).catch(() => {});
+        requestShiftWidgetUpdate(dataToRender).catch(() => {});
       }
     } catch {}
   };
@@ -277,7 +279,7 @@ export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNoti
     fetchShift(hasLoadedShiftRef.current);
     const interval = setInterval(() => { fetchShift(true); }, 60_000);
     return () => clearInterval(interval);
-  }, [isFocused]);
+  }, [isFocused, airportCode, locale]);
   useEffect(() => { if (isFocused) fetchWeather(); }, [airportCode, weatherMap, isFocused]);
 
   useEffect(() => {
@@ -674,6 +676,8 @@ export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNoti
           </View>
         </View>
       </BoardReveal>
+
+      <HomeFlightActions airportCode={airportCode} onOpenFlights={onOpenFlights} />
 
       {attention && (
         <View style={s.attentionCard}>

@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
 import { secureWipeAsyncStorageItem } from './secureWipe';
 import { getErrorMessage } from './errorUtils';
+import { sanitizeNotificationSettings } from './flightNotificationSettings';
 
 const BACKUP_VERSION = 2;
 
@@ -29,7 +30,20 @@ const SAFE_BACKUP_KEYS = [
   'manuals_data_v2',
   '@shift_import_name',
   'aerostaff_notif_enabled',
+  'aerostaff_notif_settings_v1',
 ];
+
+function safeImportValue(key: string, value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  if (key !== 'aerostaff_notif_settings_v1') return value;
+  try {
+    const parsed = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return JSON.stringify(sanitizeNotificationSettings(parsed));
+  } catch {
+    return null;
+  }
+}
 
 export type BackupResult = { ok: true } | { ok: false; error: string };
 
@@ -118,8 +132,11 @@ export async function importBackup(): Promise<BackupResult> {
 
     const data = parsed.data as Record<string, unknown>;
     const pairs: [string, string][] = Object.entries(data)
-      .filter(([key, val]) => SAFE_BACKUP_KEYS.includes(key) && val !== null && val !== undefined)
-      .map(([key, val]) => [key, val as string]);
+      .filter(([key]) => SAFE_BACKUP_KEYS.includes(key))
+      .flatMap(([key, val]) => {
+        const value = safeImportValue(key, val);
+        return value === null ? [] : [[key, value] as [string, string]];
+      });
     const importedLegacySensitive = await importLegacySensitiveData(data);
 
     if (pairs.length === 0 && importedLegacySensitive === 0) {

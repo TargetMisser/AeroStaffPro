@@ -30,7 +30,6 @@ import { statusToToken, delayToToken } from '../utils/statusColors';
 import {
   enrichFlightScheduleWithFr24Ids,
   fetchAirportScheduleRaw,
-  resolveFlightradar24IdForFlight,
   type FlightScheduleProviderStatus,
 } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
@@ -133,15 +132,11 @@ type FetchAllOptions = {
 
 async function openFlightradar24Arrival(
   arrivalItem: any | null,
-  airportCode: string,
 ): Promise<void> {
   const flightNumber = arrivalItem?.flight?.identification?.number?.default || '';
-  let fr24Id = getFlightradar24FlightId(arrivalItem);
-  if (arrivalItem && !fr24Id) {
-    try {
-      fr24Id = await resolveFlightradar24IdForFlight(airportCode, arrivalItem, 'arrival');
-    } catch {}
-  }
+  // Use the known leg when available; opening a link must not wait for a
+  // network lookup. The flight-number page remains a usable fallback.
+  const fr24Id = getFlightradar24FlightId(arrivalItem);
   const url = buildFlightradar24FlightPageUrl(flightNumber, fr24Id);
   if (!url) return;
   await Linking.openURL(url);
@@ -435,7 +430,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
       style={[s.fr24FlightBtn, !canOpenArrivalLink && s.fr24FlightBtnDisabled]}
       onPress={(event) => {
         event.stopPropagation();
-        openFlightradar24Arrival(arrivalLinkItem, airportCode).catch(() => {});
+        openFlightradar24Arrival(arrivalLinkItem).catch(() => {});
       }}
       activeOpacity={0.8}
       disabled={!canOpenArrivalLink}
@@ -1391,9 +1386,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
             })
             .sort((a, b) => a.departureTs - b.departureTs);
 
+          const context = { airportCode, start: activeWidgetShift.start, end: activeWidgetShift.end };
+          const updatedAtTs = Date.now();
           widgetData = wFlights.length === 0
-            ? { state: 'work_empty', shiftLabel, updatedAt: nowHH }
-            : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH };
+            ? { state: 'work_empty', shiftLabel, context, updatedAt: nowHH, updatedAtTs }
+            : { state: 'work', shiftLabel, context, flights: wFlights, updatedAt: nowHH, updatedAtTs };
         } else if (isRestDay) {
           widgetData = { state: 'rest' };
         } else {

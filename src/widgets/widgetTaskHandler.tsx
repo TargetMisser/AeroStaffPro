@@ -63,11 +63,27 @@ export type WidgetPresentation = {
 };
 
 export type WidgetData =
-  | { state: 'work'; shiftLabel: string; flights: WidgetFlight[]; updatedAt: string; updatedAtTs?: number; presentation?: WidgetPresentation }
-  | { state: 'work_empty'; shiftLabel: string; updatedAt: string; updatedAtTs?: number; presentation?: WidgetPresentation }
+  | { state: 'work'; shiftLabel: string; context?: WidgetShiftContext; flights: WidgetFlight[]; updatedAt: string; updatedAtTs?: number; presentation?: WidgetPresentation }
+  | { state: 'work_empty'; shiftLabel: string; context?: WidgetShiftContext; updatedAt: string; updatedAtTs?: number; presentation?: WidgetPresentation }
   | { state: 'rest' }
   | { state: 'no_shift' }
   | { state: 'error' };
+
+export type WidgetShiftContext = {
+  airportCode: string;
+  start: number;
+  end: number;
+};
+
+function isValidWidgetContext(context: WidgetShiftContext | undefined): context is WidgetShiftContext {
+  return Boolean(context && /^[A-Z0-9]{3,4}$/.test(context.airportCode)
+    && Number.isFinite(context.start) && Number.isFinite(context.end) && context.end > context.start);
+}
+
+function sameWidgetContext(left: WidgetShiftContext | undefined, right: WidgetShiftContext | undefined): boolean {
+  return isValidWidgetContext(left) && isValidWidgetContext(right)
+    && left.airportCode === right.airportCode && left.start === right.start && left.end === right.end;
+}
 
 export type WidgetShiftWindow = {
   date: string;
@@ -125,10 +141,10 @@ export function preserveCachedWidgetFlights(
   if (
     nextData.state === 'work_empty'
     && cachedData?.state === 'work'
-    && cachedData.shiftLabel === nextData.shiftLabel
+    && sameWidgetContext(cachedData.context, nextData.context)
     && cachedData.flights.length > 0
   ) {
-    return cachedData;
+    return { ...cachedData, shiftLabel: nextData.shiftLabel };
   }
   return nextData;
 }
@@ -144,7 +160,8 @@ export async function storeWidgetDataPreservingFlights(nextData: WidgetData): Pr
 
   const dataToStore = preserveCachedWidgetFlights(nextData, cachedData);
   await AsyncStorage.setItem(WIDGET_CACHE_KEY, JSON.stringify(dataToStore));
-  return dataToStore;
+  // Cache all flights; apply the display preferences only to the render result.
+  return presentWidgetData(dataToStore, await readWidgetPreferences());
 }
 
 function fmtTs(ts: number): string {
@@ -292,24 +309,26 @@ export async function getWidgetData({ refreshShiftSnapshot = false }: { refreshS
   try {
     const preferences = await readWidgetPreferences();
     const shiftData = await readShiftSnapshot(refreshShiftSnapshot);
+    const airportCode = await getStoredAirportCode();
 
     if (shiftData) {
       const resolved = resolveWidgetShift(shiftData);
       if (resolved === 'rest') return { state: 'rest' };
       if (resolved) {
         const { shiftLabel } = resolved;
+        const context: WidgetShiftContext = { airportCode, start: resolved.shift.start, end: resolved.shift.end };
 
         // It's a work day — return cached flight data only if it matches the active shift.
         // A stale current-shift cache must not override the automatic next-day handoff.
         const cached = await AsyncStorage.getItem(WIDGET_CACHE_KEY);
         if (cached) {
           const data: WidgetData = JSON.parse(cached);
-          if ((data.state === 'work' || data.state === 'work_empty') && data.shiftLabel === shiftLabel) {
-            return presentWidgetData(data, preferences);
+          if ((data.state === 'work' || data.state === 'work_empty') && sameWidgetContext(data.context, context)) {
+            return presentWidgetData({ ...data, shiftLabel }, preferences);
           }
         }
         // Cache is stale or missing — show work_empty until periodic update runs.
-        return presentWidgetData({ state: 'work_empty', shiftLabel, updatedAt: '' }, preferences);
+        return presentWidgetData({ state: 'work_empty', shiftLabel, context, updatedAt: '' }, preferences);
       }
       // An empty current snapshot must not resurrect flights from an undone import.
       if (shiftData.date === toLocalIso()) return { state: 'no_shift' };
@@ -321,6 +340,12 @@ export async function getWidgetData({ refreshShiftSnapshot = false }: { refreshS
     const data: WidgetData = JSON.parse(cached);
     // Rest/no_shift cached but shift key is stale → treat as no_shift.
     if (data.state === 'rest' || data.state === 'no_shift') return { state: 'no_shift' };
+    if (data.state === 'work' || data.state === 'work_empty') {
+      // With no current calendar snapshot, only retain an identified, unexpired
+      // shift at the selected airport. Legacy snapshots are refreshed once.
+      if (!isValidWidgetContext(data.context) || data.context.airportCode !== airportCode
+        || data.context.end < Date.now() / 1000) return { state: 'no_shift' };
+    }
     return presentWidgetData(data, preferences);
   } catch {}
   return { state: 'error' };
@@ -354,7 +379,6 @@ async function withWidgetRefreshTimeout<T>(operation: Promise<T>): Promise<T> {
 // ─── Fetch fresh widget data from the live provider + cached shift key ────────
 export async function fetchFreshWidgetData(): Promise<WidgetData> {
   try {
-    const preferences = await readWidgetPreferences();
     const shiftData = await readShiftSnapshot();
     if (!shiftData) return getWidgetData();
 
@@ -459,14 +483,15 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
       .sort((a, b) => a.departureTs - b.departureTs);
 
     const updatedAtTs = Date.now();
+    const context: WidgetShiftContext = { airportCode, start: activeShift.start, end: activeShift.end };
     const freshData: WidgetData = wFlights.length === 0
-      ? { state: 'work_empty', shiftLabel, updatedAt: nowHH, updatedAtTs }
-      : { state: 'work', shiftLabel, flights: wFlights, updatedAt: nowHH, updatedAtTs };
+      ? { state: 'work_empty', shiftLabel, context, updatedAt: nowHH, updatedAtTs }
+      : { state: 'work', shiftLabel, context, flights: wFlights, updatedAt: nowHH, updatedAtTs };
 
     // A temporarily empty provider response must not erase a valid snapshot
-    // for the same shift. Shift changes still replace it because the labels differ.
+    // for the same shift. The identity includes airport and absolute shift times.
     const stored = await storeWidgetDataPreservingFlights(freshData);
-    return presentWidgetData(stored, preferences);
+    return stored;
   } catch {
     return markWidgetOffline(await getWidgetData());
   }
