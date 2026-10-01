@@ -185,7 +185,15 @@ export default function ProfileSwitcherModal({ visible, onClose }: Props) {
               <Text style={styles.title}>{t('profileTitle')}</Text>
               <Text style={styles.subtitle}>{t('profileSubtitle')}</Text>
             </View>
-            <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.8} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
+            <TouchableOpacity
+              style={styles.closeBtn}
+              onPress={onClose}
+              activeOpacity={0.8}
+              accessible
+              accessibilityRole="button"
+              accessibilityLabel={t('a11yClose')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <MaterialIcons name="close" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           </View>

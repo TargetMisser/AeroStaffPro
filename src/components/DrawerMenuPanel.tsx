@@ -139,7 +139,17 @@ export default function DrawerMenuPanel({
               <Text style={styles.opsTitle}>Operations</Text>
             </View>
           </View>
-          <TactilePressable onPress={onClose} animatedStyle={styles.opsClose} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
+          <TactilePressable
+            onPress={onClose}
+            animatedStyle={styles.opsClose}
+            depth={2}
+            pressedScale={0.94}
+            haptic="selection"
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={t('a11yClose')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <MaterialIcons name="close" size={18} color="rgba(204,251,241,0.72)" />
           </TactilePressable>
         </View>
@@ -151,7 +161,17 @@ export default function DrawerMenuPanel({
           style={styles.headerGradient}
         >
           <AeroStaffLogo variant="large" monochrome />
-          <TactilePressable onPress={onClose} animatedStyle={styles.closeIconBtn} depth={2} pressedScale={0.94} haptic="selection" accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
+          <TactilePressable
+            onPress={onClose}
+            animatedStyle={styles.closeIconBtn}
+            depth={2}
+            pressedScale={0.94}
+            haptic="selection"
+            accessible
+            accessibilityRole="button"
+            accessibilityLabel={t('a11yClose')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
             <MaterialIcons name="close" size={20} color="rgba(255,255,255,0.72)" />
           </TactilePressable>
         </LinearGradient>
