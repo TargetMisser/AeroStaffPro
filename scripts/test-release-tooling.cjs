@@ -78,6 +78,15 @@ assert(
   bumpVersionSource.includes('Latest stable release'),
   'version:bump should know the README stable-version marker',
 );
+assert(
+  bumpVersionSource.includes('FALLBACK_APP_VERSION'),
+  'version:bump should keep the updateChecker version fallback in sync',
+);
+const releaseCheckSource = fs.readFileSync(path.join(root, 'scripts', 'release-check.cjs'), 'utf8');
+assert(
+  releaseCheckSource.includes('FALLBACK_APP_VERSION'),
+  'release:check should verify the updateChecker version fallback',
+);
 
 const tempGitRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'aerostaff-release-tooling-git-'));
 releaseTools.run('git', ['init'], { cwd: tempGitRepo, capture: true });

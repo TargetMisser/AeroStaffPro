@@ -22,16 +22,18 @@ import { SwipeableFlightCard } from '../components/flights/SwipeableFlightCard';
 import { useAppTheme, type ThemeColors } from '../context/ThemeContext';
 import { useAirport } from '../context/AirportContext';
 import { getAirlineOps, getAirlineColor, getDepartureGateWindow } from '../utils/airlineOps';
+import { statusToToken, delayToToken } from '../utils/statusColors';
 import { fetchAirportScheduleRaw, type FlightScheduleProviderStatus } from '../utils/fr24api';
 import { fetchStaffMonitorData, normalizeFlightNumber, type StaffMonitorFlight } from '../utils/staffMonitor';
-import { formatAirportHeader, getAirportAirlines, getStoredAirportAirlines } from '../utils/airportSettings';
+import { formatAirportHeader, getAirportAirlines, getAirportInfo, getStoredAirportAirlines, reconcileSelectedAirlines } from '../utils/airportSettings';
+import { applyLiveArrivalEtas, applyLiveDepartureStatus, applyLiveOriginDepartures, fetchAdsbAircraft } from '../utils/liveArrivalEta';
 import { WIDGET_CACHE_KEY, WIDGET_SHIFT_KEY } from '../widgets/widgetTaskHandler';
 import type { WidgetData, WidgetFlight, WidgetShiftData } from '../widgets/widgetTaskHandler';
 import { requestShiftWidgetUpdate } from '../widgets/widgetThemeSync';
 import { useLanguage } from '../context/LanguageContext';
 import type { TranslationKey } from '../i18n/translations';
 import { dismissPinnedFlightNotification, showOrUpdatePinnedFlightNotification } from '../utils/pinnedFlightOngoingNotification';
-import { getBestArrivalTs, getBestDepartureTs } from '../utils/flightTimes';
+import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from '../utils/flightTimes';
 import { isFlightEasyJet } from '../utils/easyjetOverlapMode';
 import {
   compareFlightsChronologically,
@@ -43,6 +45,7 @@ import {
   isFlightAirlineMatch,
   mergeFlightLists,
   pruneExpiredFlights,
+  pruneUnseenFlights,
 } from '../utils/flightScheduleAdapter';
 import {
   loadFlightScreenCache,
@@ -65,7 +68,6 @@ import {
 import {
   clamp,
   DEFAULT_NOTIFICATION_SETTINGS,
-  sameAirlineKeys,
   sanitizeNotificationSettings,
   type FlightNotificationSettings,
 } from '../utils/flightNotificationSettings';
@@ -80,6 +82,8 @@ import {
   schedulePinnedNotifications,
   scheduleShiftNotifications,
 } from '../utils/flightNotificationScheduler';
+import { TYPE, WEIGHT } from '../theme/typography';
+import { SPACING, RADIUS } from '../theme/spacing';
 
 const WearDataSender = Platform.OS === 'android' ? NativeModules.WearDataSender : null;
 
@@ -140,7 +144,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const airlineIdentity = [airline, iataCode, icaoCode].filter(Boolean).join(' ');
   const statusText = item.flight?.status?.text || 'Scheduled';
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
-  const statusColor = raw === 'green' ? '#10b981' : raw === 'red' ? '#ef4444' : raw === 'yellow' ? '#f59e0b' : '#6b7280';
+  const statusColor = statusToToken(raw, colors);
   const remoteAirport = activeTab === 'arrivals'
     ? item.flight?.airport?.origin
     : item.flight?.airport?.destination;
@@ -148,7 +152,10 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
   const originDest = getFlightAirportLabel(remoteAirport, 'N/A');
   const ts = activeTab === 'arrivals' ? item.flight?.time?.scheduled?.arrival : item.flight?.time?.scheduled?.departure;
   const isEasyJet = isFlightEasyJet(item);
-  const time = ts ? new Date(ts * 1000).toLocaleTimeString(locale, {
+  // Header shows the live time (real > estimated > scheduled), so delays surface immediately
+  // instead of the card always displaying the original timetable time.
+  const bestTs = activeTab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
+  const time = bestTs ? new Date(bestTs * 1000).toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
     second: (activeTab === 'arrivals' && isEasyJet) ? '2-digit' : undefined,
@@ -217,16 +224,13 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
     if (!startTs || !endTs || endTs <= startTs) return null;
 
     const delayMin = Math.round((endTs - ts) / 60);
-    const progressColor = realArr ? '#10B981'
-      : delayMin > 20 ? '#EF4444'
-      : delayMin > 5 ? '#F59E0B'
-      : colors.primary;
+    const progressColor = delayToToken(delayMin, !!realArr, colors);
 
     return {
       startTs,
       endTs,
       progress: realArr ? 1 : clamp((Date.now() / 1000 - startTs) / (endTs - startTs), 0, 1),
-      departureColor: realDep ? colors.primary : '#6B7280',
+      departureColor: realDep ? colors.primary : colors.neutral,
       arrivalColor: progressColor,
       planeColor: progressColor,
     };
@@ -385,32 +389,37 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             </View>
           ) : activeTab === 'arrivals' && ts ? (() => {
             const realDep = item.flight?.time?.real?.departure;
+            const estDep = item.flight?.time?.estimated?.departure;
+            const schedDep = item.flight?.time?.scheduled?.departure;
             const realArr = item.flight?.time?.real?.arrival;
             const estArr = item.flight?.time?.estimated?.arrival;
             const bestArr = realArr || estArr || ts;
             const delayMin = Math.round((bestArr - ts) / 60);
             const landed = !!realArr;
-            const departed = !!realDep;
+            const depEstimated = item.flight?._departureSource === 'adsb-estimate';
 
-            const landColor = landed ? '#10B981'
-              : delayMin > 20 ? '#EF4444'
-              : delayMin > 5 ? '#F59E0B'
-              : colors.primary;
-            const landLabel = landed ? t('flightLanded') : t('flightEstimated');
+            const landColor = delayToToken(delayMin, landed, colors);
+            // Arrival card = the inbound's journey: Partenza (from origin) -> Atterraggio
+            // (here). Left box is always the departure time (real > ADS-B estimate "~" >
+            // scheduled, or --:-- when unknown); right box is the landing, shown as the
+            // real touchdown once landed, otherwise the expected landing time.
+            const landLabel = landed ? t('flightLanded') : t('flightLandingTime');
+
+            const depTs = realDep ?? estDep ?? schedDep;
+            const depApprox = !!depTs && !realDep && depEstimated;
+            const depTimeText = depTs ? `${depApprox ? '~' : ''}${fmtTs(depTs)}` : '--:--';
 
             return (
               <View style={s.opsRow}>
                 <ValueChangeFlash
-                  valueKey={departed ? fmtTs(realDep) : '--:--'}
+                  valueKey={`dep|${depTimeText}`}
                   enabled={isOperations}
                   style={s.opsBadge}
                 >
-                  <MaterialIcons name="flight-takeoff" size={16} color={departed ? colors.primary : '#6B7280'} />
+                  <MaterialIcons name="flight-takeoff" size={16} color={depTs ? colors.primary : colors.neutral} />
                   <View>
-                    <Text style={s.opsLabel}>{t('flightDeparted')}</Text>
-                    <Text style={[s.opsTime, !departed && { color: '#6B7280' }]}>
-                      {departed ? fmtTs(realDep) : '--:--'}
-                    </Text>
+                    <Text style={s.opsLabel}>{t('flightDepartureTime')}</Text>
+                    <Text style={[s.opsTime, !depTs && { color: colors.neutral }]}>{depTimeText}</Text>
                   </View>
                 </ValueChangeFlash>
                 <ValueChangeFlash
@@ -448,7 +457,7 @@ function FlightRowComponent({ item, index, activeTab, userShift, pinnedFlightId,
             const dMin = Math.round((bArr - ts) / 60);
             const isLanded = !!rArr;
             const dText = isLanded ? 'Atterrato' : dMin > 0 ? `+${dMin} min` : 'In orario';
-            const dColor = isLanded ? '#10B981' : dMin > 20 ? '#EF4444' : dMin > 5 ? '#F59E0B' : '#10B981';
+            const dColor = delayToToken(dMin, isLanded, colors, colors.success);
             return (
               <ValueChangeFlash valueKey={dText} enabled={isOperations} style={[s.statusPill, { backgroundColor: dColor + '22' }]}>
                 <Text style={[s.statusText, { color: dColor }]}>{dText}</Text>
@@ -550,16 +559,11 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
     setSelectedAirlines(next);
     persistSelectedAirlines(next).catch(() => {});
   }, [persistSelectedAirlines]);
-  const airportAirlinesRef = useRef<string[]>([]);
   const selectedAirlinesRef = useRef<string[]>([]);
   const notifSettingsRef = useRef<FlightNotificationSettings>(DEFAULT_NOTIFICATION_SETTINGS);
   const selectedAirlinesNotifSignatureRef = useRef<string>('');
   const fetchInFlightRef = useRef(false);
   const lastFlightRefreshAttemptAtRef = useRef(0);
-
-  useEffect(() => {
-    airportAirlinesRef.current = airportAirlines;
-  }, [airportAirlines]);
 
   useEffect(() => {
     selectedAirlinesRef.current = selectedAirlines;
@@ -664,42 +668,105 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       const nextAirportAirlines = getAirportAirlines(airportCode);
       setAirportAirlines(nextAirportAirlines);
 
-      const savedProfileAirlines = activeProfile?.airportCode === airportCode ? activeProfile.airlines : [];
-      const previousAirportAirlines = airportAirlinesRef.current;
-      const previousSelectedAirlines = selectedAirlinesRef.current;
-      const hadAllPreviouslySelected =
-        previousAirportAirlines.length > 0 &&
-        previousAirportAirlines.every(key => previousSelectedAirlines.includes(key));
-
-      if (savedProfileAirlines.length === 0) {
-        if (previousSelectedAirlines.length > 0) {
-          applySelectedAirlines([]);
-        }
-      } else if (hadAllPreviouslySelected && !sameAirlineKeys(savedProfileAirlines, nextAirportAirlines)) {
-        applySelectedAirlines(nextAirportAirlines);
+      // Le compagnie appena rilevate nello schedule NON vengono mai selezionate
+      // in automatico: restano deselezionate nel filtro finché l'utente non le
+      // spunta, così in bacheca non compaiono voli che non gestisce.
+      const reconciledSelection = reconcileSelectedAirlines({
+        savedProfileAirlines: activeProfile?.airportCode === airportCode ? activeProfile.airlines : [],
+        previousSelectedAirlines: selectedAirlinesRef.current,
+        nextAirportAirlines,
+      });
+      if (reconciledSelection) {
+        applySelectedAirlines(reconciledSelection);
       }
       // Accumula voli: fonde i dati freschi con quelli in cache e conserva solo
       // i voli non più vecchi di 1 ora dall'orario migliore disponibile.
+      // I voli in cache che NESSUNA fonte conferma da più di 2 ore decadono
+      // (cancellati o mai esistiti): senza eviction la cache si auto-rinnova
+      // e i voli fantasma sopravvivono fino al loro orario previsto.
       let cachedArrs: any[] = [], cachedDeps: any[] = [];
       try {
         const cache = await loadFlightScreenCache(airportCode);
-        cachedArrs = cache?.arrivals ?? [];
-        cachedDeps = cache?.departures ?? [];
+        const stampLegacy = (item: any) =>
+          (typeof item?._seenAtMs === 'number' ? item : { ...item, _seenAtMs: cache?.savedAt ?? Date.now() });
+        cachedArrs = (cache?.arrivals ?? []).map(stampLegacy);
+        cachedDeps = (cache?.departures ?? []).map(stampLegacy);
       } catch {}
-      const mergedArrs = pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival');
-      const mergedDeps = pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure');
+      let mergedArrs = pruneUnseenFlights(
+        pruneExpiredFlights(mergeFlightLists(cachedArrs, allArrivals, 'arrival'), 'arrival'),
+      );
+      let mergedDeps = pruneUnseenFlights(
+        pruneExpiredFlights(mergeFlightLists(cachedDeps, allDepartures, 'departure'), 'departure'),
+      );
+
+      // Overlay ETA live dai dati ADS-B aperti (stessa fonte grezza di FR24):
+      // incrocia gli arrivi per registrazione/callsign con gli aerei in volo
+      // e sostituisce la stima con distanza/velocità reali. Best-effort: se
+      // l'ADS-B non risponde restano gli orari del FIDS.
+      const liveEtaDiagnostics: FlightScheduleProviderStatus[] = [];
+      try {
+        const airportInfo = getAirportInfo(airportCode);
+        if (airportInfo.latitude != null && airportInfo.longitude != null) {
+          const adsbController = new AbortController();
+          const adsbTimer = setTimeout(() => adsbController.abort(), 8_000);
+          const startedAt = Date.now();
+          try {
+            const aircraft = await fetchAdsbAircraft(
+              airportInfo.latitude,
+              airportInfo.longitude,
+              undefined,
+              adsbController.signal,
+            );
+            mergedArrs = applyLiveArrivalEtas(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            // Estimate the inbound's origin-departure time from its route + how far
+            // it has flown, but only for arrivals no schedule provider gave a
+            // departure time for (a key-backed exact time always wins).
+            mergedArrs = await applyLiveOriginDepartures(mergedArrs, aircraft, airportInfo.latitude, airportInfo.longitude);
+            // Mark outbound flights whose aircraft is already airborne and
+            // climbing away from the field as departed, ahead of the FIDS.
+            mergedDeps = applyLiveDepartureStatus(mergedDeps, aircraft, airportInfo.latitude, airportInfo.longitude);
+            const matched = mergedArrs.filter(item => item.flight?._etaSource === 'adsb').length;
+            const depMatched = mergedArrs.filter(item => item.flight?._departureSource === 'adsb-estimate').length;
+            const departed = mergedDeps.filter(item => item.flight?._departureStatusSource === 'adsb').length;
+            liveEtaDiagnostics.push({
+              provider: 'liveEta',
+              label: 'Live ETA (ADS-B)',
+              status: 'success',
+              arrivals: matched,
+              departures: departed,
+              durationMs: Date.now() - startedAt,
+              message: `${aircraft.length} aerei nel raggio, ${matched} ETA, ${depMatched} decolli stimati, ${departed} decollati`,
+            });
+          } finally {
+            clearTimeout(adsbTimer);
+          }
+        }
+      } catch (e) {
+        if (__DEV__) console.log('[liveEta]', e);
+        liveEtaDiagnostics.push({
+          provider: 'liveEta',
+          label: 'Live ETA (ADS-B)',
+          status: 'failed',
+          message: String((e as any)?.message ?? e).slice(0, 120),
+        });
+      }
       const sourceState: FlightDataSourceState = {
         sourceLabel: sourceLabel ?? 'Sconosciuta',
         fetchedAt: fetchedAt ?? Date.now(),
-        providerDiagnostics,
+        providerDiagnostics: [...(providerDiagnostics ?? []), ...liveEtaDiagnostics],
       };
       setAllArrivalsFull(mergedArrs);
       setAllDeparturesFull(mergedDeps);
       setFlightDataSource(sourceState);
+      // I voli sintetizzati dalla tabella rotte AirLabs sono stime di orario,
+      // non voli osservati: mostrali pure come fallback, ma non persisterli
+      // in cache, così spariscono al primo fetch buono invece di restare
+      // come fantasmi per ore.
+      const isPersistable = (item: any) => item?.flight?._source !== 'airlabs_routes';
       saveFlightScreenCache({
         airportCode,
-        arrivals: mergedArrs,
-        departures: mergedDeps,
+        arrivals: mergedArrs.filter(isPersistable),
+        departures: mergedDeps.filter(isPersistable),
         sourceLabel: sourceState.sourceLabel,
         fetchedAt: sourceState.fetchedAt,
         providerDiagnostics: sourceState.providerDiagnostics,
@@ -819,17 +886,18 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           const wAllowedAirlines: string[] = wFilterRaw ? JSON.parse(wFilterRaw) : [];
           const wFlights: WidgetFlight[] = mergedDeps
             .filter(item => {
-              const ts = getBestDepartureTs(item);
-              if (ts == null) return false;
+              const stdTs = getScheduledFlightTs(item, 'departure');
+              if (stdTs == null) return false;
               const airline = item.flight?.airline?.name || '';
               if (wAllowedAirlines.length > 0 && !wAllowedAirlines.some(k => isFlightAirlineMatch(item, k))) return false;
               const ops = getAirlineOps(airline);
-              const ciO = ts - ops.checkInOpen * 60, ciC = ts - ops.checkInClose * 60;
-              const gO = ts - ops.gateOpen * 60, gC = ts - ops.gateClose * 60;
+              const ciO = stdTs - ops.checkInOpen * 60, ciC = stdTs - ops.checkInClose * 60;
+              const gO = stdTs - ops.gateOpen * 60, gC = stdTs - ops.gateClose * 60;
               return (ciO <= activeWidgetShift.end && ciC >= activeWidgetShift.start) || (gO <= activeWidgetShift.end && gC >= activeWidgetShift.start);
             })
             .map(item => {
-              const ts = getBestDepartureTs(item)!;
+              const etdTs = getBestDepartureTs(item)!;
+              const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
               const airline = item.flight?.airline?.name || 'Sconosciuta';
               const airlineIdentity = [
                 airline,
@@ -846,10 +914,10 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
               return {
                 flightNumber: fn,
                 destinationIata: getFlightAirportLabel(item.flight?.airport?.destination, 'N/A'),
-                departureTs: ts,
-                departureTime: fmtT(ts),
-                ciOpen: fmtOff(ts, ops.checkInOpen), ciClose: fmtOff(ts, ops.checkInClose),
-                gateOpen: fmtOff(ts, ops.gateOpen), gateClose: fmtOff(ts, ops.gateClose),
+                departureTs: etdTs,
+                departureTime: fmtT(etdTs),
+                ciOpen: fmtOff(stdTs, ops.checkInOpen), ciClose: fmtOff(stdTs, ops.checkInClose),
+                gateOpen: fmtOff(stdTs, ops.gateOpen), gateClose: fmtOff(stdTs, ops.gateClose),
                 airlineColor: getAirlineColor(airlineIdentity),
                 isPinned: fn === pinnedFn,
                 stand: sm?.stand,
@@ -907,6 +975,22 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
         setDepartures([]);
         setFlightDataSource({
           sourceLabel: 'Nessuna fonte voli disponibile',
+          fetchedAt: Date.now(),
+          providerDiagnostics: [{
+            provider: 'cache',
+            label: 'Fonti voli',
+            status: 'failed',
+            message,
+          }],
+        });
+      } else {
+        // Non-fatal refresh failure: keep whatever flights are already on
+        // screen but surface that the update failed. Previously this branch
+        // only logged under __DEV__, so in production the error vanished and
+        // crew saw silently stale times/gates with no indication anything
+        // had gone wrong.
+        setFlightDataSource({
+          sourceLabel: 'Aggiornamento non riuscito · dati non aggiornati',
           fetchedAt: Date.now(),
           providerDiagnostics: [{
             provider: 'cache',
@@ -1329,7 +1413,7 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           keyExtractor={(item, i) => item.flight?.identification?.id || String(i)}
           renderItem={renderFlight}
           contentContainerStyle={{
-            paddingHorizontal: 16,
+            paddingHorizontal: SPACING.lg,
             paddingTop: isOperations ? 8 : 18,
             paddingBottom: isOperations ? 176 : 120,
           }}
@@ -1446,40 +1530,40 @@ function makeStyles(c: ThemeColors, isOperations = false) {
   const operationBorderSoft = isOperations ? 'rgba(45,212,191,0.18)' : c.border;
 
   return StyleSheet.create({
-    pageHeader: { backgroundColor: isOperations ? 'rgba(2,8,12,0.90)' : c.card, paddingHorizontal: 16, paddingVertical: isOperations ? 12 : 14, borderBottomWidth: 1, borderBottomColor: operationBorderSoft, flexDirection: 'row', alignItems: 'center' },
+    pageHeader: { backgroundColor: isOperations ? 'rgba(2,8,12,0.90)' : c.card, paddingHorizontal: SPACING.lg, paddingVertical: isOperations ? 12 : 14, borderBottomWidth: 1, borderBottomColor: operationBorderSoft, flexDirection: 'row', alignItems: 'center' },
     notifBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     notifBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
-    notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: 8, backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
+    notifBadge: { position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: RADIUS.sm, backgroundColor: c.danger, justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: c.card },
     notifBadgeTxt: { fontSize: 9, fontWeight: '800', color: '#fff' },
-    pageTitle: { fontSize: isOperations ? 24 : 22, fontWeight: isOperations ? '900' : 'bold', color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
+    pageTitle: { ...(isOperations ? TYPE.titleLg : TYPE.title), color: isOperations ? c.text : c.primaryDark, letterSpacing: isOperations ? -0.5 : 0 },
     pageSub: { fontSize: 13, color: c.textSub, marginTop: 2, letterSpacing: isOperations ? 0.7 : 0 },
-    controlsRow: { flexDirection: 'row', gap: 8, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
-    sourceRow: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: 16 },
-    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%', flexShrink: 1, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
+    controlsRow: { flexDirection: 'row', gap: SPACING.sm, padding: isOperations ? 9 : 12, backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.card, borderBottomWidth: 1, borderBottomColor: operationBorderSoft },
+    sourceRow: { flexDirection: 'row', alignItems: 'flex-start', flexWrap: 'wrap', gap: SPACING.sm, marginTop: isOperations ? 8 : 10, marginBottom: isOperations ? 2 : 8, marginHorizontal: SPACING.lg },
+    sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', maxWidth: '100%', flexShrink: 1, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: RADIUS.pill, backgroundColor: isOperations ? 'rgba(45,212,191,0.12)' : c.primaryLight, borderWidth: 1, borderColor: operationBorder },
     sourceBadgeText: { flexShrink: 1, flexWrap: 'wrap', fontSize: 11, lineHeight: 15, fontWeight: '800', color: c.primaryDark },
-    refreshBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: 999, backgroundColor: isOperations ? 'rgba(15,23,42,0.82)' : c.cardSecondary, borderWidth: 1, borderColor: operationBorderSoft },
+    refreshBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 7, borderRadius: RADIUS.pill, backgroundColor: isOperations ? 'rgba(15,23,42,0.82)' : c.cardSecondary, borderWidth: 1, borderColor: operationBorderSoft },
     refreshBadgeText: { fontSize: 11, fontWeight: '800', color: c.textSub },
     segment: { flex: 1, flexDirection: 'row', backgroundColor: isOperations ? 'rgba(2,8,12,0.76)' : c.bg, borderRadius: isOperations ? 14 : 8, padding: 3, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     segBtn: { flex: 1, paddingVertical: isOperations ? 6 : 7, alignItems: 'center', borderRadius: isOperations ? 11 : 6 },
     segBtnActive: { backgroundColor: isOperations ? 'rgba(45,212,191,0.16)' : c.card, borderWidth: 1, borderColor: isOperations ? operationBorder : c.primaryLight },
-    segBtnText: { fontSize: 12, fontWeight: '600', color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
+    segBtnText: { ...TYPE.caption, color: c.textSub, letterSpacing: isOperations ? 0.6 : 0 },
     segBtnTextActive: { color: isOperations ? c.primaryDark : c.primary, fontWeight: '800' },
     card: { backgroundColor: operationPanel, borderRadius: isOperations ? 18 : 16, marginBottom: 10, overflow: 'hidden', shadowColor: c.primary, shadowOpacity: isOperations || c.isDark ? 0 : 0.08, shadowRadius: 10, elevation: isOperations || c.isDark ? 0 : 3, borderWidth: 1, borderColor: operationBorder, borderLeftWidth: isOperations ? 4 : 1 },
-    cardShift: { borderWidth: 1.5, borderColor: '#F59E0B' },
-    shiftBanner: { backgroundColor: '#F59E0B', paddingVertical: 5, paddingHorizontal: 12 },
-    shiftBannerText: { color: '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
-    cardPinned: { borderWidth: 2, borderColor: '#F59E0B' },
-    pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : '#F59E0B', paddingVertical: 5, paddingHorizontal: 12, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
-    pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: 'bold', fontSize: 11, letterSpacing: 0.5 },
+    cardShift: { borderWidth: 1.5, borderColor: c.warning },
+    shiftBanner: { backgroundColor: c.warning, paddingVertical: 5, paddingHorizontal: SPACING.md },
+    shiftBannerText: { color: '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
+    cardPinned: { borderWidth: 2, borderColor: c.warning },
+    pinBanner: { backgroundColor: isOperations ? 'rgba(245,158,11,0.18)' : c.warning, paddingVertical: 5, paddingHorizontal: SPACING.md, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: 'rgba(245,158,11,0.28)' },
+    pinBannerText: { color: isOperations ? '#FBBF24' : '#fff', fontWeight: WEIGHT.semibold, fontSize: 11, letterSpacing: 0.5 },
     statusPill: { paddingHorizontal: 10, paddingVertical: isOperations ? 3 : 4, borderRadius: isOperations ? 10 : 20, marginTop: isOperations ? 6 : 8, alignSelf: 'flex-end', borderWidth: isOperations ? 1 : 0, borderColor: isOperations ? operationBorderSoft : 'transparent' },
-    statusText: { fontSize: 10, fontWeight: '800', letterSpacing: isOperations ? 0.6 : 0 },
+    statusText: { ...TYPE.micro, letterSpacing: isOperations ? 0.6 : 0 },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, borderBottomWidth: isOperations ? 1 : 0, borderBottomColor: operationBorderSoft },
     airlineBrandRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: isOperations ? 5 : 0, opacity: 0.95 },
     headerLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 },
     headerText: { flex: 1, minWidth: 0 },
     headerFlightNum: { color: isOperations ? c.primaryDark : '#fff', fontWeight: '900', fontSize: isOperations ? 16 : 15, lineHeight: 18, letterSpacing: isOperations ? 0.6 : 0 },
     headerAirlineName: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, letterSpacing: isOperations ? 0.5 : 0 },
-    headerMetaFlash: { alignItems: 'flex-end', borderRadius: 12, marginRight: -8, paddingHorizontal: 8, paddingVertical: 4, maxWidth: isOperations ? 150 : 142, flexShrink: 0 },
+    headerMetaFlash: { alignItems: 'flex-end', borderRadius: RADIUS.md, marginRight: -8, paddingHorizontal: SPACING.sm, paddingVertical: SPACING.xs, maxWidth: isOperations ? 150 : 142, flexShrink: 0 },
     headerTime: { color: isOperations ? c.text : '#fff', fontWeight: '900', fontSize: isOperations ? 19 : 18, lineHeight: 20, textAlign: 'right', fontVariant: ['tabular-nums'] },
     headerDest: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.8)', fontSize: 10, textAlign: 'right' },
     headerAirportCode: { color: isOperations ? c.textSub : 'rgba(255,255,255,0.86)', fontSize: isOperations ? 11 : 10, lineHeight: 13, fontWeight: '900', letterSpacing: isOperations ? 1.1 : 0.8, textAlign: 'right' },
@@ -1487,49 +1571,49 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     cardBody: { flexDirection: 'column', paddingVertical: isOperations ? 9 : 10, paddingHorizontal: 14, backgroundColor: operationPanel },
     bodyInfo: { fontSize: 11, color: c.textSub },
     bodyTime: { fontWeight: '700', color: c.text },
-    opsRow: { flexDirection: 'row', gap: 8 },
-    opsBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 12 : 10, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
+    opsRow: { flexDirection: 'row', gap: SPACING.sm },
+    opsBadge: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 12 : 10, paddingHorizontal: 10, paddingVertical: isOperations ? 6 : 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     opsIcon: { fontSize: 16 },
     opsLabel: { fontSize: 10, fontWeight: '600', color: c.textSub, letterSpacing: 0.5 },
     opsTime: { fontSize: 13, fontWeight: '800', color: c.primaryDark },
     pinBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
     pinBtnActive: { backgroundColor: 'rgba(245,158,11,0.25)' },
-    filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: 8, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    filterBtn: { width: 42, height: 42, borderRadius: isOperations ? 14 : 21, backgroundColor: operationPanelStrong, justifyContent: 'center', alignItems: 'center', marginRight: SPACING.sm, borderWidth: isOperations ? 1 : 0, borderColor: operationBorder },
     filterBtnActive: { backgroundColor: c.primary, shadowColor: c.primary, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.35, shadowRadius: 6, elevation: 5 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
-    alertOverlay: { flex: 1, backgroundColor: 'rgba(2,6,23,0.55)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+    alertOverlay: { flex: 1, backgroundColor: 'rgba(2,6,23,0.55)', justifyContent: 'center', alignItems: 'center', padding: SPACING.xxl },
     alertCard: {
       width: '100%',
       maxWidth: 440,
-      borderRadius: 20,
+      borderRadius: RADIUS.xl,
       padding: 18,
       backgroundColor: c.card,
       borderWidth: 1,
       borderColor: c.glassBorder,
     },
-    alertHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
+    alertHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md, gap: 10 },
     alertIconWrap: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-    alertSuccess: { backgroundColor: '#16A34A' },
-    alertWarning: { backgroundColor: '#EA580C' },
+    alertSuccess: { backgroundColor: c.success },
+    alertWarning: { backgroundColor: c.warning },
     alertInfo: { backgroundColor: c.primary },
     alertTitle: { flex: 1, fontSize: 28, fontWeight: '900', color: c.text },
-    alertMessage: { fontSize: 17, lineHeight: 24, color: c.textSub, marginBottom: 16 },
-    alertBtn: { alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: c.primary },
+    alertMessage: { fontSize: 17, lineHeight: 24, color: c.textSub, marginBottom: SPACING.lg },
+    alertBtn: { alignSelf: 'flex-end', paddingHorizontal: 18, paddingVertical: 10, borderRadius: RADIUS.md, backgroundColor: c.primary },
     alertBtnTxt: { color: '#fff', fontSize: 15, fontWeight: '800' },
-    filterSheet: { backgroundColor: isOperations ? '#071414' : c.card, borderTopLeftRadius: isOperations ? 28 : 24, borderTopRightRadius: isOperations ? 28 : 24, padding: 20, paddingBottom: 36, borderTopWidth: isOperations ? 1 : 0, borderColor: operationBorder },
-    filterSheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: isOperations ? 'rgba(45,212,191,0.34)' : c.border, alignSelf: 'center', marginBottom: 16 },
-    filterSheetTitle: { fontSize: 16, fontWeight: '800', color: isOperations ? c.primaryDark : c.text, marginBottom: 16, textAlign: 'center', letterSpacing: isOperations ? 0.8 : 0 },
-    notifSheetSub: { fontSize: 13, color: c.textSub, textAlign: 'center', marginTop: -8, marginBottom: 16 },
-    notifRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+    filterSheet: { backgroundColor: isOperations ? '#071414' : c.card, borderTopLeftRadius: isOperations ? 28 : 24, borderTopRightRadius: isOperations ? 28 : 24, padding: SPACING.xl, paddingBottom: 36, borderTopWidth: isOperations ? 1 : 0, borderColor: operationBorder },
+    filterSheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: isOperations ? 'rgba(45,212,191,0.34)' : c.border, alignSelf: 'center', marginBottom: SPACING.lg },
+    filterSheetTitle: { fontSize: 16, fontWeight: '800', color: isOperations ? c.primaryDark : c.text, marginBottom: SPACING.lg, textAlign: 'center', letterSpacing: isOperations ? 0.8 : 0 },
+    notifSheetSub: { fontSize: 13, color: c.textSub, textAlign: 'center', marginTop: -8, marginBottom: SPACING.lg },
+    notifRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, paddingVertical: 10 },
     notifRowTextWrap: { flex: 1 },
     notifRowTitle: { fontSize: 14, fontWeight: '700', color: c.text },
     notifRowSub: { fontSize: 12, color: c.textSub, marginTop: 2 },
     notifDivider: { height: 1, backgroundColor: c.border, marginVertical: 10 },
     notifMinutesRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
-    notifStepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bg, borderRadius: 10, padding: 4 },
-    notifStepperBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: c.card },
+    notifStepper: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.bg, borderRadius: 10, padding: SPACING.xs },
+    notifStepperBtn: { width: 32, height: 32, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: c.card },
     notifStepperValue: { minWidth: 54, textAlign: 'center', fontSize: 14, fontWeight: '800', color: c.primaryDark },
-    filterOption: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderRadius: 14, marginBottom: 8, borderWidth: 1.5 },
+    filterOption: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md, padding: 14, borderRadius: 14, marginBottom: SPACING.sm, borderWidth: 1.5 },
     filterOptionActive: {
       borderWidth: 1.5,
       ...filterOptionActiveShadow,
@@ -1546,7 +1630,7 @@ function makeStyles(c: ThemeColors, isOperations = false) {
     },
     filterBrandDot: { width: 10, height: 10, borderRadius: 5 },
     smFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: 14, paddingBottom: isOperations ? 8 : 10, backgroundColor: operationPanel, borderTopWidth: isOperations ? 1 : 0, borderTopColor: operationBorderSoft },
-    smPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 10 : 8, paddingHorizontal: 8, paddingVertical: isOperations ? 3 : 4, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
+    smPill: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: isOperations ? 'rgba(45,212,191,0.10)' : c.primaryLight, borderRadius: isOperations ? 10 : 8, paddingHorizontal: SPACING.sm, paddingVertical: isOperations ? 3 : 4, borderWidth: isOperations ? 1 : 0, borderColor: operationBorderSoft },
     smPillText: { fontSize: 11, fontWeight: '700', color: c.primaryDark },
   });
 }

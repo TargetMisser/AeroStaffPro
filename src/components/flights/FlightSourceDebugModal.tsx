@@ -5,6 +5,7 @@ import type { ThemeColors } from '../../context/ThemeContext';
 import type { TranslationKey } from '../../i18n/translations';
 import type { FlightScheduleProviderStatus } from '../../utils/fr24api';
 import { formatFlightSourceLabel } from '../../utils/flightSourceLabel';
+import { SPACING, RADIUS } from '../../theme/spacing';
 import {
   formatFlightCacheAge,
   formatProviderDiagnostic,
@@ -75,7 +76,7 @@ export default function FlightSourceDebugModal({
               <Text style={[styles.title, { color: colors.text }]}>{t('flightSourceDebugTitle')}</Text>
               <Text style={[styles.subtitle, { color: colors.textMuted }]}>{t('flightSourceDebugSub')}</Text>
             </View>
-            <TouchableOpacity style={[styles.closeBtn, { backgroundColor: colors.cardSecondary }]} onPress={onClose}>
+            <TouchableOpacity style={[styles.closeBtn, { backgroundColor: colors.cardSecondary }]} onPress={onClose} accessibilityRole="button" accessibilityLabel={t('a11yClose')}>
               <MaterialIcons name="close" size={20} color={colors.text} />
             </TouchableOpacity>
           </View>
@@ -172,13 +173,13 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 16,
+    gap: SPACING.md,
+    padding: SPACING.lg,
   },
   headerIcon: {
     width: 44,
     height: 44,
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -191,17 +192,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  content: { paddingHorizontal: 16, paddingBottom: 18, gap: 12 },
+  content: { paddingHorizontal: SPACING.lg, paddingBottom: 18, gap: SPACING.md },
   sourcePill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
     alignSelf: 'flex-start',
     maxWidth: '100%',
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
   sourceText: { flexShrink: 1, fontSize: 12, fontWeight: '900' },
   refreshRow: {
@@ -210,20 +211,20 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 14,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: SPACING.md,
     paddingVertical: 10,
   },
-  metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  metaBox: { minWidth: '47%', flexGrow: 1, borderRadius: 14, paddingHorizontal: 12, paddingVertical: 10 },
+  metaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  metaBox: { minWidth: '47%', flexGrow: 1, borderRadius: 14, paddingHorizontal: SPACING.md, paddingVertical: 10 },
   metaLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.7, textTransform: 'uppercase' },
   metaValue: { fontSize: 14, fontWeight: '900', marginTop: 3 },
-  filterBox: { borderWidth: 1, borderRadius: 16, padding: 12 },
-  filterText: { fontSize: 14, fontWeight: '800', marginTop: 4 },
+  filterBox: { borderWidth: 1, borderRadius: RADIUS.lg, padding: SPACING.md },
+  filterText: { fontSize: 14, fontWeight: '800', marginTop: SPACING.xs },
   reasonText: { fontSize: 12, lineHeight: 17, marginTop: 6 },
-  sectionTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.1, marginTop: 4 },
-  providerList: { gap: 8 },
-  providerRow: { flexDirection: 'row', gap: 10, borderWidth: 1, borderRadius: 14, padding: 12 },
-  statusDot: { width: 10, height: 10, borderRadius: 5, marginTop: 4 },
+  sectionTitle: { fontSize: 11, fontWeight: '900', letterSpacing: 1.1, marginTop: SPACING.xs },
+  providerList: { gap: SPACING.sm },
+  providerRow: { flexDirection: 'row', gap: 10, borderWidth: 1, borderRadius: 14, padding: SPACING.md },
+  statusDot: { width: 10, height: 10, borderRadius: 5, marginTop: SPACING.xs },
   providerName: { fontSize: 13, fontWeight: '900' },
   providerSub: { fontSize: 11, lineHeight: 16, marginTop: 2 },
 });

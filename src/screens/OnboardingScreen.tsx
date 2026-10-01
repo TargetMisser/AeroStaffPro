@@ -9,6 +9,7 @@ import { useAirport } from '../context/AirportContext';
 import { formatAirportSettingLabel } from '../utils/airportSettings';
 import { getFlightProviderSettingsState, type FlightProviderSettingsState } from '../utils/flightProviderSettings';
 import { getNotificationDebugSnapshot, NOTIF_ENABLED_KEY, type NotificationDebugSnapshot } from '../utils/notificationDiagnostics';
+import { SPACING, RADIUS } from '../theme/spacing';
 import {
   buildSetupChecklist,
   ONBOARDING_SETUP_STORAGE_KEY,
@@ -147,7 +148,7 @@ export default function OnboardingScreen({
           <MaterialIcons name="tune" size={28} color={colors.primary} />
         </View>
         <View style={styles.heroText}>
-          <Text style={[styles.kicker, { color: colors.primary }]}>SETUP GUIDATO</Text>
+          <Text style={[styles.kicker, { color: colors.primaryText }]}>SETUP GUIDATO</Text>
           <Text style={[styles.title, { color: colors.text }]}>Prepara AeroStaff Pro</Text>
           <Text style={[styles.copy, { color: colors.textSub }]}>
             Configura il minimo utile: aeroporto, calendario, fonti voli, notifiche e widget.
@@ -187,28 +188,28 @@ export default function OnboardingScreen({
             <View style={styles.stepText}>
               <View style={styles.stepTitleRow}>
                 <Text style={[styles.stepTitle, { color: colors.text }]}>{item.title}</Text>
-                {item.required && <Text style={[styles.required, { color: colors.primary }]}>richiesto</Text>}
+                {item.required && <Text style={[styles.required, { color: colors.primaryText }]}>richiesto</Text>}
               </View>
               <Text style={[styles.stepDetail, { color: colors.textSub }]}>{item.detail}</Text>
             </View>
             {item.id === 'profile' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={onOpenProfiles}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>Apri</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>Apri</Text>
               </TouchableOpacity>
             )}
             {item.id === 'calendar' && item.status !== 'ready' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={requestCalendar}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>Consenti</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>Consenti</Text>
               </TouchableOpacity>
             )}
             {item.id === 'flightData' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={onOpenFlightApis}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>API</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>API</Text>
               </TouchableOpacity>
             )}
             {item.id === 'notifications' && item.status !== 'ready' && (
               <TouchableOpacity style={[styles.stepAction, { borderColor: colors.border }]} onPress={requestNotifications}>
-                <Text style={[styles.stepActionText, { color: colors.primary }]}>Attiva</Text>
+                <Text style={[styles.stepActionText, { color: colors.primaryText }]}>Attiva</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -246,13 +247,13 @@ export default function OnboardingScreen({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  content: { padding: 16, paddingBottom: 116, gap: 14 },
-  heroText: { flex: 1, gap: 4 },
+  content: { padding: SPACING.lg, paddingBottom: 116, gap: 14 },
+  heroText: { flex: 1, gap: SPACING.xs },
   heroIcon: { width: 56, height: 56, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   kicker: { fontSize: 10, fontWeight: '900', letterSpacing: 1.7 },
   title: { fontSize: 28, fontWeight: '900', letterSpacing: -0.7 },
   copy: { fontSize: 13, lineHeight: 19 },
-  progressCard: { borderWidth: 1, borderRadius: 20, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  progressCard: { borderWidth: 1, borderRadius: RADIUS.xl, padding: SPACING.lg, flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
   progressTitle: { fontSize: 18, fontWeight: '900' },
   progressSub: { fontSize: 12, lineHeight: 17, marginTop: 2 },
   steps: { gap: 10 },
@@ -263,15 +264,15 @@ const styles = StyleSheet.create({
   stepTitle: { fontSize: 15, fontWeight: '900' },
   required: { fontSize: 9, fontWeight: '900', letterSpacing: 0.8, textTransform: 'uppercase' },
   stepDetail: { fontSize: 12, lineHeight: 17 },
-  stepAction: { borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 8 },
+  stepAction: { borderWidth: 1, borderRadius: RADIUS.md, paddingHorizontal: 10, paddingVertical: SPACING.sm },
   stepActionText: { fontSize: 12, fontWeight: '900' },
   airportCard: { borderWidth: 1, borderRadius: 18, padding: 14 },
   airportLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
   airportValue: { fontSize: 15, fontWeight: '900', marginTop: 3 },
   footerActions: { flexDirection: 'row', gap: 10 },
-  secondaryBtn: { flex: 1, borderWidth: 1, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  secondaryBtn: { flex: 1, borderWidth: 1, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: 'center' },
   secondaryText: { fontSize: 14, fontWeight: '900' },
-  primaryBtn: { flex: 1.3, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  primaryBtn: { flex: 1.3, borderRadius: RADIUS.lg, paddingVertical: 14, alignItems: 'center' },
   primaryText: { color: '#fff', fontSize: 14, fontWeight: '900' },
 });
 
@@ -280,7 +281,7 @@ function makeStyles(isOperations: boolean) {
     hero: {
       borderWidth: 1,
       borderRadius: isOperations ? 26 : 22,
-      padding: 16,
+      padding: SPACING.lg,
       flexDirection: 'row',
       gap: 14,
       alignItems: 'center',

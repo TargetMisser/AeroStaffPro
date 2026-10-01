@@ -3,6 +3,7 @@ import { View, StyleSheet, Platform, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from '../context/ThemeContext';
+import { SPACING } from '../theme/spacing';
 
 type Variant = 'default' | 'strong' | 'subtle';
 
@@ -155,6 +156,6 @@ const styles = StyleSheet.create({
     borderWidth: 0.75,
   },
   content: {
-    padding: 16,
+    padding: SPACING.lg,
   },
 });

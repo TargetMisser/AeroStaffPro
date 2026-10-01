@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { RADIUS } from '../../theme/spacing';
 import {
   Animated,
   StyleSheet,
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   flash: {
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
   },
   instrumentSheen: {
     position: 'absolute',
@@ -114,7 +115,7 @@ const styles = StyleSheet.create({
     bottom: -6,
     left: 0,
     width: 22,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     backgroundColor: 'rgba(255,255,255,0.24)',
   },
 });

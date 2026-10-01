@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { getAirlineOps } from './airlineOps';
 import { getFlightAirportLabel } from './flightScheduleAdapter';
-import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
+import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from './flightTimes';
 import { shouldNotifyAirline, type FlightNotificationSettings } from './flightNotificationSettings';
 import { isFlightEasyJet } from './easyjetOverlapMode';
 import {
@@ -57,23 +57,29 @@ export async function scheduleShiftNotifications(
           second: isEasyJet ? '2-digit' : undefined,
         });
 
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Arrivo tra ${settings.arrivalLeadMinutes} min - ${flightNumber}`,
-            body: `${airline} da ${origin} · atterraggio alle ${arrivalTime}`,
-            sound: true,
-            sticky: settings.sticky,
-            autoDismiss: !settings.sticky,
-            data: buildNotificationData({
-              scheduler: 'flights',
-              type: 'arrival_shift',
-              flightNumber,
-              ts,
-            }),
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
-        });
-        newIds.push(id);
+        try {
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Arrivo tra ${settings.arrivalLeadMinutes} min - ${flightNumber}`,
+              body: `${airline} da ${origin} · atterraggio alle ${arrivalTime}`,
+              sound: true,
+              sticky: settings.sticky,
+              autoDismiss: !settings.sticky,
+              data: buildNotificationData({
+                scheduler: 'flights',
+                type: 'arrival_shift',
+                flightNumber,
+                ts,
+              }),
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
+          });
+          newIds.push(id);
+        } catch {
+          // Skip just this notification and keep scheduling the rest, so a
+          // single OS rejection can't abort the batch and orphan the IDs we
+          // already created (they are persisted to NOTIF_IDS_KEY below).
+        }
       }
     }
 
@@ -90,23 +96,29 @@ export async function scheduleShiftNotifications(
         const destination = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
         const departureTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
-        const id = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: `Partenza tra ${settings.departureLeadMinutes} min - ${flightNumber}`,
-            body: `${airline} → ${destination} · decollo alle ${departureTime}`,
-            sound: true,
-            sticky: settings.sticky,
-            autoDismiss: !settings.sticky,
-            data: buildNotificationData({
-              scheduler: 'flights',
-              type: 'departure_shift',
-              flightNumber,
-              ts,
-            }),
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
-        });
-        newIds.push(id);
+        try {
+          const id = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: `Partenza tra ${settings.departureLeadMinutes} min - ${flightNumber}`,
+              body: `${airline} → ${destination} · decollo alle ${departureTime}`,
+              sound: true,
+              sticky: settings.sticky,
+              autoDismiss: !settings.sticky,
+              data: buildNotificationData({
+                scheduler: 'flights',
+                type: 'departure_shift',
+                flightNumber,
+                ts,
+              }),
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilNotify), repeats: false },
+          });
+          newIds.push(id);
+        } catch {
+          // Skip just this notification and keep scheduling the rest, so a
+          // single OS rejection can't abort the batch and orphan the IDs we
+          // already created (they are persisted to NOTIF_IDS_KEY below).
+        }
       }
     }
 
@@ -114,22 +126,27 @@ export async function scheduleShiftNotifications(
       const secondsUntilEnd = shiftEnd - now;
       if (secondsUntilEnd > 0) {
         const endTime = new Date(shiftEnd * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-        const endId = await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Turno terminato',
-            body: `Buon lavoro! Il tuo turno delle ${endTime} è concluso.`,
-            sound: true,
-            sticky: settings.sticky,
-            autoDismiss: !settings.sticky,
-            data: buildNotificationData({
-              scheduler: 'flights',
-              type: 'shift_end',
-              ts: shiftEnd,
-            }),
-          },
-          trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilEnd), repeats: false },
-        });
-        newIds.push(endId);
+        try {
+          const endId = await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Turno terminato',
+              body: `Buon lavoro! Il tuo turno delle ${endTime} è concluso.`,
+              sound: true,
+              sticky: settings.sticky,
+              autoDismiss: !settings.sticky,
+              data: buildNotificationData({
+                scheduler: 'flights',
+                type: 'shift_end',
+                ts: shiftEnd,
+              }),
+            },
+            trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilEnd), repeats: false },
+          });
+          newIds.push(endId);
+        } catch {
+          // Best-effort: a failed shift-end notification must not abort the
+          // batch or orphan the flight notifications already scheduled above.
+        }
       }
     }
 
@@ -212,26 +229,30 @@ export async function schedulePinnedNotifications(
         ids.push(id);
       }
     } else {
-      const ts = getBestDepartureTs(item);
-      if (!ts) return;
+      const etdTs = getBestDepartureTs(item);
+      if (!etdTs) return;
+      const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
       const dest = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
-      const depTime = new Date(ts * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+      const depTime = new Date(etdTs * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
       const ops = getAirlineOps(airline);
 
-      const phases: Array<{ offset: number; type: string; title: string; body: string }> = [
-        { offset: ops.checkInOpen, type: 'pinned_checkin_open', title: `Check-in aperto - ${flightNumber}`, body: `Check-in aperto per il volo delle ${depTime} → ${dest}` },
-        { offset: ops.gateOpen, type: 'pinned_gate_open', title: `Gate aperto - ${flightNumber}`, body: `Gate aperto per il volo delle ${depTime} → ${dest}` },
-        { offset: ops.gateClose, type: 'pinned_gate_close', title: `Chiusura gate - ${flightNumber}`, body: `Gate in chiusura per il volo delle ${depTime} → ${dest}` },
+      // Closure phases use stdTs so they never shift when the flight is delayed.
+      // Only the departure notification uses etdTs (the real/estimated departure).
+      const phases: Array<{ offset: number; type: string; title: string; body: string; baseTs: number }> = [
+        { offset: ops.checkInOpen, type: 'pinned_checkin_open', title: `Check-in aperto - ${flightNumber}`, body: `Check-in aperto per il volo delle ${depTime} → ${dest}`, baseTs: stdTs },
+        { offset: ops.gateOpen, type: 'pinned_gate_open', title: `Gate aperto - ${flightNumber}`, body: `Gate aperto per il volo delle ${depTime} → ${dest}`, baseTs: stdTs },
+        { offset: ops.gateClose, type: 'pinned_gate_close', title: `Chiusura gate - ${flightNumber}`, body: `Gate in chiusura per il volo delle ${depTime} → ${dest}`, baseTs: stdTs },
         {
           offset: settings.departureLeadMinutes,
           type: 'pinned_departure',
           title: `Partenza tra ${settings.departureLeadMinutes} min - ${flightNumber}`,
           body: `${airline} → ${dest} · partenza alle ${depTime}`,
+          baseTs: etdTs,
         },
       ];
 
       for (const phase of phases) {
-        const secsUntil = ts - phase.offset * 60 - now;
+        const secsUntil = phase.baseTs - phase.offset * 60 - now;
         if (secsUntil <= 0) continue;
         const id = await Notifications.scheduleNotificationAsync({
           content: {
@@ -244,7 +265,7 @@ export async function schedulePinnedNotifications(
               scheduler: 'flights_pinned',
               type: phase.type,
               flightNumber,
-              ts,
+              ts: phase.baseTs,
               pinned: true,
             }),
           },

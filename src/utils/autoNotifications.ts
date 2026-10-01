@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAirlineOps } from './airlineOps';
 import { fetchAirportScheduleRaw } from './fr24api';
 import { getFlightAirportLabel, isFlightAirlineMatch } from './flightScheduleAdapter';
-import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
+import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from './flightTimes';
 import {
   showShiftOngoingNotification,
   dismissShiftOngoingNotification,
@@ -237,22 +237,23 @@ export async function autoScheduleNotifications(): Promise<number> {
     // ── Departure notifications: check-in/gate open-close warnings ──
     for (const item of shiftDepartures) {
       try {
-        const depTs = getBestDepartureTs(item);
-        if (!depTs || isNaN(depTs)) continue;
+        const etdTs = getBestDepartureTs(item);
+        const stdTs = getScheduledFlightTs(item, 'departure') ?? etdTs;
+        if (!stdTs || isNaN(stdTs)) continue;
 
         const airline = item.flight?.airline?.name || 'Sconosciuta';
         const flightNumber = item.flight?.identification?.number?.default || 'N/A';
         const destination = getFlightAirportLabel(item.flight?.airport?.destination, 'N/A');
-        const depTime = new Date(depTs * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+        const depTime = new Date((etdTs ?? stdTs) * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 
         // Get airline-specific ops times
         const ops = getAirlineOps(airline);
 
-        // Check-in open/close timestamps
-        const ciOpenTs = depTs - ops.checkInOpen * 60;
-        const ciCloseTs = depTs - ops.checkInClose * 60;
-        const gateOpenTs = depTs - ops.gateOpen * 60;
-        const gateCloseTs = depTs - ops.gateClose * 60;
+        // Closure timestamps anchored to scheduled departure — never shift with delays
+        const ciOpenTs = stdTs - ops.checkInOpen * 60;
+        const ciCloseTs = stdTs - ops.checkInClose * 60;
+        const gateOpenTs = stdTs - ops.gateOpen * 60;
+        const gateCloseTs = stdTs - ops.gateClose * 60;
 
         // Notification 10 min before check-in open
         const secondsUntilCIOpenWarn = ciOpenTs - 10 * 60 - now;
@@ -267,8 +268,8 @@ export async function autoScheduleNotifications(): Promise<number> {
                 scheduler: 'auto',
                 type: 'checkin_open_10min',
                 flightNumber,
-                ts: depTs,
-                extra: { depTs },
+                ts: stdTs,
+                extra: { depTs: stdTs },
               }),
             },
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilCIOpenWarn), repeats: false },
@@ -289,8 +290,8 @@ export async function autoScheduleNotifications(): Promise<number> {
                 scheduler: 'auto',
                 type: 'checkin_close_10min',
                 flightNumber,
-                ts: depTs,
-                extra: { depTs },
+                ts: stdTs,
+                extra: { depTs: stdTs },
               }),
             },
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilCICloseWarn), repeats: false },
@@ -311,8 +312,8 @@ export async function autoScheduleNotifications(): Promise<number> {
                 scheduler: 'auto',
                 type: 'gate_open_5min',
                 flightNumber,
-                ts: depTs,
-                extra: { depTs },
+                ts: stdTs,
+                extra: { depTs: stdTs },
               }),
             },
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilGateOpenWarn), repeats: false },
@@ -333,8 +334,8 @@ export async function autoScheduleNotifications(): Promise<number> {
                 scheduler: 'auto',
                 type: 'gate_close_5min',
                 flightNumber,
-                ts: depTs,
-                extra: { depTs },
+                ts: stdTs,
+                extra: { depTs: stdTs },
               }),
             },
             trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: Math.round(secondsUntilGateCloseWarn), repeats: false },

@@ -4,7 +4,9 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAppTheme } from '../context/ThemeContext';
+import { TYPE } from '../theme/typography';
 import { type UpdateInfo, APP_VERSION } from '../utils/updateChecker';
+import { SPACING, RADIUS } from '../theme/spacing';
 import {
   downloadUpdatePackage,
   getDownloadedUpdateUri,
@@ -151,7 +153,7 @@ export default function UpdateModal({ info, onDismiss }: Props) {
           {/* Header */}
           <View style={[styles.header, { backgroundColor: colors.primary }]}>
             <MaterialIcons name="system-update" size={28} color="#fff" />
-            <View style={{ marginLeft: 12, flex: 1 }}>
+            <View style={{ marginLeft: SPACING.md, flex: 1 }}>
               <Text style={styles.headerTitle}>Aggiornamento disponibile</Text>
               <Text style={styles.headerSub}>
                 v{APP_VERSION} → v{latestVersionLabel}
@@ -210,7 +212,7 @@ export default function UpdateModal({ info, onDismiss }: Props) {
               activeOpacity={0.8}
             >
               <MaterialIcons name="open-in-browser" size={16} color={colors.primary} />
-              <Text style={[styles.btnText, { color: colors.primary }]}>GitHub</Text>
+              <Text style={[styles.btnText, { color: colors.primaryText }]}>GitHub</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -239,19 +241,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    padding: SPACING.xxl,
   },
   sheet: {
     width: '100%',
     maxWidth: 420,
-    borderRadius: 20,
+    borderRadius: RADIUS.xl,
     overflow: 'hidden',
     maxHeight: '80%',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 20,
+    padding: SPACING.xl,
   },
   headerTitle: {
     color: '#fff',
@@ -267,43 +269,42 @@ const styles = StyleSheet.create({
     maxHeight: 320,
   },
   notesContent: {
-    padding: 20,
+    padding: SPACING.xl,
   },
   notesText: {
     fontSize: 13,
     lineHeight: 20,
   },
   statusBox: {
-    paddingHorizontal: 20,
+    paddingHorizontal: SPACING.xl,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: SPACING.md,
     borderBottomWidth: 1,
   },
   statusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: SPACING.sm,
   },
   statusText: {
     flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
+    ...TYPE.callout,
   },
   progressTrack: {
     height: 8,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     overflow: 'hidden',
     marginTop: 10,
   },
   progressFill: {
     height: '100%',
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    padding: 16,
+    gap: SPACING.sm,
+    padding: SPACING.lg,
     borderTopWidth: 1,
   },
   btnLater: {

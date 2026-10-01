@@ -9,6 +9,7 @@ export type StaffMonitorFlight = {
   route?: string;
   scheduledTime?: string;
   estimatedTime?: string;
+  landedTime?: string;
   status?: string;
   stand?: string;
   checkin?: string;
@@ -249,12 +250,22 @@ function parseXmlSection(xmlStr: string): StaffMonitorFlight[] {
     const registration = getAttr(flightAttrsStr, 'aircraftReg') || undefined;
     const route = getAttr(flightAttrsStr, 'city') || undefined;
     
-    const schedTime = getAttr(flightAttrsStr, 'schedulate');
-    const scheduledTime = schedTime ? schedTime.slice(0, 5) : undefined;
-    
-    const expTime = getAttr(flightAttrsStr, 'expect');
-    const estimatedTime = expTime ? expTime.slice(0, 5) : undefined;
-    
+    // Times can arrive as "14:25:00", "14:25" or even date-prefixed like
+    // "12/06/2026 17:11" (block/landed times for older flights). Pull out the
+    // HH:MM portion instead of blindly slicing the first 5 chars, which would
+    // turn "12/06/2026 17:11" into the junk "12/06".
+    const extractClock = (raw: string): string | undefined => {
+      const m = /(\d{1,2})[:.](\d{2})/.exec(raw);
+      return m ? `${m[1].padStart(2, '0')}:${m[2]}` : undefined;
+    };
+
+    const scheduledTime = extractClock(getAttr(flightAttrsStr, 'schedulate'));
+    const estimatedTime = extractClock(getAttr(flightAttrsStr, 'expect'));
+    // Actual touchdown time. In the live PSA feed `state` is frequently empty
+    // even for flights that have already landed, so this is the reliable
+    // "the aircraft is down" signal for arrivals.
+    const landedTime = extractClock(getAttr(flightAttrsStr, 'landed'));
+
     const status = getAttr(flightAttrsStr, 'state') || undefined;
     const stand = getAttr(flightAttrsStr, 'stand') || undefined;
     const checkin = getAttr(flightAttrsStr, 'checkin') || undefined;
@@ -275,6 +286,7 @@ function parseXmlSection(xmlStr: string): StaffMonitorFlight[] {
       route,
       scheduledTime,
       estimatedTime,
+      landedTime,
       status,
       stand,
       checkin,
@@ -410,12 +422,16 @@ function extractSectionFor(html: string, nature: 'D' | 'A'): string {
 
 // ─── Debug state ──────────────────────────────────────────────────────────────────
 let _lastDebugStatus = 'init';
-let _lastDebugHtml = '';
+let _lastDebugHtmlD = '';
+let _lastDebugHtmlA = '';
 let _lastDebugColumns = 'non ancora rilevate';
 let _lastDebugFlightsD = 'nessun volo';
 let _lastDebugFlightsA = 'nessun volo';
 export function getStaffMonitorDebugStatus(): string { return _lastDebugStatus; }
-export function getStaffMonitorDebugHtml(): string { return _lastDebugHtml; }
+/** Raw HTML/XML sample of the last successful fetch, for support/debug purposes. */
+export function getStaffMonitorDebugHtml(nature: 'D' | 'A' = 'A'): string {
+  return nature === 'A' ? _lastDebugHtmlA : _lastDebugHtmlD;
+}
 export function getStaffMonitorDebugColumns(): string { return _lastDebugColumns; }
 export function getStaffMonitorDebugFlights(): string {
   return `D:\n${_lastDebugFlightsD}\n\nA:\n${_lastDebugFlightsA}`;
@@ -453,7 +469,7 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
         try {
           html = await tryFetchWithRetry(url, 25_000);
           _lastDebugStatus = `D:200 len=${html.length}`;
-          _lastDebugHtml = html.replace(/\s+/g, ' ').slice(0, 300);
+          _lastDebugHtmlD = html.replace(/\s+/g, ' ').slice(0, 4000);
           break;
         } catch (e: any) {
           _lastDebugStatus = `D:ERR ${String(e).slice(0, 60)}`;
@@ -476,6 +492,7 @@ export async function fetchStaffMonitorData(nature: 'D' | 'A'): Promise<StaffMon
       html = await raceUrls([...primaryUrls, ...arrivalExtras], 40_000) ?? '';
       if (html) {
         _lastDebugStatus = `A:200 len=${html.length} cookie=${_sessionCookie ? 'yes' : 'no'}`;
+        _lastDebugHtmlA = html.replace(/\s+/g, ' ').slice(0, 4000);
         devLog(`[staffMonitor] A parallel race succeeded len=${html.length}`);
       } else {
         _lastDebugStatus = `A:ERR all ${primaryUrls.length + arrivalExtras.length} URLs failed cookie=${_sessionCookie ? 'yes' : 'no'}`;

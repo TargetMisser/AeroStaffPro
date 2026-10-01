@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import { Animated, PanResponder, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { SPACING, RADIUS } from '../../theme/spacing';
 import {
   motionDurations,
   motionEasing,
@@ -137,10 +138,10 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(251, 191, 36, 0.34)',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: SPACING.xs,
   },
   pinActionRailCompact: {
-    borderRadius: 16,
+    borderRadius: RADIUS.lg,
   },
   pinActionText: {
     color: '#FBBF24',

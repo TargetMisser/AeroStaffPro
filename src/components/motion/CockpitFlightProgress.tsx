@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { motionDurations, motionEasing, useReducedMotionPreference } from '../../utils/motion';
+import { SPACING, RADIUS } from '../../theme/spacing';
 
 type CockpitFlightProgressProps = {
   progress: number;
@@ -106,7 +107,7 @@ export default function CockpitFlightProgress({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: 12,
+    marginTop: SPACING.md,
   },
   wrapOperations: {
     borderWidth: 1,
@@ -152,17 +153,17 @@ const styles = StyleSheet.create({
     width: 58,
     opacity: 0.18,
     backgroundColor: '#99F6E4',
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
   },
   track: {
     height: 5,
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
     backgroundColor: 'rgba(141,163,173,0.24)',
     overflow: 'hidden',
   },
   fill: {
     height: '100%',
-    borderRadius: 999,
+    borderRadius: RADIUS.pill,
   },
   planeWrap: {
     position: 'absolute',
@@ -172,7 +173,7 @@ const styles = StyleSheet.create({
   planeBadge: {
     width: 24,
     height: 24,
-    borderRadius: 12,
+    borderRadius: RADIUS.md,
     backgroundColor: '#071414',
     borderWidth: 1.5,
     borderColor: 'rgba(45,212,191,0.30)',

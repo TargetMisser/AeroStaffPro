@@ -3,6 +3,7 @@ import { FlexWidget, TextWidget, ListWidget } from 'react-native-android-widget'
 import type { ThemeMode, ThemeSnapshotColors } from '../utils/themeMode';
 import type { WidgetData, WidgetFlight } from './widgetTaskHandler';
 import { getWidgetThemePalette, type WidgetThemePalette } from './widgetTheme';
+import { WEIGHT } from '../theme/typography';
 
 const PILL_R = 10;
 
@@ -53,7 +54,7 @@ function FlightRow({
           >
             <TextWidget
               text={flight.flightNumber}
-              style={{ fontSize: 12, fontWeight: 'bold', color: theme.airlineText }}
+              style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.airlineText }}
             />
           </FlexWidget>
           <FlexWidget
@@ -67,13 +68,13 @@ function FlightRow({
           >
             <TextWidget
               text={flight.destinationIata}
-              style={{ fontSize: 12, fontWeight: 'bold', color: theme.text }}
+              style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.text }}
             />
           </FlexWidget>
         </FlexWidget>
         <TextWidget
           text={flight.departureTime}
-          style={{ fontSize: 15, fontWeight: 'bold', color: pinned ? theme.accent : theme.text }}
+          style={{ fontSize: 15, fontWeight: WEIGHT.semibold, color: pinned ? theme.accent : theme.text }}
         />
       </FlexWidget>
 
@@ -90,7 +91,7 @@ function FlightRow({
             alignItems: 'center',
           }}
         >
-          <TextWidget text="CI" style={{ fontSize: 12, fontWeight: 'bold', color: theme.accentText }} />
+          <TextWidget text="CI" style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.accentText }} />
           <TextWidget text={` ${flight.ciOpen}-${flight.ciClose}`} style={{ fontSize: 12, color: theme.accentText }} />
         </FlexWidget>
         <FlexWidget
@@ -104,7 +105,7 @@ function FlightRow({
             alignItems: 'center',
           }}
         >
-          <TextWidget text="Gate" style={{ fontSize: 12, fontWeight: 'bold', color: theme.gate }} />
+          <TextWidget text="Gate" style={{ fontSize: 12, fontWeight: WEIGHT.semibold, color: theme.gate }} />
           <TextWidget text={` ${flight.gateOpen}-${flight.gateClose}`} style={{ fontSize: 12, color: theme.gate }} />
         </FlexWidget>
       </FlexWidget>
@@ -122,7 +123,7 @@ function FlightRow({
             alignItems: 'center',
           }}
         >
-          <TextWidget text="Stand " style={{ fontSize: 10, fontWeight: 'bold', color: theme.muted }} />
+          <TextWidget text="Stand " style={{ fontSize: 10, fontWeight: WEIGHT.semibold, color: theme.muted }} />
           <TextWidget text={flight.stand ?? '-'} style={{ fontSize: 10, color: theme.text }} />
         </FlexWidget>
         <FlexWidget
@@ -136,7 +137,7 @@ function FlightRow({
             alignItems: 'center',
           }}
         >
-          <TextWidget text="Banco " style={{ fontSize: 10, fontWeight: 'bold', color: theme.muted }} />
+          <TextWidget text="Banco " style={{ fontSize: 10, fontWeight: WEIGHT.semibold, color: theme.muted }} />
           <TextWidget text={flight.checkin ?? '-'} style={{ fontSize: 10, color: theme.text }} />
         </FlexWidget>
         <FlexWidget
@@ -150,7 +151,7 @@ function FlightRow({
             alignItems: 'center',
           }}
         >
-          <TextWidget text="Uscita " style={{ fontSize: 10, fontWeight: 'bold', color: theme.muted }} />
+          <TextWidget text="Uscita " style={{ fontSize: 10, fontWeight: WEIGHT.semibold, color: theme.muted }} />
           <TextWidget text={flight.gate ?? '-'} style={{ fontSize: 10, color: theme.text }} />
         </FlexWidget>
       </FlexWidget>
@@ -192,7 +193,7 @@ function Header({ label, theme }: { label?: string; theme: WidgetThemePalette })
         />
         <TextWidget
           text={label ? `Turno  ${label}` : 'AeroStaff Pro'}
-          style={{ fontSize: 14, fontWeight: 'bold', color: theme.text }}
+          style={{ fontSize: 14, fontWeight: WEIGHT.semibold, color: theme.text }}
         />
       </FlexWidget>
     </FlexWidget>
@@ -258,13 +259,13 @@ export function ShiftWidget({ data, themeMode = 'light', themeSnapshot }: ShiftW
             />
             <TextWidget
               text="RIPOSO"
-              style={{ fontSize: 13, fontWeight: 'bold', color: theme.restAccent }}
+              style={{ fontSize: 13, fontWeight: WEIGHT.semibold, color: theme.restAccent }}
             />
           </FlexWidget>
           <FlexWidget style={{ width: 'match_parent', alignItems: 'center', marginTop: 8 }}>
             <TextWidget
               text="Giorno di Riposo"
-              style={{ fontSize: 18, fontWeight: 'bold', color: theme.text, textAlign: 'center' }}
+              style={{ fontSize: 18, fontWeight: WEIGHT.semibold, color: theme.text, textAlign: 'center' }}
             />
           </FlexWidget>
         </FlexWidget>
