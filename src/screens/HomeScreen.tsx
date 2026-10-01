@@ -14,6 +14,7 @@ import { useAirport } from '../context/AirportContext';
 import BoardReveal from '../components/motion/BoardReveal';
 import ShiftTimeline from '../components/ShiftTimeline';
 import HomeFlightActions from '../components/HomeFlightActions';
+import HomeBriefing from '../components/HomeBriefing';
 
 import { getAirlineOps, getAirlineColor } from '../utils/airlineOps';
 import { statusToToken } from '../utils/statusColors';
@@ -172,10 +173,11 @@ const PinnedFlightCard = React.memo(PinnedFlightCardComponent);
 type HomeScreenProps = {
   isFocused?: boolean;
   onOpenFlights: () => void;
+  onOpenHandover: () => void;
   onOpenNotificationSettings: () => void;
 };
 
-export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNotificationSettings }: HomeScreenProps) {
+export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenHandover, onOpenNotificationSettings }: HomeScreenProps) {
   const { colors, mode } = useAppTheme();
   const { airportCode } = useAirport();
   const { t, locale, weatherMap } = useLanguage();
@@ -677,6 +679,14 @@ export default function HomeScreen({ isFocused = true, onOpenFlights, onOpenNoti
         </View>
       </BoardReveal>
 
+      <HomeBriefing
+        airportCode={airportCode}
+        isFocused={isFocused}
+        shift={isWork && shiftEvent ? { start: new Date(shiftEvent.startDate).getTime() / 1000, end: new Date(shiftEvent.endDate).getTime() / 1000 } : null}
+        pinnedFlight={pinnedFlight}
+        onOpenFlights={onOpenFlights}
+        onOpenHandover={onOpenHandover}
+      />
       <HomeFlightActions airportCode={airportCode} onOpenFlights={onOpenFlights} />
 
       {attention && (

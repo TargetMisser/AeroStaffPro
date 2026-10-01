@@ -227,12 +227,86 @@ async function testImportRollback() {
   assert(staleRollbackError?.message === 'SHIFT_IMPORT_CHANGED_SINCE_IMPORT', 'undo should refuse to overwrite shifts edited after the import');
 }
 
+function testHomeBriefing() {
+  const airlineAliases = loadTsModule('src/utils/airlineAliases.ts');
+  const airlineOps = loadTsModule('src/utils/airlineOps.ts', { './airlineAliases': airlineAliases });
+  const adapter = loadTsModule('src/utils/flightScheduleAdapter.ts', { './airlineAliases': airlineAliases });
+  const mod = loadTsModule('src/utils/homeBriefing.ts', {
+    './airlineOps': airlineOps,
+    './flightScheduleAdapter': adapter,
+  });
+  const at = time => Math.floor(new Date(`2026-09-20T${time}:00`).getTime() / 1000);
+  const departure = (number, std, extra = {}) => ({
+    flight: {
+      identification: { number: { default: number } },
+      airline: { name: 'Test Air', code: { iata: 'ZZ', icao: 'ZZZ' } },
+      airport: { destination: { code: { iata: 'BCN' }, name: 'Barcelona' } },
+      status: { text: extra.status ?? 'Scheduled' },
+      time: { scheduled: { departure: at(std) }, real: { departure: extra.real ?? null } },
+    },
+  });
+  const ops = airlineOps.getAirlineOps('Test Air ZZ ZZZ');
+  assert(JSON.stringify(ops) === JSON.stringify(airlineOps.DEFAULT_OPS), 'test airline should use the default check-in/gate rules');
+
+  const shift = { start: at('08:00'), end: at('16:00') };
+  const now = at('09:00');
+  const flights = [
+    departure('ZZ100', '10:30'),
+    departure('ZZ200', '09:40', { status: 'Cancelled' }),
+    departure('ZZ300', '09:30', { real: at('08:55') }),
+    departure('ZZ400', '18:30'),
+  ];
+  const next = mod.getNextHomeActivity(flights, shift, null, now);
+  assert(next && next.flightNumber === 'ZZ100' && next.kind === 'checkInClose' && next.at === at('09:50'),
+    'next activity should be the earliest upcoming check-in/gate event, skipping cancelled and departed flights');
+  assert(next.destination === 'BCN' && next.isPinned === false, 'next activity should carry destination and pin state');
+  assert(mod.getNextHomeActivity(flights, shift, null, at('15:00')) === null,
+    'events after the end of the shift should not be shown');
+  assert(mod.getNextHomeActivity(flights, { start: at('00:00'), end: at('08:30') }, null, now) === null,
+    'an ended shift should not show activities');
+  assert(mod.getNextHomeActivity(flights, null, null, now) === null,
+    'without a shift and without a pinned flight nothing should be shown');
+
+  const pinned = { ...departure('ZZ100', '10:30'), _pinTab: 'departures' };
+  const pinnedNext = mod.getNextHomeActivity(flights, null, pinned, now);
+  assert(pinnedNext && pinnedNext.flightNumber === 'ZZ100' && pinnedNext.isPinned,
+    'off shift, the pinned departure should still drive the countdown');
+  assert(mod.getNextHomeActivity(flights, null, { ...pinned, _pinTab: 'arrivals' }, now) === null,
+    'a pinned arrival should not produce departure reminders');
+
+  const tie = [departure('ZZ100', '10:30'), departure('ZZ500', '10:30')];
+  assert(mod.getNextHomeActivity(tie, shift, null, now).flightNumber === 'ZZ100',
+    'simultaneous events should be ordered by flight number');
+  const pinnedTie = mod.getNextHomeActivity(tie, shift, { ...tie[1], _pinTab: 'departures' }, now);
+  assert(pinnedTie.flightNumber === 'ZZ500' && pinnedTie.isPinned, 'simultaneous events should prefer the pinned flight');
+
+  const entries = [
+    { id: 'a', shiftDate: '2026-09-20', scope: 'shift', note: 'vecchia', checklist: [], createdAt: 1 },
+    { id: 'b', shiftDate: '2026-09-20', scope: 'flight', flightNumber: 'ZZ100', direction: 'departure', note: 'PRM', checklist: [], createdAt: 3 },
+    { id: 'c', shiftDate: '2026-09-20', scope: 'shift', note: 'fatta', checklist: ['Consegna completata'], createdAt: 2 },
+    { id: 'd', shiftDate: '2026-09-19', scope: 'shift', note: 'ieri', checklist: [], createdAt: 4 },
+  ];
+  assert(mod.getOpenHomeHandovers(entries, '2026-09-20').map(entry => entry.id).join(',') === 'b,a',
+    'Home should list today\'s open handovers, newest first');
+
+  assert(mod.getHomeCountdownMinutes(now + 61, now) === 2 && mod.getHomeCountdownMinutes(now + 60, now) === 1,
+    'countdown should round up to whole minutes');
+  assert(mod.getHomeCountdownMinutes(now - 30, now) === 0, 'countdown should never go negative');
+
+  const homeSource = fs.readFileSync(path.join(root, 'src', 'screens', 'HomeScreen.tsx'), 'utf8');
+  const appSource = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
+  assert(homeSource.includes('<HomeBriefing') && homeSource.includes('onOpenHandover={onOpenHandover}'),
+    'Home should render the briefing cards');
+  assert(appSource.includes("onOpenHandover={() => setOverlay('Notepad')}"), 'Home handovers should open the notes overlay');
+}
+
 async function main() {
   testImportPreview();
   testShiftSharing();
   testCompensation();
   testWidgetPreferences();
   testHandover();
+  testHomeBriefing();
   testFeatureWiring();
   await testManualShiftReplacementKeepsExistingOnFailure();
   await testImportRollback();

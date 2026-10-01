@@ -251,6 +251,7 @@ function AppInner() {
         <HomeScreen
           isFocused={activeTab === 'Shifts' && !overlay}
           onOpenFlights={() => goToTab(TABS.findIndex(item => item.id === 'Flights'))}
+          onOpenHandover={() => setOverlay('Notepad')}
           onOpenNotificationSettings={() => {
             setSettingsInitialModal('debug');
             setOverlay('Settings');
