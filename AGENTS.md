@@ -4,11 +4,10 @@ Read this first in every Codex/agent session. It exists to avoid rediscovering t
 
 ## Session Startup
 
-1. Work from `C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp-flight-fix` unless the user explicitly says otherwise.
+1. Work from `C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp` unless the user explicitly says otherwise.
 2. Run `git status --short --branch` before editing.
-3. Do not modify or clean `C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp` unless explicitly asked; it may contain user edits on an old branch.
-4. Prefer the branch `codex/design-lab-storybook` for ongoing work.
-5. Read this file and `docs/release-automation.md` before release/APK work.
+3. Prefer the branch `codex/design-lab-storybook` for ongoing work.
+4. Read this file and `docs/release-automation.md` before release/APK work.
 
 ## Default Work Loop
 
@@ -24,6 +23,8 @@ For bugs and product fixes:
 Useful checks:
 
 ```bash
+npm run test:release-tooling
+npm run test:qa-tooling
 npm test
 npm run typecheck
 npm run release:check
@@ -35,6 +36,8 @@ For flight-provider bugs, start with:
 npm run test:flight-helpers
 ```
 
+For a general app health check, run `npm run qa:full`. `qa:release` runs release metadata checks, all tests, TypeScript, production bundle inspection, and dependency policy; `qa:full` also runs Android lint and merged release-manifest validation.
+
 ## Release Flow
 
 When the user says to release, use the automated flow:
@@ -43,7 +46,17 @@ When the user says to release, use the automated flow:
 npm run release:quick
 ```
 
-This bumps patch version, runs release checks, runs the full test suite, runs TypeScript, commits, pushes, triggers the GitHub APK release workflow, waits for it, then downloads/verifies the published Android APK and copies it to Downloads.
+This bumps patch version, runs `qa:release`, commits, pushes, triggers the GitHub APK release workflow, waits for it, then downloads/verifies the published Android APK and copies it to Downloads.
+It requires a clean worktree and does not run from detached `HEAD`.
+
+Other supported variants:
+
+```bash
+npm run release:quick -- minor
+npm run release:quick -- major
+npm run release:quick -- 2.7.0
+npm run release:quick -- --install
+```
 
 Before release work, run:
 
@@ -83,6 +96,13 @@ Current PC autostart helper, no admin required:
 npm run runner:setup -- -InstallStartupTask -Start
 ```
 
+Persistent Windows service helper, requires Administrator PowerShell:
+
+```powershell
+npm run runner:setup -- -InstallService
+npm run runner:optimize
+```
+
 Keep the runner root short (`C:\gha`, work `_w`) or native Android/CMake builds can hit Windows path length limits.
 
 ## Emulator QA Flow
@@ -98,6 +118,7 @@ Useful variants:
 ```bash
 npm run qa:emulator -- --install-release v2.6.66
 npm run qa:emulator -- --install-apk C:\path\to\AeroStaffPro.apk
+npm run qa:emulator -- --no-start
 ```
 
 What the script does:
