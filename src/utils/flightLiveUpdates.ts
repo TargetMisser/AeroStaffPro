@@ -14,7 +14,12 @@ function shouldApplyArrivalEta(current: any, update: any): boolean {
   const existing = current?.flight ?? {};
   // Refresh snapshots also contain unchanged timetable rows. They are not
   // observations and must never be relabelled as FR24 or replace a live ETA.
+  // An observation that has already expired (e.g. a held live-arrivals
+  // snapshot re-merged on every render) must not override newer airport data.
+  const incomingExpired = incoming._etaSource === 'adsb'
+    && typeof incoming._etaObservedAt === 'number' && !isLiveEtaFresh(update);
   return (incoming._etaSource === 'fr24_api' || incoming._etaSource === 'adsb')
+    && !incomingExpired
     && typeof incoming.time?.estimated?.arrival === 'number' && Number.isFinite(incoming.time.estimated.arrival)
     && !(incoming._etaSource === 'adsb' && existing._etaSource === 'fr24_api' && isLiveEtaFresh(current))
     && ((incoming._etaSource === 'fr24_api' && existing._etaSource !== 'fr24_api' && isLiveEtaFresh(update))

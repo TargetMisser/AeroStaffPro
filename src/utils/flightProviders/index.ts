@@ -342,7 +342,19 @@ function mergeProviderResults(
   };
 }
 
-function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: FlightDirection): any {
+// A later provider only fills gaps with real values: AeroDataBox emits keys such
+// as aircraft.registration even when undefined, which used to wipe the
+// registration StaffMonitor had just provided.
+function withoutEmpty<T extends Record<string, any>>(value: T | null | undefined): Partial<T> {
+  if (!value || typeof value !== 'object') return {};
+  const out: Partial<T> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (entry !== undefined && entry !== null && entry !== '') (out as any)[key] = entry;
+  }
+  return out;
+}
+
+export function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: FlightDirection): any {
   const previousFlight = previousItem?.flight ?? {};
   const nextFlight = nextItem?.flight ?? {};
   const previousTime = previousFlight.time ?? {};
@@ -356,7 +368,7 @@ function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: F
     && typeof nextTime.estimated?.[timeField] === 'number';
   const estimated = {
     ...(previousTime.estimated ?? {}),
-    ...(nextTime.estimated ?? {}),
+    ...withoutEmpty(nextTime.estimated),
   };
 
   if (previousHasAuthoritativeEta && !nextHasAuthoritativeEta) {
@@ -365,46 +377,46 @@ function mergeProviderFlightItems(previousItem: any, nextItem: any, direction: F
 
   return {
     ...previousItem,
-    ...nextItem,
+    ...withoutEmpty(nextItem),
     flight: {
       ...previousFlight,
-      ...nextFlight,
+      ...withoutEmpty(nextFlight),
       identification: {
         ...(previousFlight.identification ?? {}),
-        ...(nextFlight.identification ?? {}),
+        ...withoutEmpty(nextFlight.identification),
       },
       airline: {
         ...(previousFlight.airline ?? {}),
-        ...(nextFlight.airline ?? {}),
+        ...withoutEmpty(nextFlight.airline),
         code: {
           ...(previousFlight.airline?.code ?? {}),
-          ...(nextFlight.airline?.code ?? {}),
+          ...withoutEmpty(nextFlight.airline?.code),
         },
       },
       aircraft: {
         ...(previousFlight.aircraft ?? {}),
-        ...(nextFlight.aircraft ?? {}),
+        ...withoutEmpty(nextFlight.aircraft),
       },
       airport: {
         ...(previousFlight.airport ?? {}),
-        ...(nextFlight.airport ?? {}),
+        ...withoutEmpty(nextFlight.airport),
       },
       time: {
         ...previousTime,
-        ...nextTime,
+        ...withoutEmpty(nextTime),
         scheduled: {
           ...(previousTime.scheduled ?? {}),
-          ...(nextTime.scheduled ?? {}),
+          ...withoutEmpty(nextTime.scheduled),
         },
         estimated,
         real: {
           ...(previousTime.real ?? {}),
-          ...(nextTime.real ?? {}),
+          ...withoutEmpty(nextTime.real),
         },
       },
       _operational: {
         ...(previousFlight._operational ?? {}),
-        ...(nextFlight._operational ?? {}),
+        ...withoutEmpty(nextFlight._operational),
       },
       _etaSource: direction === 'arrival'
         ? nextHasAuthoritativeEta

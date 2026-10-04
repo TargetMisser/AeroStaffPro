@@ -1043,6 +1043,23 @@ const zeroMismatch = liveEta.applyLiveDepartureStatus(
   [zeroDep], [{ ...departedAircraft, registration: undefined, callsign: 'RYR245' }], PSA_LAT, PSA_LON, depNowSec);
 assert(zeroMismatch[0].flight.time.real.departure === undefined, 'RYR245 must not match FR2045');
 
+// An airframe matched by registration two hours before this flight's STA is
+// flying an earlier leg; a ~20 min ETA must not be attached to it.
+const earlyLegNow = 1_800_000_000;
+const laterArrival = {
+  flight: {
+    identification: { number: { default: 'FR8269' } },
+    aircraft: { registration: 'EIDWA' },
+    time: { scheduled: { arrival: earlyLegNow + 2 * 60 * 60 }, estimated: {}, real: {} },
+  },
+};
+const earlyLeg = liveEta.applyLiveArrivalEtas([laterArrival], [{ ...inboundAircraft, callsign: 'RYR52GT' }], PSA_LAT, PSA_LON, earlyLegNow);
+assert(earlyLeg[0].flight.time.estimated.arrival === undefined,
+  'an ETA ~1h40 before STA belongs to an earlier leg of the same airframe');
+const onTimeArrival = { flight: { ...laterArrival.flight, time: { scheduled: { arrival: earlyLegNow + 25 * 60 }, estimated: {}, real: {} } } };
+const onTime = liveEta.applyLiveArrivalEtas([onTimeArrival], [{ ...inboundAircraft, callsign: 'RYR52GT' }], PSA_LAT, PSA_LON, earlyLegNow);
+assert(typeof onTime[0].flight.time.estimated.arrival === 'number', 'a plausibly early arrival still gets its live ETA');
+
 console.log('Live departure status tests passed.');
 
 // ─── Origin-departure estimate (ADS-B route + elapsed flight) ────────────────
@@ -1083,6 +1100,14 @@ assert(liveEta.estimateElapsedSeconds(inboundAircraft, PSA_LAT + 0.05, PSA_LON, 
     'the origin airport code is back-filled from the route when the feed only had a name');
   assert(inboundArr.flight.time.estimated.departure === undefined,
     'applyLiveOriginDepartures must not mutate the input');
+  assert(out[0].flight.airport.origin.name === 'BUCAREST',
+    'the airport board name is kept; the route only back-fills the missing code');
+
+  // A stale/reassigned callsign resolves to a leg ending elsewhere (Bergamo).
+  const otherLeg = async () => ({ ...route, destIata: 'BGY', destLat: 45.67, destLon: 9.70 });
+  const wrongLeg = await liveEta.applyLiveOriginDepartures([inboundArr], [aircraftW6], PSA_LAT, PSA_LON, nowSec, undefined, otherLeg);
+  assert(wrongLeg[0].flight.time.estimated.departure === undefined,
+    'a route that does not end at this airport must not produce an origin-departure estimate');
 
   // A flight that already has a provider departure time must be left untouched.
   const withProviderDep = {

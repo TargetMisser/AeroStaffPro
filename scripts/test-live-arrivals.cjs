@@ -325,7 +325,38 @@ async function manchesterPhotoRegression() {
   assert.equal(refresh(observed, board).flight.time.estimated.arrival, sta, 'expired observations must not override a new timetable indefinitely');
 }
 
+function providerMergeRegression() {
+  const { mergeProviderFlightItems } = loader(baseMocks)('src/utils/flightProviders/index.ts');
+  const staffMonitor = { flight: {
+    identification: { number: { default: 'FR1493' } },
+    aircraft: { registration: '9H-QAG', model: { code: 'B38M' } },
+    status: { text: 'Imbarco' },
+    time: { scheduled: { departure: 1000 }, estimated: { departure: 1300 }, real: {} },
+    _source: 'staffMonitor',
+  } };
+  const aeroDataBox = { flight: {
+    identification: { number: { default: 'FR1493' } },
+    aircraft: { registration: undefined, model: undefined },
+    status: undefined,
+    time: { scheduled: { departure: 1000 }, estimated: { departure: undefined }, real: {} },
+    _source: 'aeroDataBox',
+  } };
+  const merged = mergeProviderFlightItems(staffMonitor, aeroDataBox, 'departure');
+  assert.equal(merged.flight.aircraft.registration, '9H-QAG', 'an undefined AeroDataBox registration must not wipe StaffMonitor');
+  assert.equal(merged.flight.status.text, 'Imbarco', 'an absent status must not replace the operational one');
+  assert.equal(merged.flight.time.estimated.departure, 1300, 'an undefined estimate must not erase a known ETD');
+
+  const live = loader(baseMocks)('src/utils/flightLiveUpdates.ts');
+  const nowMs = Date.now();
+  const board = arrival('FR123', Math.floor(nowMs / 1000) + 1800);
+  const expired = { ...board, flight: { ...board.flight, _etaSource: 'adsb', _etaObservedAt: nowMs - 10 * 60_000,
+    time: { ...board.flight.time, estimated: { arrival: Math.floor(nowMs / 1000) + 600 } } } };
+  assert.equal(live.applyFlightLiveUpdates([board], [expired], 'arrival')[0].flight.time.estimated.arrival, undefined,
+    'a held ADS-B snapshot whose observation expired must not be re-applied');
+}
+
 (async () => {
+  providerMergeRegression();
   await manchesterPhotoRegression();
   await providerRegression();
   await trackingRegression();

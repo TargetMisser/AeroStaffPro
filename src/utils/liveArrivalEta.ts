@@ -61,6 +61,8 @@ const MAX_INBOUND_TRACK_DEVIATION_DEG = 80;
 const MAX_OUTBOUND_TRACK_DEVIATION_DEG = 80;
 /** a flight can leave a little early, never most of an hour before its time */
 const MAX_EARLY_DEPARTURE_SECONDS = 15 * 60;
+/** arrivals beat their schedule by tens of minutes at most */
+const MAX_EARLY_ARRIVAL_SECONDS = 45 * 60;
 /** below this distance the field→aircraft bearing is too noisy to tell an
     outbound climb from an arrival on short final, so don't guess a takeoff */
 const MIN_OUTBOUND_DISTANCE_NM = 1.5;
@@ -292,6 +294,9 @@ export function applyLiveArrivalEtas(
       ? Math.abs(estimatedArrival - rotationReference)
       : Number.POSITIVE_INFINITY;
     if (typeof rotationReference === 'number' && deviation > MAX_SCHEDULE_DEVIATION_SECONDS) return;   // another rotation
+    // Real arrivals are rarely more than ~30-45 min early; a much earlier ETA
+    // is an earlier leg of the same airframe, not this flight.
+    if (typeof rotationReference === 'number' && estimatedArrival < rotationReference - MAX_EARLY_ARRIVAL_SECONDS) return;
 
     const current = bestByAircraft.get(aircraft);
     if (!current || deviation < current.deviation) {
@@ -486,7 +491,12 @@ export type AircraftRoute = {
   originLat: number;
   originLon: number;
   destIata?: string;
+  destLat?: number;
+  destLon?: number;
 };
+
+/** a route ending farther than this from the field is another leg */
+const MAX_ROUTE_DESTINATION_OFFSET_NM = 30;
 
 const ADSBDB_CALLSIGN_BASE = 'https://api.adsbdb.com/v0/callsign';
 /** callsign -> route (or null when unknown); routes are stable within a day */
@@ -507,7 +517,12 @@ export async function fetchAircraftRoute(
   if (ROUTE_CACHE.has(cs)) return ROUTE_CACHE.get(cs) ?? null;
   try {
     const res = await fetch(`${ADSBDB_CALLSIGN_BASE}/${cs}`, { headers: ADSB_FETCH_HEADERS, signal });
-    if (!res.ok) { ROUTE_CACHE.set(cs, null); return null; }   // 404 = unknown callsign, cache the miss
+    if (!res.ok) {
+      // Only 404 means "unknown callsign"; 429/5xx are transient and must not
+      // disable the lookup for the rest of the session.
+      if (res.status === 404) ROUTE_CACHE.set(cs, null);
+      return null;
+    }
     const json = await res.json();
     const origin = json?.response?.flightroute?.origin;
     const destination = json?.response?.flightroute?.destination;
@@ -524,6 +539,8 @@ export async function fetchAircraftRoute(
       originLat: origin.latitude,
       originLon: origin.longitude,
       destIata: typeof destination?.iata_code === 'string' ? destination.iata_code : undefined,
+      destLat: typeof destination?.latitude === 'number' ? destination.latitude : undefined,
+      destLon: typeof destination?.longitude === 'number' ? destination.longitude : undefined,
     };
     ROUTE_CACHE.set(cs, route);
     return route;
@@ -615,6 +632,12 @@ export async function applyLiveOriginDepartures(
   const resolved = await Promise.all(tasks.map(async ({ index, aircraft }) => {
     const route = await routeLookup(aircraft.callsign, signal);
     if (!route) return null;
+    // A reassigned or stale callsign returns a route for some other leg: only
+    // trust it when it actually ends here (or doesn't say where it ends).
+    if (typeof route.destLat === 'number' && typeof route.destLon === 'number'
+      && haversineNm(route.destLat, route.destLon, airportLat, airportLon) > MAX_ROUTE_DESTINATION_OFFSET_NM) {
+      return null;
+    }
     const elapsed = estimateElapsedSeconds(aircraft, route.originLat, route.originLon, airportLat, airportLon);
     if (elapsed == null) return null;
     return { index, departedAt: nowSeconds - elapsed, route };
@@ -631,7 +654,8 @@ export async function applyLiveOriginDepartures(
     const needsOriginCode = !existingOrigin?.code?.iata && !existingOrigin?.code?.icao;
     const originOverride = needsOriginCode && (hit.route.originIata || hit.route.originIcao)
       ? {
-          name: hit.route.originName || existingOrigin?.name,
+          // The airport board's own name (e.g. StaffMonitor's text) wins.
+          name: existingOrigin?.name || hit.route.originName,
           code: {
             ...(hit.route.originIata ? { iata: hit.route.originIata } : {}),
             ...(hit.route.originIcao ? { icao: hit.route.originIcao } : {}),
