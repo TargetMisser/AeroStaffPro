@@ -1,4 +1,3 @@
-import ScreenHeading, { ScreenAction } from '../components/ScreenHeading';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View, Text, StyleSheet, ActivityIndicator, ScrollView, TouchableOpacity,
@@ -766,7 +765,6 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
     ]);
   };
 
-  const monthLabel = visibleMonth.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const todayIso = toLocalIso(new Date());
   const selectedEvents = eventsData[selectedDay] || [];
   const workEvent = selectedEvents.find(e => e.title.includes('Lavoro'));
@@ -936,34 +934,36 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ paddingBottom: 96 }}>
-        {/* Page Header */}
-        <ScreenHeading title={t('calTitle')} subtitle={monthLabel} icon="calendar-month">
-          <ScreenAction label={t('calEditBtn')} icon="edit-calendar" onPress={() => setEditMenuOpen(true)} />
-        </ScreenHeading>
-
-        <View style={s.viewModeRow}>
-          {(['week', 'calendar'] as const).map(mode => {
-            const active = viewMode === mode;
-            return (
-              <TouchableOpacity
-                key={mode}
-                style={[s.viewModeBtn, active && { backgroundColor: colors.primaryLight }]}
-                activeOpacity={0.85}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                onPress={() => setViewMode(mode)}
-              >
-                <MaterialIcons
-                  name={mode === 'calendar' ? 'calendar-month' : 'view-week'}
-                  size={16}
-                  color={active ? colors.primaryText : colors.textSub}
-                />
-                <Text style={[s.viewModeText, { color: active ? colors.primaryText : colors.textSub }]}>
-                  {mode === 'calendar' ? t('calModeCalendar') : t('calModeWeek')}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+        {/* One control row: the app bar already names the screen. */}
+        <View style={s.controlsRow}>
+          <View style={s.viewModeRow}>
+            {(['week', 'calendar'] as const).map(mode => {
+              const active = viewMode === mode;
+              return (
+                <TouchableOpacity
+                  key={mode}
+                  style={[s.viewModeBtn, active && s.viewModeBtnActive]}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => setViewMode(mode)}
+                >
+                  <Text style={[s.viewModeText, { color: active ? colors.primaryText : colors.textSub }]}>
+                    {mode === 'calendar' ? t('calModeCalendar') : t('calModeWeek')}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            style={s.controlIconBtn}
+            onPress={() => setEditMenuOpen(true)}
+            activeOpacity={0.82}
+            accessibilityRole="button"
+            accessibilityLabel={t('calEditBtn')}
+          >
+            <MaterialIcons name="edit-calendar" size={20} color={colors.primary} />
+          </TouchableOpacity>
         </View>
 
         {loading ? (
@@ -1099,30 +1099,7 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
             {viewMode === 'week' && (
               <View style={s.weekCard}>
-                <View style={s.weekHeader}>
-                  <View>
-                    <Text style={s.weekTitle}>{t('calModeWeek')}</Text>
-                  </View>
-                  <View style={s.weekHeaderActions}>
-                    <TouchableOpacity
-                      style={s.weekShareBtn}
-                      onPress={() => openShiftShare(
-                        selectedStatsRange.startIso,
-                        selectedStatsRange.endIso,
-                        `Turni ${selectedStatsRange.startIso.split('-').reverse().join('/')} - ${selectedStatsRange.endIso.split('-').reverse().join('/')}`,
-                      )}
-                    >
-                      <MaterialIcons name="share" size={18} color={colors.primaryText} />
-                    </TouchableOpacity>
-                    <View style={s.weekTotalPill}>
-                      <Text style={s.weekTotalValue}>{weekHoursSummary.totalHours.toFixed(1)} h</Text>
-                      <Text style={s.weekTotalLabel}>
-                        {t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
+                {/* Week navigation, total hours and share in a single row. */}
                 <View style={s.weekNavRow}>
                   <TouchableOpacity
                     style={s.weekNavBtn}
@@ -1131,9 +1108,9 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     accessibilityRole="button"
                     accessibilityLabel={t('calPrevWeek')}
                   >
-                    <MaterialIcons name="chevron-left" size={24} color={colors.primaryText} />
+                    <MaterialIcons name="chevron-left" size={22} color={colors.primaryText} />
                   </TouchableOpacity>
-                  <Text style={s.weekNavLabel}>{weekRangeLabel}</Text>
+                  <Text style={s.weekNavLabel} numberOfLines={1}>{weekRangeLabel}</Text>
                   <TouchableOpacity
                     style={s.weekNavBtn}
                     onPress={() => goToWeek(1)}
@@ -1141,7 +1118,29 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                     accessibilityRole="button"
                     accessibilityLabel={t('calNextWeek')}
                   >
-                    <MaterialIcons name="chevron-right" size={24} color={colors.primaryText} />
+                    <MaterialIcons name="chevron-right" size={22} color={colors.primaryText} />
+                  </TouchableOpacity>
+                  <View
+                    style={s.weekTotalPill}
+                    accessible
+                    accessibilityLabel={`${weekHoursSummary.totalHours.toFixed(1)} h · ${t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}`}
+                  >
+                    <Text style={s.weekTotalValue}>{weekHoursSummary.totalHours.toFixed(1)} h</Text>
+                    <Text style={s.weekTotalLabel}>
+                      {t('calWeekShiftsCount').replace('{count}', String(weekHoursSummary.shiftsCount))}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={s.weekShareBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Condividi turni della settimana"
+                    onPress={() => openShiftShare(
+                      selectedStatsRange.startIso,
+                      selectedStatsRange.endIso,
+                      `Turni ${selectedStatsRange.startIso.split('-').reverse().join('/')} - ${selectedStatsRange.endIso.split('-').reverse().join('/')}`,
+                    )}
+                  >
+                    <MaterialIcons name="share" size={18} color={colors.primaryText} />
                   </TouchableOpacity>
                 </View>
 
@@ -1163,26 +1162,27 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
                         timestamp: day.date.getTime(),
                       })}
                     >
-                      <View style={[s.weekDateBox, selected && { backgroundColor: colors.primary }]}>
+                      <View
+                        style={[s.weekDateBox, selected && { backgroundColor: colors.primary }]}
+                        accessibilityLabel={`${dayName} ${dayNumber}/${monthNumber}`}
+                      >
                         <Text style={[s.weekDayName, selected && { color: '#fff' }]}>{dayName}</Text>
                         <Text style={[s.weekDayNumber, selected && { color: '#fff' }]}>{dayNumber}</Text>
-                        <Text style={[s.weekMonthNumber, selected && { color: 'rgba(255,255,255,0.75)' }]}>{monthNumber}</Text>
                       </View>
 
                       <View style={s.weekShiftBody}>
                         {day.work ? (
                           <>
+                            {/* The time range is the information; "Lavoro" is implied. */}
                             <View style={s.weekShiftTitleRow}>
-                              <MaterialIcons name="flight" size={17} color={colors.primary} />
-                              <Text style={[s.weekShiftTitle, { color: colors.primaryDark }]}>{t('calShiftWork')}</Text>
+                              <MaterialIcons name="flight-takeoff" size={16} color={colors.primary} />
+                              <Text style={s.weekShiftMeta}>
+                                {new Date(day.work.startDate).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                                {' – '}
+                                {new Date(day.work.endDate).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                                <Text style={s.weekShiftHours}>{'  ·  '}{(day.minutes / 60).toFixed(1)} h</Text>
+                              </Text>
                             </View>
-                            <Text style={s.weekShiftMeta}>
-                              {new Date(day.work.startDate).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
-                              {' - '}
-                              {new Date(day.work.endDate).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
-                              {'  ·  '}
-                              {(day.minutes / 60).toFixed(1)} h
-                            </Text>
                             {day.stats?.flightCount > 0 && (
                               <Text style={s.weekFlightMeta}>{day.stats.flightCount} voli nel turno</Text>
                             )}
@@ -1504,26 +1504,39 @@ export default function CalendarScreen({ isFocused = true }: { isFocused?: boole
 
 function makeStyles(c: ThemeColors) {
   return StyleSheet.create({
-    viewModeRow: {
+    controlsRow: {
       flexDirection: 'row',
+      alignItems: 'center',
       gap: SPACING.sm,
-      marginHorizontal: SPACING.lg,
-      marginTop: 14,
-      backgroundColor: c.card,
-      borderRadius: RADIUS.lg,
-      padding: 6,
+      paddingHorizontal: SPACING.lg,
+      paddingTop: SPACING.sm,
+    },
+    viewModeRow: {
+      flex: 1,
+      flexDirection: 'row',
+      backgroundColor: c.cardSecondary,
+      borderRadius: 14,
+      padding: 4,
       borderWidth: 1,
       borderColor: c.glassBorder,
     },
     viewModeBtn: {
       flex: 1,
-      minHeight: 44,
-      flexDirection: 'row',
+      minHeight: 36,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
-      borderRadius: RADIUS.md,
-      paddingVertical: 10,
+      borderRadius: 10,
+    },
+    viewModeBtnActive: { backgroundColor: c.card },
+    controlIconBtn: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 12,
+      backgroundColor: c.primaryLight,
+      borderWidth: 1,
+      borderColor: c.primary,
     },
     viewModeText: { fontSize: 13, fontWeight: '800' },
     calendarCard: {
@@ -1568,8 +1581,8 @@ function makeStyles(c: ThemeColors) {
       backgroundColor: c.card,
       borderRadius: RADIUS.xl,
       marginHorizontal: SPACING.lg,
-      marginTop: SPACING.lg,
-      padding: SPACING.lg,
+      marginTop: SPACING.sm,
+      padding: SPACING.md,
       shadowColor: '#172B3A',
       shadowOpacity: c.isDark ? 0 : 0.03,
       shadowRadius: 10,
@@ -1579,13 +1592,13 @@ function makeStyles(c: ThemeColors) {
     },
     weekHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: SPACING.md, marginBottom: SPACING.sm },
     weekHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-    weekShareBtn: { width: 38, height: 38, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
+    weekShareBtn: { width: 36, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
     weekTitle: { color: c.primaryDark, fontSize: 20, fontWeight: '900' },
-    weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: 14 },
-    weekNavBtn: { width: 40, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
-    weekNavLabel: { flex: 1, textAlign: 'center', color: c.textSub, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-    weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 14, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, alignItems: 'flex-end' },
-    weekTotalValue: { color: c.primaryText, fontSize: 18, fontWeight: '900' },
+    weekNavRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+    weekNavBtn: { width: 34, height: 36, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', backgroundColor: c.primaryLight },
+    weekNavLabel: { flex: 1, textAlign: 'center', color: c.text, fontSize: 13, fontWeight: '800', textTransform: 'uppercase' },
+    weekTotalPill: { backgroundColor: c.primaryLight, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'flex-end' },
+    weekTotalValue: { color: c.primaryText, fontSize: 15, fontWeight: '900' },
     weekTotalLabel: { ...TYPE.micro, color: c.primaryDark, marginTop: 1 },
     weekRow: {
       flexDirection: 'row',
@@ -1593,31 +1606,33 @@ function makeStyles(c: ThemeColors) {
       gap: SPACING.md,
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: RADIUS.lg,
-      padding: 10,
-      marginTop: 9,
+      borderRadius: 14,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      marginTop: 6,
       backgroundColor: c.bg,
     },
     weekDateBox: {
-      width: 54,
-      borderRadius: 14,
+      width: 44,
+      borderRadius: 10,
       backgroundColor: c.card,
       alignItems: 'center',
-      paddingVertical: SPACING.sm,
+      paddingVertical: 4,
       borderWidth: 1,
       borderColor: c.border,
     },
     weekDayName: { color: c.textSub, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-    weekDayNumber: { color: c.text, fontSize: 22, fontWeight: '900', lineHeight: 26 },
+    weekDayNumber: { color: c.text, fontSize: 18, fontWeight: '900', lineHeight: 22 },
     weekMonthNumber: { ...TYPE.micro, color: c.textMuted },
-    weekShiftBody: { flex: 1, minHeight: 58, justifyContent: 'center' },
+    weekShiftBody: { flex: 1, minHeight: 40, justifyContent: 'center' },
     weekShiftTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
     weekShiftTitle: { fontSize: 16, fontWeight: '900' },
-    weekShiftMeta: { color: c.text, fontSize: 15, fontWeight: '800', marginTop: 5 },
-    weekFlightMeta: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 3 },
+    weekShiftMeta: { color: c.text, fontSize: 16, fontWeight: '800', fontVariant: ['tabular-nums'] },
+    weekShiftHours: { color: c.textSub, fontSize: 13, fontWeight: '700' },
+    weekFlightMeta: { color: c.textSub, fontSize: 12, fontWeight: '700', marginTop: 2, marginLeft: 23 },
     weekRestRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
-    weekRestText: { color: c.success, fontSize: 16, fontWeight: '900' },
-    weekEmptyText: { color: c.textSub, fontSize: 14, fontWeight: '700' },
+    weekRestText: { color: c.success, fontSize: 15, fontWeight: '800' },
+    weekEmptyText: { color: c.textMuted, fontSize: 13, fontWeight: '600' },
     mainCard: {
       backgroundColor: c.card, borderRadius: RADIUS.xl,
       marginHorizontal: SPACING.lg, marginTop: SPACING.lg,

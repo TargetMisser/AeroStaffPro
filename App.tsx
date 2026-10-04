@@ -266,13 +266,15 @@ function AppInner() {
   };
 
 
-  // Voli has no in-page heading: the bar names the screen and the airport, so
-  // the flight list starts right below the day selector.
+  // Voli and Turni have no in-page heading: the bar names the screen, so the
+  // content starts right below a single control row.
   const appBarTitle = overlay
     ? overlayTitles[overlay]
     : activeTab === 'Flights'
       ? `Voli · ${airportCode}`
-      : 'AeroStaff Pro';
+      : activeTab === 'Calendar'
+        ? 'Turni'
+        : 'AeroStaff Pro';
   const surfaceVariant = 'app';
   const activeTabIndex = TABS.findIndex(tab => tab.id === activeTab);
   const tabInactiveColor = colors.tabIconInactive;

@@ -208,7 +208,7 @@ function FlightRowComponent({ item, linkedArrival, index, direction, airportCode
   const iataCode = item.flight?.airline?.code?.iata || '';
   const icaoCode = item.flight?.airline?.code?.icao || '';
   const airlineIdentity = [airline, iataCode, icaoCode].filter(Boolean).join(' ');
-  const statusText = item.flight?.status?.text || 'Scheduled';
+  const statusText = item.flight?.status?.text || t('flightScheduled');
   const raw = item.flight?.status?.generic?.status?.color || 'gray';
   const statusColor = statusToToken(raw, colors);
   const remoteAirport = isArrival
