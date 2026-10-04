@@ -4,7 +4,7 @@ Read this first in every Codex/agent session. It exists to avoid rediscovering t
 
 ## Session Startup
 
-1. Work from `C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp` unless the user explicitly says otherwise.
+1. Work from `C:\Users\turni\Documents\Progetti Antigravity\AeroStaffPro` unless the user explicitly says otherwise.
 2. Run `git status --short --branch` before editing.
 3. Prefer the branch `codex/design-lab-storybook` for ongoing work.
 4. Read this file and `docs/release-automation.md` before release/APK work.

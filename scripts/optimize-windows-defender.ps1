@@ -6,15 +6,14 @@ if (-not $isAdmin) {
     Write-Warning "Questo script richiede privilegi di Amministratore."
     Write-Host "Per favore, copia ed esegui questo comando in una finestra di PowerShell avviata COME AMMINISTRATORE:`n" -ForegroundColor Yellow
     
-    $cmd = 'Add-MpPreference -ExclusionPath "C:\gha", "C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp-flight-fix", "C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp", "C:\Users\turni\.gradle", "' + $env:LOCALAPPDATA + '\Android\Sdk"'
+    $cmd = 'Add-MpPreference -ExclusionPath "C:\gha", "C:\Users\turni\Documents\Progetti Antigravity\AeroStaffPro", "C:\Users\turni\.gradle", "' + $env:LOCALAPPDATA + '\Android\Sdk"'
     Write-Host "PowerShell Cmd:`n$cmd`n" -ForegroundColor Cyan
     exit 1
 }
 
 $exclusions = @(
     "C:\gha",
-    "C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp-flight-fix",
-    "C:\Users\turni\Documents\Progetti Antigravity\FlightWorkApp",
+    "C:\Users\turni\Documents\Progetti Antigravity\AeroStaffPro",
     "C:\Users\turni\.gradle",
     "$env:LOCALAPPDATA\Android\Sdk"
 )
