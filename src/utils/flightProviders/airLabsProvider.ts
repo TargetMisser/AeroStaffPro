@@ -642,14 +642,19 @@ export const airLabsProvider: FlightScheduleProvider = {
     const allDepartures = mergePredictedAndLiveFlights(routeDepartures, liveDepartures, 'departure');
     const allArrivals = mergePredictedAndLiveFlights(routeArrivals, liveArrivals, 'arrival');
 
-    if (
-      departuresResult.status === 'rejected'
-      && arrivalsResult.status === 'rejected'
-      && routeDeparturesResult.status === 'rejected'
-      && routeArrivalsResult.status === 'rejected'
-    ) {
+    // Only requests that were actually issued count: in routesOnly mode the
+    // live slots are placeholders that always "succeed", which used to turn a
+    // 429/auth failure of both route calls into AIRLABS_EMPTY_SCHEDULE (no
+    // cooldown, quota keeps burning).
+    const issued = useLiveSchedules
+      ? [departuresResult, arrivalsResult, routeDeparturesResult, routeArrivalsResult]
+      : [routeDeparturesResult, routeArrivalsResult];
+    if (issued.every(result => result.status === 'rejected')) {
+      const reasonOf = (result: PromiseSettledResult<any[]>) => (
+        result.status === 'rejected' ? getErrorMessage(result.reason) : 'skipped'
+      );
       throw new Error(
-        `AIRLABS_FAILED D:${getErrorMessage(departuresResult.reason)} A:${getErrorMessage(arrivalsResult.reason)} RD:${getErrorMessage(routeDeparturesResult.reason)} RA:${getErrorMessage(routeArrivalsResult.reason)}`,
+        `AIRLABS_FAILED D:${reasonOf(departuresResult)} A:${reasonOf(arrivalsResult)} RD:${reasonOf(routeDeparturesResult)} RA:${reasonOf(routeArrivalsResult)}`,
       );
     }
 

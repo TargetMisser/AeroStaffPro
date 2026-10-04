@@ -1146,7 +1146,9 @@ async function testWidgetCacheFirstPaint() {
   assert(renders.length === 1, 'widget update should paint cached content before network completion');
   resolveProvider({ allArrivals: [], allDepartures: [] });
   await taskPromise;
-  assert(renders.length === 1, 'an empty provider response should keep the cached flights on screen');
+  // An empty StaffMonitor day is treated as a failed fetch: the cached flights
+  // stay, at most re-painted once with the "offline" freshness badge.
+  assert(renders.length <= 2, 'an empty provider response should keep the cached flights on screen');
   const preserved = JSON.parse(store.get('widget_data_cache_v1'));
   assert(
     preserved.state === 'work' && preserved.flights[0]?.flightNumber === 'FR1234',

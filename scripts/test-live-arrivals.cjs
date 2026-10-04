@@ -355,8 +355,23 @@ function providerMergeRegression() {
     'a held ADS-B snapshot whose observation expired must not be re-applied');
 }
 
+async function airLabsQuotaRegression() {
+  const store = new Map();
+  const asyncStorage = { getItem: async key => store.get(key) ?? null, setItem: async (key, value) => { store.set(key, value); } };
+  const load = loader({ '@react-native-async-storage/async-storage': asyncStorage, '../devLog': { devLog() {} } }, {
+    fetch: async () => ({ ok: false, status: 429, json: async () => ({ error: { message: 'rate limit' } }), text: async () => 'rate limit' }),
+  });
+  const { airLabsProvider } = load('src/utils/flightProviders/airLabsProvider.ts');
+  await assert.rejects(
+    airLabsProvider.fetch({ airportCode: 'PSA', airLabsApiKey: 'key', airLabsMode: 'routesOnly', now: new Date() }),
+    error => /AIRLABS_FAILED/.test(error.message) && !/EMPTY_SCHEDULE/.test(error.message),
+    'routes-only quota failures must surface their cause so the provider cooldown starts',
+  );
+}
+
 (async () => {
   providerMergeRegression();
+  await airLabsQuotaRegression();
   await manchesterPhotoRegression();
   await providerRegression();
   await trackingRegression();

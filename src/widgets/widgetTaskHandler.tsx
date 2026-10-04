@@ -409,6 +409,11 @@ export async function fetchFreshWidgetData(): Promise<WidgetData> {
     if (staffMonitorProvider.supports({ airportCode, airport: airportInfo, now: new Date() })) {
       const result = await staffMonitorProvider.fetch({ airportCode, airport: airportInfo, now: new Date() });
       allDepartures = result.allDepartures;
+      // StaffMonitor answers [] (not an error) when every URL failed and its
+      // cache is empty. A whole airport day with no departures is a failed
+      // fetch, not a quiet shift: show the cached data as offline instead of
+      // a fresh "Nessuna partenza · Aggiornato HH:MM".
+      if (allDepartures.length === 0) throw new Error('STAFFMONITOR_NO_DATA');
     } else {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 10000);
