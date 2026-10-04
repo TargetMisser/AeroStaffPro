@@ -67,7 +67,7 @@ const FOOTER_SWIPE_SWITCH_VELOCITY = 0.5;
 function AppInner() {
   const { colors, mode } = useAppTheme();
   const { t } = useLanguage();
-  const { profileInitials } = useAirport();
+  const { profileInitials, airportCode } = useAirport();
   const insets = useSafeAreaInsets();
   const reducedMotion = useReducedMotionPreference();
   const [activeTab, setActiveTab]   = useState<Tab>('Shifts');
@@ -266,7 +266,13 @@ function AppInner() {
   };
 
 
-  const appBarTitle = overlay ? overlayTitles[overlay] : 'AeroStaff Pro';
+  // Voli has no in-page heading: the bar names the screen and the airport, so
+  // the flight list starts right below the day selector.
+  const appBarTitle = overlay
+    ? overlayTitles[overlay]
+    : activeTab === 'Flights'
+      ? `Voli · ${airportCode}`
+      : 'AeroStaff Pro';
   const surfaceVariant = 'app';
   const activeTabIndex = TABS.findIndex(tab => tab.id === activeTab);
   const tabInactiveColor = colors.tabIconInactive;

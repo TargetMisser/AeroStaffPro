@@ -336,7 +336,7 @@ assert(
     && flightScreenSource.includes("buildFlightradar24AirportBoardUrl(airportCode, 'arrival')")
     && flightScreenSource.includes('openFlightradar24AirportArrivals(airportCode)')
     && flightScreenSource.includes('disabled={!canOpenArrivalLink}')
-    && flightScreenSource.includes("t('flightAirportArrivalsFr24')")
+    && flightScreenSource.includes("t('flightOpenAirportArrivalsFr24')")
     && !flightScreenSource.includes('openFlightradar24Flight(item, direction, airportCode)')
     && flightScreenSource.includes('enrichFlightScheduleWithFr24Ids(requestAirportCode, mergedArrs, mergedDeps)')
     && flightScreenSource.includes("direction === 'arrival' ? 'arrivals' : 'departures'"),

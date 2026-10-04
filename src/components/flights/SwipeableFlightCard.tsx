@@ -97,7 +97,7 @@ function SwipeableFlightCardComponent({
   const actionIcon: keyof typeof MaterialIcons.glyphMap = 'push-pin';
 
   return (
-    <View style={[styles.shell, { marginBottom: compact ? 12 : 18 }]}>
+    <View style={[styles.shell, { marginBottom: compact ? 8 : 18 }]}>
       <Animated.View
         pointerEvents="none"
         style={[

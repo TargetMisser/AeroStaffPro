@@ -24,6 +24,21 @@ export function statusToToken(raw: string, c: ThemeColors): string {
 }
 
 /**
+ * Departure status text -> semantic color. Providers' coarse colors paint
+ * "boarding" amber like a warning; staff read it as "in progress / OK", so the
+ * text wins: boarding green, delays amber, cancellations red, finished phases
+ * (closed, departed) neutral. Unknown texts fall back to the provider color.
+ */
+export function flightStatusToken(statusText: string, raw: string, c: ThemeColors): string {
+  const status = statusText.toLowerCase();
+  if (/cancel|annull/.test(status)) return c.danger;
+  if (/ritard|delay|posticip|final call|ultima chiamata/.test(status)) return c.warning;
+  if (/imbarc|boarding|gate open|gate aperto/.test(status)) return c.success;
+  if (/chius|closed|partit|decollat|departed|airborne/.test(status)) return c.neutral;
+  return statusToToken(raw, c);
+}
+
+/**
  * Flight delay (minutes) -> semantic color: landed/on-time, slightly late (>5),
  * very late (>20). `onTime` overrides the on-time fill — most cards use the
  * brand primary, the inbound status pill uses success/green.

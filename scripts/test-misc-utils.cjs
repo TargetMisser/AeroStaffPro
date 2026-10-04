@@ -923,6 +923,16 @@ async function testDevLog() {
   assert(calls.length === 3, 'development log helpers should emit all diagnostics when __DEV__ is true');
 }
 
+function testFlightStatusToken() {
+  const { flightStatusToken } = loadTsModule('src/utils/statusColors.ts', {});
+  const c = { success: 'green', danger: 'red', warning: 'amber', neutral: 'gray' };
+  assert(flightStatusToken('IMBARCO', 'yellow', c) === 'green', 'boarding reads as in progress, not as a warning');
+  assert(flightStatusToken('Cancellato', 'gray', c) === 'red', 'cancellations are red whatever the provider colour');
+  assert(flightStatusToken('Chiuso', 'yellow', c) === 'gray', 'a closed gate is a finished phase');
+  assert(flightStatusToken('Ultima chiamata', 'green', c) === 'amber', 'final call is urgent');
+  assert(flightStatusToken('Scheduled', 'yellow', c) === 'amber', 'unknown texts keep the provider colour');
+}
+
 function testTimedCachePrune() {
   const { pruneTimedCache } = loadTsModule('src/utils/flightProviders/timedCache.ts', {});
   const now = 1_800_000_000_000;
@@ -1267,6 +1277,7 @@ async function main() {
   await testDevLog();
   await testShiftCalendarOwnershipAndPartialImport();
   testTimedCachePrune();
+  testFlightStatusToken();
   await testWidgetRefreshAfterImportRollback();
   await testWidgetShiftSelfHeal();
   await testWidgetKeepsPreviousDayNightShiftAfterMidnight();
