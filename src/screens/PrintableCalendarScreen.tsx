@@ -104,10 +104,16 @@ export default function PrintableCalendarScreen() {
 
       const rangeStart = getMonthStart(month);
       const rangeEnd = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-      const events = await SystemCalendar.getEventsAsync([calendar.id], rangeStart, rangeEnd);
+      // Android only returns events fully contained in the window, so a night
+      // shift starting on the month's last day would be missed: query one more
+      // day and keep only shifts that START inside the month.
+      const queryEnd = new Date(month.getFullYear(), month.getMonth() + 1, 2);
+      const events = await SystemCalendar.getEventsAsync([calendar.id], rangeStart, queryEnd);
       const next: Record<string, PrintableShiftEvent[]> = {};
       for (const event of events) {
         if (!isOwnedShiftEvent(event)) continue;
+        const startsAt = new Date(event.startDate).getTime();
+        if (startsAt < rangeStart.getTime() || startsAt >= rangeEnd.getTime()) continue;
         const iso = toLocalIso(new Date(event.startDate));
         next[iso] ??= [];
         next[iso].push({

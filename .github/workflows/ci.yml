@@ -11,6 +11,10 @@ on:
       - main
       - dev
 
+# Pull requests (including forks) only ever need to read the repository.
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -33,6 +37,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Release metadata check
+        run: npm run release:check
 
       - name: Validate Expo config
         run: npx expo config --json > /dev/null

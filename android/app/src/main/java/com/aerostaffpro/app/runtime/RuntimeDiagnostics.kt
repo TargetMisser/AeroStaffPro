@@ -124,7 +124,13 @@ object RuntimeDiagnostics {
         if (!installed) {
             val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
             Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-                recordNativeCrash(application, thread, throwable)
+                // Recording does disk and MediaStore I/O; if it throws, the
+                // platform handler must still run (system crash dialog,
+                // ApplicationExitInfo), so never let it escape.
+                try {
+                    recordNativeCrash(application, thread, throwable)
+                } catch (ignored: Throwable) {
+                }
                 if (previousHandler != null) {
                     previousHandler.uncaughtException(thread, throwable)
                 } else {

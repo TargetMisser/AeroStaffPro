@@ -167,6 +167,18 @@ async function ensureDownloadDirectory(): Promise<void> {
   }
 }
 
+// The updates/ folder is ours alone. Each release APK is ~100 MB, so earlier
+// downloads (and their markers) are removed before fetching a new one.
+async function pruneOldUpdatePackages(): Promise<void> {
+  if (!DOWNLOAD_DIR) return;
+  try {
+    const entries = await FileSystem.readDirectoryAsync(DOWNLOAD_DIR);
+    await Promise.all(entries.map(name => FileSystem.deleteAsync(`${DOWNLOAD_DIR}${name}`, { idempotent: true })));
+  } catch {
+    // Best effort: a failed cleanup must not block the update itself.
+  }
+}
+
 export async function getDownloadedUpdateUri(info: UpdateInfo): Promise<string | null> {
   if (!DOWNLOAD_DIR || !info.downloadUrl) {
     return null;
@@ -193,6 +205,7 @@ export async function downloadUpdatePackage(
   const targetUri = getTargetUri(info);
 
   await ensureDownloadDirectory();
+  await pruneOldUpdatePackages();
   await FileSystem.deleteAsync(targetUri, { idempotent: true });
   await FileSystem.deleteAsync(getVerificationMarkerUri(targetUri), { idempotent: true });
 

@@ -20,6 +20,11 @@ on:
 permissions:
   contents: write
 
+# Two runs publishing the same tag (a tag push plus a dispatch) must not race.
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
 env:
   # Force Node 24 for any JS-based actions still declaring Node 20 in their action.yml.
   # Node 20 is being removed from runners on 2026-09-16.
@@ -28,18 +33,19 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Signing secrets are passed only to the steps that need them, never to
+    # third-party actions (which get the whole job environment).
     env:
       RELEASE_STORE_FILE: ${{ github.workspace }}/android/app/release.keystore
-      RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
       - name: Compute checkout ref
         id: co
+        env:
+          INPUT_REF: ${{ github.event.inputs.ref }}
         run: |
-          if [[ -n "${{ github.event.inputs.ref }}" ]]; then
-            echo "ref=${{ github.event.inputs.ref }}" >> "$GITHUB_OUTPUT"
+          if [[ -n "$INPUT_REF" ]]; then
+            echo "ref=$INPUT_REF" >> "$GITHUB_OUTPUT"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             echo "ref=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           else
@@ -77,7 +83,7 @@ jobs:
           restore-keys: gradle-
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           # The action's default ("tools platform-tools") fails since Google
           # removed the legacy "tools" package; the components we need are
@@ -93,7 +99,13 @@ jobs:
             "cmake;3.22.1"
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        # Lockfile-exact install: a release must build the dependencies that were tested.
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck and tests
+        run: |
+          npm run typecheck
+          npm test
 
       - name: Fix expo-modules-core Gradle bugs
         run: |
@@ -103,10 +115,12 @@ jobs:
 
       - name: Compute release tag
         id: meta
+        env:
+          VERSION_OVERRIDE: ${{ github.event.inputs.version_override }}
         run: |
           VERSION=$(node -p "require('./app.json').expo.version")
-          if [[ -n "${{ github.event.inputs.version_override }}" ]]; then
-            TAG="${{ github.event.inputs.version_override }}"
+          if [[ -n "$VERSION_OVERRIDE" ]]; then
+            TAG="$VERSION_OVERRIDE"
           elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${{ github.ref_name }}"
           else
@@ -115,12 +129,34 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
 
+      - name: Never replace an already-published release from a branch push
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          # A push to main without a version bump used to rebuild and silently
+          # swap the APK of the existing release. Tag pushes and manual runs
+          # still publish; a branch push only builds as a check.
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" != refs/tags/* ]] \
+            && gh release view "$TAG" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "Release $TAG already exists: building only, not publishing."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
       - name: Restore release keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if [[ -z "${{ secrets.KEYSTORE_BASE64 }}" ]]; then
+          if [[ -z "$KEYSTORE_BASE64" ]]; then
             echo "Missing KEYSTORE_BASE64 secret"
             exit 1
           fi
@@ -131,7 +167,7 @@ jobs:
             fi
           done
           mkdir -p android/app
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "$RELEASE_STORE_FILE"
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RELEASE_STORE_FILE"
 
       - name: Build release APK
         run: |
@@ -142,6 +178,13 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m"
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Remove release keystore
+        if: always()
+        run: rm -f "$RELEASE_STORE_FILE"
 
       - name: Validate APK release metadata
         run: |
@@ -180,6 +223,13 @@ jobs:
             echo "Could not read phone signing certificate SHA-256 digest"
             exit 1
           fi
+          echo "Signing certificate SHA-256: $PHONE_CERT"
+          # Set the repository variable EXPECTED_SIGNING_CERT_SHA256 to enforce the key.
+          EXPECTED_CERT="${{ vars.EXPECTED_SIGNING_CERT_SHA256 }}"
+          if [[ -n "$EXPECTED_CERT" && "${PHONE_CERT,,}" != "${EXPECTED_CERT,,}" ]]; then
+            echo "APK is signed with an unexpected certificate"
+            exit 1
+          fi
 
       - name: Rename APK
         run: |
@@ -189,7 +239,8 @@ jobs:
           echo "apk=$PHONE_DEST" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        if: steps.guard.outputs.publish == 'true'
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "AeroStaff Pro ${{ steps.meta.outputs.tag }}"

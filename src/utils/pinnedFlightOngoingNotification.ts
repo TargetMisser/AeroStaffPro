@@ -4,7 +4,7 @@ import { isFlightEasyJet } from './easyjetOverlapMode';
 import type { CurrentRequestCheck } from './currentRequestEffects';
 
 const PINNED_ONGOING_ID = 'aerostaff-pinned-flight-ongoing';
-const PINNED_ONGOING_CHANNEL = 'pinned-flight-ongoing';
+const PINNED_ONGOING_CHANNEL = 'pinned-flight-ongoing-quiet';
 const ALWAYS_CURRENT: CurrentRequestCheck = () => true;
 let legacyOverlapCleanup: Promise<void> | null = null;
 
@@ -12,7 +12,10 @@ async function setupPinnedChannel() {
   try {
     await Notifications.setNotificationChannelAsync(PINNED_ONGOING_CHANNEL, {
       name: 'Volo pinnato',
-      importance: Notifications.AndroidImportance.HIGH,
+      // LOW: a persistent status that is re-posted on every refresh must not
+      // pop up, ring or vibrate each time.
+      importance: Notifications.AndroidImportance.LOW,
+      sound: null,
       vibrationPattern: [],
       enableVibrate: false,
       showBadge: false,
@@ -70,11 +73,11 @@ export async function showOrUpdatePinnedFlightNotification(
       data: { type: 'pinned_flight_ongoing', tab, flightNumber, when },
       sticky,
       autoDismiss: !sticky,
-      priority: 'max',
       color: isEasyJet ? '#FF6600' : '#F47B16',
-      vibrate: [],
     },
-    trigger: null,
+    // A null trigger posts on Expo's fallback channel (high importance, sound
+    // and vibration): the channel must be named in the trigger.
+    trigger: { channelId: PINNED_ONGOING_CHANNEL },
   });
   if (!isCurrent()) {
     try { await Notifications.dismissNotificationAsync(PINNED_ONGOING_ID); } catch {}

@@ -66,8 +66,10 @@ export function selectWidgetFlights<T extends WidgetSelectableFlight>(
 
   if (preferences.mode === 'pinned') {
     const pinned = sortedFlights.find(flight => flight.isPinned);
+    // "Prossimo volo" must be the next one, not the shift's first (already gone).
+    const fallback = firstUpcoming ? [firstUpcoming] : sortedFlights.slice(-1);
     return {
-      flights: pinned ? [pinned] : sortedFlights.slice(0, 1),
+      flights: pinned ? [pinned] : fallback,
       workloadCount,
       workloadLevel,
       modeLabel: pinned ? 'Volo pinnato' : 'Prossimo volo',
@@ -76,7 +78,8 @@ export function selectWidgetFlights<T extends WidgetSelectableFlight>(
 
   if (preferences.mode === 'load') {
     return {
-      flights: (workloadFlights.length > 0 ? workloadFlights : sortedFlights).slice(0, 3),
+      // With nothing upcoming, the latest flights are the relevant ones, not the oldest.
+      flights: workloadFlights.length > 0 ? workloadFlights.slice(0, 3) : sortedFlights.slice(-3),
       workloadCount,
       workloadLevel,
       modeLabel: `Carico ${preferences.workloadWindowMinutes} min`,

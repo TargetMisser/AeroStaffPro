@@ -120,6 +120,16 @@ function testWidgetPreferences() {
     { departureTs: 10_900, id: 'future-2' },
   ], { mode: 'load', workloadWindowMinutes: 60, showDataAge: true }, 900);
   assert(futureSelection.workloadCount === 2, 'load mode should measure the first upcoming block for a future shift');
+  const midShift = [
+    { departureTs: 1000, id: 'gone-1' },
+    { departureTs: 1100, id: 'gone-2' },
+    { departureTs: 5000, id: 'next' },
+  ];
+  assert(mod.selectWidgetFlights(midShift, { mode: 'pinned', workloadWindowMinutes: 60, showDataAge: true }, 1200).flights[0].id === 'next',
+    '"Prossimo volo" without a pin must be the next departure, not one that already left');
+  const lateShift = [1000, 1100, 1200, 1300].map((ts, i) => ({ departureTs: ts, id: 'f' + i }));
+  assert(mod.selectWidgetFlights(lateShift, { mode: 'load', workloadWindowMinutes: 60, showDataAge: true }, 9000).flights.map(f => f.id).join() === 'f1,f2,f3',
+    'load mode with nothing upcoming shows the latest flights, not the oldest');
   assert(mod.getWidgetFreshness(Date.now() - 20 * 60 * 1000) === 'stale', 'old widget data should be labeled stale');
   assert(mod.getWidgetFreshness(Date.now(), Date.now(), true) === 'offline', 'failed refresh should be labeled offline');
 }

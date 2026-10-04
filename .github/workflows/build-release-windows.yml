@@ -26,18 +26,19 @@ jobs:
   build:
     runs-on: [self-hosted, Windows, X64, aerostaff]
     timeout-minutes: 45
+    # Signing secrets go only to the steps that need them, never to
+    # third-party actions (which receive the whole job environment).
     env:
       RELEASE_STORE_FILE: ${{ github.workspace }}\android\app\release.keystore
-      RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
     steps:
       - name: Compute checkout ref
         id: co
         shell: pwsh
+        env:
+          INPUT_REF: ${{ github.event.inputs.ref }}
         run: |
-          $inputRef = '${{ github.event.inputs.ref }}'
+          $inputRef = $env:INPUT_REF
           if (-not [string]::IsNullOrWhiteSpace($inputRef)) {
             "ref=$inputRef" >> $env:GITHUB_OUTPUT
           } else {
@@ -115,9 +116,11 @@ jobs:
       - name: Compute release tag
         id: meta
         shell: pwsh
+        env:
+          VERSION_OVERRIDE: ${{ github.event.inputs.version_override }}
         run: |
           $version = node -p "require('./app.json').expo.version"
-          $override = '${{ github.event.inputs.version_override }}'
+          $override = $env:VERSION_OVERRIDE
           if (-not [string]::IsNullOrWhiteSpace($override)) {
             $tag = $override
           } else {
@@ -128,8 +131,13 @@ jobs:
 
       - name: Restore release keystore
         shell: pwsh
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          if ([string]::IsNullOrWhiteSpace('${{ secrets.KEYSTORE_BASE64 }}')) {
+          if ([string]::IsNullOrWhiteSpace($env:KEYSTORE_BASE64)) {
             throw 'Missing KEYSTORE_BASE64 secret'
           }
           foreach ($name in @('RELEASE_STORE_PASSWORD', 'RELEASE_KEY_ALIAS', 'RELEASE_KEY_PASSWORD')) {
@@ -138,7 +146,7 @@ jobs:
             }
           }
           New-Item -ItemType Directory -Force -Path 'android/app' | Out-Null
-          [IO.File]::WriteAllBytes($env:RELEASE_STORE_FILE, [Convert]::FromBase64String('${{ secrets.KEYSTORE_BASE64 }}'))
+          [IO.File]::WriteAllBytes($env:RELEASE_STORE_FILE, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
 
       - name: Build release APK
         shell: pwsh
@@ -147,6 +155,16 @@ jobs:
           & .\gradlew.bat ':app:assembleRelease' '-Pandroid.overridePathCheck=true'
         env:
           GRADLE_OPTS: "-Xmx4g -XX:MaxMetaspaceSize=512m"
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      # The self-hosted runner's workspace persists between jobs: never leave
+      # the production keystore on its disk.
+      - name: Remove release keystore
+        if: always()
+        shell: pwsh
+        run: Remove-Item -LiteralPath $env:RELEASE_STORE_FILE -Force -ErrorAction SilentlyContinue
 
       - name: Validate APK release metadata
         shell: pwsh
@@ -215,7 +233,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ github.event.inputs.publish_release != 'false' }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
           name: "AeroStaff Pro ${{ steps.meta.outputs.tag }}"
