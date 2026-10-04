@@ -972,10 +972,14 @@ export default function ManualsScreen() {
     AsyncStorage.getItem(STORAGE_KEY).then(raw => {
       if (raw) {
         try {
-          const parsed: Airline[] = JSON.parse(raw);
+          const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            setAirlines(parsed);
-            setSelectedAirline(parsed[0]?.id ?? '');
+            // Older or hand-edited data may lack `sections`; the list renders sections.length.
+            const airlinesData: Airline[] = parsed
+              .filter(item => item && typeof item === 'object')
+              .map(item => ({ ...item, sections: Array.isArray(item.sections) ? item.sections : [] }));
+            setAirlines(airlinesData);
+            setSelectedAirline(airlinesData[0]?.id ?? '');
           }
         } catch {
           AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_AIRLINES));

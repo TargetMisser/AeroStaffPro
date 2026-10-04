@@ -196,6 +196,30 @@ for (const { editing, secret } of [
   });
 }
 
+test('passwords: an unreadable vault blocks saves instead of overwriting it', async () => {
+  const original = JSON.stringify([{ id: 'a', name: 'Kept', username: 'u', password: 'p', notes: '' }]);
+  const secrets = new Map([[passwordsKey, original]]);
+  let failReads = 1;
+  const flakySecrets = Object.assign(Object.create(secrets), {
+    get(key) {
+      if (key === passwordsKey && failReads > 0) { failReads -= 1; throw new Error('KeyStoreException'); }
+      return secrets.get(key);
+    },
+    set: (key, value) => secrets.set(key, value),
+    has: key => secrets.has(key),
+  });
+  const harness = createHarness(new Map(), flakySecrets);
+  const Screen = harness.load('src/screens/PasswordScreen.tsx');
+  let tree = await harness.mount(Screen);
+  button(tree, 'passwordAdd').props.onPress();
+  tree = harness.render(Screen);
+  nodes(tree).find(node => node.type === 'TextInput' && node.props.placeholder === 'passwordNamePh').props.onChangeText('New');
+  nodes(tree).find(node => node.type === 'TextInput' && node.props.secureTextEntry !== undefined).props.onChangeText('secret');
+  await button(harness.render(Screen), 'Salva').props.onPress();
+  assert.equal(secrets.get(passwordsKey), original, 'A read failure must never lead to overwriting the stored vault');
+  assert.ok(harness.alerts.some(alert => /Impossibile leggere/.test(alert.message || '')), 'The user is told the vault could not be read');
+});
+
 test('passwords: reject an actually empty secret', async () => {
   const harness = createHarness();
   const Screen = harness.load('src/screens/PasswordScreen.tsx');

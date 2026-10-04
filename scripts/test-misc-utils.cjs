@@ -374,6 +374,7 @@ async function testBackupManager() {
   const PASSWORDS_KEY = 'aerostaff_passwords_v1';
   const PIN_KEY = 'aerostaff_pin_v1';
   const PIN_ENABLED_KEY = 'aerostaff_pin_enabled_v1';
+  const LEGACY_PASSWORDS = JSON.stringify([{ id: 'p1', name: 'Legacy', username: 'u', password: 'p', notes: '' }]);
 
   function makeFileSystemMock({ readResult, throwOnRead = false } = {}) {
     return {
@@ -484,11 +485,11 @@ async function testBackupManager() {
       pickerResult: { canceled: false, assets: [{ uri: 'file://backup.json' }] },
       fileSystemMock: makeFileSystemMock({
         readResult: JSON.stringify({
-          version: 2,
+          version: 1,
           data: {
             aerostaff_notepad_v1: 'my notes',
             aerostaff_theme_mode: 'dark',
-            aerostaff_passwords_v1: 'legacy-passwords-blob',
+            aerostaff_passwords_v1: LEGACY_PASSWORDS,
             aerostaff_pin_v1: '1234',
             aerostaff_pin_enabled_v1: 'true',
             unknown_key_should_be_ignored: 'xyz',
@@ -503,7 +504,7 @@ async function testBackupManager() {
     assert(result.ok === true, 'a recognized backup with safe and legacy data should import successfully');
     assert(asyncStorage._store.aerostaff_notepad_v1 === 'my notes' && asyncStorage._store.aerostaff_theme_mode === 'dark', 'safe keys should be written back via multiSet');
     assert(!('unknown_key_should_be_ignored' in asyncStorage._store), 'keys outside SAFE_BACKUP_KEYS should be ignored');
-    assert(secureStore._store[PASSWORDS_KEY] === 'legacy-passwords-blob', 'legacy passwords should be migrated to SecureStore');
+    assert(secureStore._store[PASSWORDS_KEY] === LEGACY_PASSWORDS, 'legacy passwords should be migrated to SecureStore');
     assert(secureStore._store[PIN_KEY] === '1234', 'legacy PIN should be migrated to SecureStore');
     assert(!(PASSWORDS_KEY in asyncStorage._store) && !(PIN_KEY in asyncStorage._store), 'legacy AsyncStorage entries should be securely wiped after migration');
     assert(asyncStorage._store[PIN_ENABLED_KEY] === 'true', 'PIN-enabled should be set to true when both the flag and a PIN were imported');
@@ -528,9 +529,65 @@ async function testBackupManager() {
       secureStore,
     });
 
+    asyncStorage._store[PIN_ENABLED_KEY] = 'true';
     const result = await mod.importBackup();
     assert(result.ok === true, 'a backup with safe data and a dangling PIN-enabled flag should still import successfully');
-    assert(asyncStorage._store[PIN_ENABLED_KEY] === 'false', 'PIN-enabled should be forced to "false" when no PIN was actually imported');
+    assert(asyncStorage._store[PIN_ENABLED_KEY] === 'true', 'an import without a PIN must never switch off the current vault PIN');
+  }
+
+  // v1 backup (PIN already in SecureStore when it was made) must not disable the lock,
+  // and must not replace a vault that already holds passwords.
+  {
+    const current = JSON.stringify([{ id: 'now', name: 'Current', username: 'c', password: 'c', notes: '' }]);
+    const asyncStorage = makeAsyncStorageMock({ [PIN_ENABLED_KEY]: 'true' });
+    const secureStore = makeSecureStoreMock();
+    secureStore._store[PASSWORDS_KEY] = current;
+    const mod = makeBackupModule({
+      pickerResult: { canceled: false, assets: [{ uri: 'file://backup.json' }] },
+      fileSystemMock: makeFileSystemMock({ readResult: JSON.stringify({ version: 1, data: {
+        aerostaff_notepad_v1: 'old notes', aerostaff_pin_enabled_v1: 'true', aerostaff_pin_v1: null,
+        aerostaff_passwords_v1: LEGACY_PASSWORDS,
+      } }) }),
+      asyncStorage,
+      secureStore,
+    });
+    assert((await mod.importBackup()).ok, 'a v1 backup should import its safe data');
+    assert(asyncStorage._store[PIN_ENABLED_KEY] === 'true', 'a v1 backup must not disable the vault PIN');
+    assert(secureStore._store[PASSWORDS_KEY] === current, 'a backup must not overwrite a vault that already holds passwords');
+  }
+
+  // v2 backups never carry secrets: legacy keys in them are ignored.
+  {
+    const secureStore = makeSecureStoreMock();
+    const mod = makeBackupModule({
+      pickerResult: { canceled: false, assets: [{ uri: 'file://backup.json' }] },
+      fileSystemMock: makeFileSystemMock({ readResult: JSON.stringify({ version: 2, data: {
+        aerostaff_notepad_v1: 'n', aerostaff_passwords_v1: LEGACY_PASSWORDS, aerostaff_pin_v1: '9999',
+      } }) }),
+      asyncStorage: makeAsyncStorageMock(),
+      secureStore,
+    });
+    assert((await mod.importBackup()).ok, 'a v2 backup should import its safe data');
+    assert(!(PASSWORDS_KEY in secureStore._store) && !(PIN_KEY in secureStore._store), 'secrets in a v2 file must be ignored');
+  }
+
+  // Malformed list data is repaired or dropped instead of crashing Manuals/Phonebook.
+  {
+    const asyncStorage = makeAsyncStorageMock();
+    const mod = makeBackupModule({
+      pickerResult: { canceled: false, assets: [{ uri: 'file://backup.json' }] },
+      fileSystemMock: makeFileSystemMock({ readResult: JSON.stringify({ version: 2, data: {
+        manuals_data_v2: JSON.stringify([{ id: 'x', name: 'X' }, null, 'junk']),
+        aerostaff_phonebook_v1: '{}',
+        aerostaff_theme_mode: 'dark',
+      } }) }),
+      asyncStorage,
+      secureStore: makeSecureStoreMock(),
+    });
+    assert((await mod.importBackup()).ok, 'a backup with malformed lists should still import valid keys');
+    const manuals = JSON.parse(asyncStorage._store.manuals_data_v2);
+    assert(manuals.length === 1 && Array.isArray(manuals[0].sections), 'manual airlines without sections are repaired, junk entries dropped');
+    assert(!('aerostaff_phonebook_v1' in asyncStorage._store), 'a phonebook that is not a list must not be imported');
   }
 }
 
@@ -874,6 +931,9 @@ async function testShiftCalendarOwnershipAndPartialImport() {
     { id: 'marked-custom-10', title: 'Turno notte personalizzato', notes: 'AEROSTAFF_PRO_SHIFT_V1', startDate: new Date(2026, 5, 10, 20, 0).toISOString(), endDate: new Date(2026, 5, 11, 4, 0).toISOString() },
     { id: 'personal-work-10', title: 'Lavoro da casa', startDate: new Date(2026, 5, 10, 12, 0).toISOString(), endDate: new Date(2026, 5, 10, 13, 0).toISOString() },
     { id: 'personal-rest-12', title: 'Riposo medico', startDate: new Date(2026, 5, 12, 12, 0).toISOString(), endDate: new Date(2026, 5, 12, 13, 0).toISOString() },
+    // A personal weekly series titled exactly "Lavoro": deleting it by id would wipe the whole series.
+    { id: 'personal-series-10', title: 'Lavoro', recurrenceRule: { frequency: 'weekly' }, startDate: new Date(2026, 5, 10, 18, 0).toISOString(), endDate: new Date(2026, 5, 10, 19, 0).toISOString() },
+    { id: 'personal-exception-12', title: 'Riposo', originalId: 'personal-series-x', startDate: new Date(2026, 5, 12, 18, 0).toISOString(), endDate: new Date(2026, 5, 12, 19, 0).toISOString() },
   ];
   const deletedIds = [];
   const createdEvents = [];
@@ -912,6 +972,10 @@ async function testShiftCalendarOwnershipAndPartialImport() {
   assert(
     !deletedIds.includes('personal-work-10') && !deletedIds.includes('personal-rest-12'),
     'events whose titles merely contain Lavoro or Riposo must remain untouched',
+  );
+  assert(
+    !deletedIds.includes('personal-series-10') && !deletedIds.includes('personal-exception-12'),
+    'recurring events titled Lavoro/Riposo are personal: the app never creates series, so they must remain untouched',
   );
   assert(
     createdEvents.length === 2 && createdEvents.every(event => event.notes === shiftCalendar.AEROSTAFF_SHIFT_EVENT_MARKER),

@@ -20,6 +20,7 @@ const PIN_KEY         = 'aerostaff_pin_v1';
 const PIN_ENABLED_KEY = 'aerostaff_pin_enabled_v1';
 const PIN_FAILED_ATTEMPTS_KEY = 'aerostaff_pin_failed_attempts_v1';
 const PIN_LOCKED_UNTIL_KEY = 'aerostaff_pin_locked_until_v1';
+const VAULT_READ_ERROR_MSG = 'Impossibile leggere le password salvate. Per non sovrascriverle, le modifiche sono bloccate: chiudi e riapri l\'app.';
 
 type AppSecurityNativeModule = {
   setSecureWindow?: (enabled: boolean) => Promise<boolean>;
@@ -34,10 +35,10 @@ export function getPinBackoffMs(failedAttempts: number): number {
 
 // ── Secure helpers — all sensitive data goes through the OS keychain ──────────
 async function getSecurePin(): Promise<string | null> {
-  try {
-    const secure = await SecureStore.getItemAsync(PIN_KEY);
-    if (secure) return secure;
-  } catch {}
+  // A keystore read error must surface as an error, not as "no PIN": the
+  // caller would count the user's correct PIN as a wrong attempt.
+  const secure = await SecureStore.getItemAsync(PIN_KEY);
+  if (secure) return secure;
   // Migration: a PIN saved by old versions lives in plaintext AsyncStorage.
   // Move it to SecureStore and securely wipe the plaintext copy.
   try {
@@ -60,11 +61,15 @@ async function deleteSecurePin(): Promise<void> {
 
 // Passwords are stored encrypted in SecureStore.
 // On first access we migrate any legacy plaintext AsyncStorage data.
+// Throws when the vault exists but cannot be read: an unreadable vault must
+// never look empty, or the next save would overwrite every stored password.
 async function loadPasswords(): Promise<PasswordEntry[]> {
-  try {
-    const secure = await SecureStore.getItemAsync(PASSWORDS_KEY);
-    if (secure) return JSON.parse(secure);
-  } catch {}
+  const secure = await SecureStore.getItemAsync(PASSWORDS_KEY);
+  if (secure) {
+    const parsed = JSON.parse(secure);
+    if (!Array.isArray(parsed)) throw new Error('VAULT_INVALID_FORMAT');
+    return parsed;
+  }
   // Migration: if data exists only in AsyncStorage, move it to SecureStore
   try {
     const legacy = await AsyncStorage.getItem(PASSWORDS_KEY);
@@ -214,6 +219,9 @@ export default function PasswordScreen() {
   const [unlocking, setUnlocking] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
   const loadGeneration = useRef(0);
+  const vaultReadFailed = useRef(false);
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
 
   const clearSensitiveState = useCallback(() => {
     loadGeneration.current += 1;
@@ -256,7 +264,15 @@ export default function PasswordScreen() {
         setPinMode('unlock');
         return;
       }
-      const loaded = await loadPasswords();
+      let loaded: PasswordEntry[] = [];
+      try {
+        loaded = await loadPasswords();
+        vaultReadFailed.current = false;
+      } catch (e) {
+        devError('[vault] read error', e);
+        vaultReadFailed.current = true;
+        if (active) Alert.alert('Errore', VAULT_READ_ERROR_MSG);
+      }
       if (!active || generation !== loadGeneration.current) return;
       setEntries(loaded);
       setPinMode(null);
@@ -289,8 +305,19 @@ export default function PasswordScreen() {
   }, [lockVault, pinEnabled]);
 
   const persist = useCallback(async (next: PasswordEntry[]) => {
+    if (vaultReadFailed.current) {
+      Alert.alert('Errore', VAULT_READ_ERROR_MSG);
+      return;
+    }
+    const previous = entriesRef.current;
     setEntries(next);
-    await savePasswords(next);
+    try {
+      await savePasswords(next);
+    } catch (e) {
+      devError('[vault] save error', e);
+      setEntries(previous);
+      Alert.alert('Errore', 'Salvataggio non riuscito: la modifica non è stata salvata.');
+    }
   }, []);
 
   // PIN toggle
@@ -340,6 +367,7 @@ export default function PasswordScreen() {
       if (pin === stored) {
         await AsyncStorage.multiRemove([PIN_FAILED_ATTEMPTS_KEY, PIN_LOCKED_UNTIL_KEY]);
         const loaded = await loadPasswords();
+        vaultReadFailed.current = false;
         if (generation !== loadGeneration.current || AppState.currentState !== 'active') return;
         setEntries(loaded);
         setFailedAttempts(0);

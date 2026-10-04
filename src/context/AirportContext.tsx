@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AIRPORT_STORAGE_KEY,
   DEFAULT_AIRPORT_CODE,
@@ -51,8 +51,20 @@ function makeProfileId(): string {
   return `profile_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function uniqueStrings(values: string[]): string[] {
-  return Array.from(new Set(values.map(value => value.trim().toLowerCase()).filter(Boolean)));
+function uniqueStrings(values: unknown[]): string[] {
+  return Array.from(new Set(values
+    .filter((value): value is string => typeof value === 'string')
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean)));
+}
+
+function parseJsonOr<T>(raw: string | null, fallback: T): unknown {
+  if (raw == null) return fallback;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
 
 function sanitizeAirlines(airportCode: string, airlines: string[] | undefined, fallbackToAirportDefaults = false): string[] {
@@ -80,7 +92,10 @@ function sanitizeProfileName(name: string, airportCode: string): string {
 }
 
 function sanitizeProfile(raw: Partial<AirportProfile>, fallbackAirportCode = DEFAULT_AIRPORT_CODE): AirportProfile | null {
-  const airportCode = normalizeAirportCode(raw.airportCode || fallbackAirportCode);
+  if (!raw || typeof raw !== 'object') return null;
+  const airportCode = normalizeAirportCode(typeof raw.airportCode === 'string' && raw.airportCode
+    ? raw.airportCode
+    : fallbackAirportCode);
   if (!airportCode) {
     return null;
   }
@@ -160,6 +175,7 @@ export function AirportProvider({ children }: { children: React.ReactNode }) {
   const [profiles, setProfiles] = useState<AirportProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const hydrateFailed = useRef(false);
 
   const commitState = useCallback(async (nextProfiles: AirportProfile[], preferredActiveProfileId?: string | null) => {
     const activeProfile = nextProfiles.find(profile => profile.id === preferredActiveProfileId) ?? nextProfiles[0] ?? null;
@@ -171,12 +187,14 @@ export function AirportProvider({ children }: { children: React.ReactNode }) {
     setAirportCodeState(nextAirportCode);
 
     const writes: [string, string][] = [
-      [PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles)],
       [AIRPORT_STORAGE_KEY, nextAirportCode],
       [FLIGHT_FILTER_STORAGE_KEY, JSON.stringify(nextAirlines)],
     ];
+    if (!hydrateFailed.current) {
+      writes.push([PROFILE_STORAGE_KEY, JSON.stringify(nextProfiles)]);
+    }
 
-    if (activeProfile?.id) {
+    if (activeProfile?.id && !hydrateFailed.current) {
       writes.push([ACTIVE_PROFILE_STORAGE_KEY, activeProfile.id]);
     }
 
@@ -197,14 +215,23 @@ export function AirportProvider({ children }: { children: React.ReactNode }) {
         ]);
 
         const fallbackAirportCode = normalizeAirportCode(storedAirportCode) || DEFAULT_AIRPORT_CODE;
-        const storedFilter = Array.isArray(JSON.parse(filterRaw ?? '[]'))
-          ? uniqueStrings(JSON.parse(filterRaw ?? '[]') as string[])
-          : [];
-        const parsedProfiles = Array.isArray(JSON.parse(profilesRaw ?? 'null'))
-          ? (JSON.parse(profilesRaw ?? '[]') as Partial<AirportProfile>[])
-          : [];
+        const filterParsed = parseJsonOr(filterRaw, []);
+        const storedFilter = Array.isArray(filterParsed) ? uniqueStrings(filterParsed) : [];
+        const profilesParsed = parseJsonOr(profilesRaw, null);
+        if (profilesRaw != null && !Array.isArray(profilesParsed)) {
+          // Stored profiles exist but can't be read: never replace them with a default.
+          throw new Error('AIRPORT_PROFILES_UNREADABLE');
+        }
+        const parsedProfiles = Array.isArray(profilesParsed) ? (profilesParsed as Partial<AirportProfile>[]) : [];
+        // One broken entry must not cost the user every other profile.
         const sanitizedProfiles = parsedProfiles
-          .map(profile => sanitizeProfile(profile, fallbackAirportCode))
+          .map(profile => {
+            try {
+              return sanitizeProfile(profile, fallbackAirportCode);
+            } catch {
+              return null;
+            }
+          })
           .filter((profile): profile is AirportProfile => profile !== null);
         const nextProfiles = sanitizedProfiles.length > 0
           ? sanitizedProfiles.map(profile => ({
@@ -229,6 +256,9 @@ export function AirportProvider({ children }: { children: React.ReactNode }) {
           [FLIGHT_FILTER_STORAGE_KEY, JSON.stringify(activeProfile.airlines)],
         ]);
       } catch {
+        // The in-memory fallback keeps the app usable, but must never be written
+        // over the stored profiles (see commitState).
+        hydrateFailed.current = true;
         if (!mounted) {
           return;
         }

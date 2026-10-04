@@ -346,8 +346,14 @@ export default function PhonebookScreen() {
   // Load
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(val => {
-      if (val) setContacts(JSON.parse(val));
-    });
+      if (!val) return;
+      try {
+        const parsed = JSON.parse(val);
+        if (Array.isArray(parsed)) setContacts(parsed.filter(item => item && typeof item === 'object'));
+      } catch {
+        // Corrupted data: keep the empty list rather than crash the screen.
+      }
+    }).catch(() => {});
   }, []);
 
   const handleSave = useCallback((c: Contact) => {

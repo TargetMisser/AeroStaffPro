@@ -33,13 +33,31 @@ const SAFE_BACKUP_KEYS = [
   'aerostaff_notif_settings_v1',
 ];
 
-function safeImportValue(key: string, value: unknown): string | null {
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value);
+
+// Screens trust the shape of these keys, so a hand-edited or corrupted backup
+// must not reach storage as-is: repair what can be repaired, drop the rest.
+const JSON_IMPORT_SANITIZERS: Record<string, (parsed: unknown) => unknown> = {
+  aerostaff_notif_settings_v1: parsed => (isPlainObject(parsed) ? sanitizeNotificationSettings(parsed) : null),
+  aerostaff_phonebook_v1: parsed => (Array.isArray(parsed) ? parsed.filter(isPlainObject) : null),
+  aerostaff_airport_profiles_v1: parsed => (Array.isArray(parsed) ? parsed.filter(isPlainObject) : null),
+  aerostaff_airport_airlines_v1: parsed => (Array.isArray(parsed) ? parsed.filter(item => typeof item === 'string') : null),
+  manuals_data_v2: parsed => (Array.isArray(parsed)
+    ? parsed.filter(isPlainObject).map(airline => ({
+      ...airline,
+      sections: Array.isArray(airline.sections) ? airline.sections.filter(isPlainObject) : [],
+    }))
+    : null),
+};
+
+export function safeImportValue(key: string, value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  if (key !== 'aerostaff_notif_settings_v1') return value;
+  const sanitize = JSON_IMPORT_SANITIZERS[key];
+  if (!sanitize) return value;
   try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    return JSON.stringify(sanitizeNotificationSettings(parsed));
+    const sanitized = sanitize(JSON.parse(value));
+    return sanitized == null ? null : JSON.stringify(sanitized);
   } catch {
     return null;
   }
@@ -52,7 +70,8 @@ async function importLegacySensitiveData(data: Record<string, unknown>): Promise
   let hasImportedPin = false;
 
   const legacyPasswords = data[PASSWORDS_KEY];
-  if (typeof legacyPasswords === 'string' && legacyPasswords.trim()) {
+  if (typeof legacyPasswords === 'string' && legacyPasswords.trim()
+    && isPasswordList(legacyPasswords) && !(await hasStoredPasswords())) {
     await SecureStore.setItemAsync(PASSWORDS_KEY, legacyPasswords);
     // Only scrub the plaintext copy once the secret is confirmed durably in
     // the keychain. A silently-failed SecureStore write must not lead us to
@@ -75,14 +94,39 @@ async function importLegacySensitiveData(data: Record<string, unknown>): Promise
     }
   }
 
+  // An import may turn the PIN on (when it brought a PIN with it) but never
+  // off: v1 backups carry "pin enabled: true" with the PIN itself already in
+  // SecureStore (null in the file), which used to silently disable the lock.
   const legacyPinEnabled = data[PIN_ENABLED_KEY];
-  if (typeof legacyPinEnabled === 'string') {
-    const nextPinEnabled = legacyPinEnabled === 'true' && hasImportedPin ? 'true' : 'false';
-    await AsyncStorage.setItem(PIN_ENABLED_KEY, nextPinEnabled);
+  if (legacyPinEnabled === 'true' && hasImportedPin) {
+    await AsyncStorage.setItem(PIN_ENABLED_KEY, 'true');
     imported += 1;
   }
 
   return imported;
+}
+
+function isPasswordList(raw: string): boolean {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every(isPlainObject);
+  } catch {
+    return false;
+  }
+}
+
+// Never replace a vault that already holds passwords with a backup's copy.
+// If the current vault can't be read, treat it as occupied: overwriting an
+// unreadable vault is exactly how passwords get lost.
+async function hasStoredPasswords(): Promise<boolean> {
+  try {
+    const current = await SecureStore.getItemAsync(PASSWORDS_KEY);
+    if (!current) return false;
+    const parsed = JSON.parse(current);
+    return !Array.isArray(parsed) || parsed.length > 0;
+  } catch {
+    return true;
+  }
 }
 
 export async function exportBackup(): Promise<BackupResult> {
@@ -137,7 +181,10 @@ export async function importBackup(): Promise<BackupResult> {
         const value = safeImportValue(key, val);
         return value === null ? [] : [[key, value] as [string, string]];
       });
-    const importedLegacySensitive = await importLegacySensitiveData(data);
+    // Secrets have not been exported since v2; only v1 files may carry them.
+    const importedLegacySensitive = Number(parsed.version) < BACKUP_VERSION
+      ? await importLegacySensitiveData(data)
+      : 0;
 
     if (pairs.length === 0 && importedLegacySensitive === 0) {
       return { ok: false, error: 'Nessun dato trovato nel backup' };

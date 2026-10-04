@@ -1000,6 +1000,49 @@ const guardDep = liveEta.applyLiveDepartureStatus([wrongRotationDep], [departedA
 assert(guardDep[0].flight.time.real.departure === undefined,
   'a takeoff hours from the schedule is a different rotation and must be ignored');
 
+// The registration fallback returns the inbound airframe that will operate the
+// departure; on downwind it points away from the field 40 min before STD.
+const inboundOperatorDep = {
+  flight: {
+    identification: { number: { default: 'FR1493' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec + 40 * 60 }, estimated: {}, real: {} },
+  },
+};
+const inboundGuard = liveEta.applyLiveDepartureStatus(
+  [inboundOperatorDep], [{ ...departedAircraft, callsign: 'RYR52GT' }], PSA_LAT, PSA_LON, depNowSec);
+assert(inboundGuard[0].flight.time.real.departure === undefined,
+  'a "takeoff" 40 minutes before STD is the inbound airframe, not the departure');
+
+const sameAirframeLater = {
+  flight: {
+    identification: { number: { default: 'FR3345' } },
+    aircraft: { registration: 'EIDXY' },
+    time: { scheduled: { departure: depNowSec - 50 * 60 }, estimated: {}, real: {} },
+  },
+};
+const onePerAirframe = liveEta.applyLiveDepartureStatus(
+  [sameAirframeLater, { ...departureOutbound, flight: { ...departureOutbound.flight, aircraft: { registration: 'EIDXY' }, identification: { number: { default: 'FR3399' } } } }],
+  [{ ...departedAircraft, callsign: 'RYR52GT' }], PSA_LAT, PSA_LON, depNowSec);
+assert(onePerAirframe[0].flight.time.real.departure === undefined
+  && typeof onePerAirframe[1].flight.time.real.departure === 'number',
+  'one airframe takes off once: only the departure closest to its takeoff is stamped');
+
+// Flight numbers with an inner zero must survive canonicalization (FR2045 != FR245).
+const zeroDep = {
+  flight: {
+    identification: { number: { default: 'FR2045' } },
+    aircraft: {},
+    time: { scheduled: { departure: depNowSec - 6 * 60 }, estimated: {}, real: {} },
+  },
+};
+const zeroMatch = liveEta.applyLiveDepartureStatus(
+  [zeroDep], [{ ...departedAircraft, registration: undefined, callsign: 'RYR2045' }], PSA_LAT, PSA_LON, depNowSec);
+assert(typeof zeroMatch[0].flight.time.real.departure === 'number', 'RYR2045 must match FR2045');
+const zeroMismatch = liveEta.applyLiveDepartureStatus(
+  [zeroDep], [{ ...departedAircraft, registration: undefined, callsign: 'RYR245' }], PSA_LAT, PSA_LON, depNowSec);
+assert(zeroMismatch[0].flight.time.real.departure === undefined, 'RYR245 must not match FR2045');
+
 console.log('Live departure status tests passed.');
 
 // ─── Origin-departure estimate (ADS-B route + elapsed flight) ────────────────

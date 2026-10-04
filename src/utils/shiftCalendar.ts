@@ -72,8 +72,18 @@ function parseTime(time: string): { hour: number; minute: number } {
   return { hour, minute };
 }
 
-export function isOwnedShiftEvent(event: { title?: string | null; notes?: string | null }): boolean {
+export function isOwnedShiftEvent(event: {
+  title?: string | null;
+  notes?: string | null;
+  recurrenceRule?: unknown;
+  originalId?: string | null;
+}): boolean {
   if ((event.notes || '').trim() === AEROSTAFF_SHIFT_EVENT_MARKER) return true;
+
+  // The app never creates recurring events. A series (or an exception of one)
+  // titled "Lavoro" is the user's own, and deleting it by id on Android would
+  // remove every occurrence of the series, not just the one in range.
+  if (event.recurrenceRule || event.originalId) return false;
 
   // Releases before the ownership marker used only these exact titles. Keep
   // those legacy events editable, but never claim personal entries such as

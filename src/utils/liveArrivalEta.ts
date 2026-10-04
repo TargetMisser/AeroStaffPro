@@ -15,6 +15,7 @@
  */
 
 import { isLiveEtaFresh } from './flightLiveUpdates';
+import { getCanonicalFlightNumberIdentity } from './flightScheduleAdapter';
 
 export type AdsbAircraft = {
   observedAt?: number;
@@ -58,6 +59,8 @@ const MAX_INBOUND_TRACK_DEVIATION_DEG = 80;
     point roughly away from the field, which separates a departure climbing out
     from the arrival of the same airframe minutes earlier */
 const MAX_OUTBOUND_TRACK_DEVIATION_DEG = 80;
+/** a flight can leave a little early, never most of an hour before its time */
+const MAX_EARLY_DEPARTURE_SECONDS = 15 * 60;
 /** below this distance the field→aircraft bearing is too noisy to tell an
     outbound climb from an arrival on short final, so don't guess a takeoff */
 const MIN_OUTBOUND_DISTANCE_NM = 1.5;
@@ -210,9 +213,20 @@ function readFlightRegistration(item: any): string {
   return normalizeRegistration(item?.flight?.aircraft?.registration);
 }
 
+// One canonicalizer for both sides of the match: the previous local regex
+// also stripped zeros inside the number (FR2045 -> FR245).
 function readFlightNumberIdentity(item: any): string {
-  const raw = String(item?.flight?.identification?.number?.default ?? '');
-  return raw.toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/^([A-Z][A-Z0-9]{1,2}?)0+(?=\d)/, '$1');
+  return getCanonicalFlightNumberIdentity(item?.flight?.identification?.number?.default ?? '');
+}
+
+function readCallsignFlightNumber(aircraft: AdsbAircraft): string {
+  const flightNumber = normalizeCallsignToFlightNumber(aircraft.callsign);
+  return flightNumber ? getCanonicalFlightNumberIdentity(flightNumber) : '';
+}
+
+function isStaleObservation(aircraft: AdsbAircraft, nowSeconds: number): boolean {
+  return aircraft.observedAt != null && (nowSeconds * 1000 - aircraft.observedAt > 90_000
+    || aircraft.observedAt > nowSeconds * 1000 + 30_000);
 }
 
 /**
@@ -229,11 +243,10 @@ export function applyLiveArrivalEtas(
   const byRegistration = new Map<string, AdsbAircraft>();
   const byFlightNumber = new Map<string, AdsbAircraft>();
   for (const aircraft of aircraftList) {
-    if (aircraft.observedAt != null && (nowSeconds * 1000 - aircraft.observedAt > 90_000
-      || aircraft.observedAt > nowSeconds * 1000 + 30_000)) continue;
+    if (isStaleObservation(aircraft, nowSeconds)) continue;
     const reg = normalizeRegistration(aircraft.registration);
     if (reg && !byRegistration.has(reg)) byRegistration.set(reg, aircraft);
-    const flightNumber = normalizeCallsignToFlightNumber(aircraft.callsign);
+    const flightNumber = readCallsignFlightNumber(aircraft);
     if (flightNumber && !byFlightNumber.has(flightNumber)) byFlightNumber.set(flightNumber, aircraft);
   }
 
@@ -346,28 +359,51 @@ export function applyLiveDepartureStatus(
   const byRegistration = new Map<string, AdsbAircraft>();
   const byFlightNumber = new Map<string, AdsbAircraft>();
   for (const aircraft of aircraftList) {
+    if (isStaleObservation(aircraft, nowSeconds)) continue;
     const reg = normalizeRegistration(aircraft.registration);
     if (reg && !byRegistration.has(reg)) byRegistration.set(reg, aircraft);
-    const flightNumber = normalizeCallsignToFlightNumber(aircraft.callsign);
+    const flightNumber = readCallsignFlightNumber(aircraft);
     if (flightNumber && !byFlightNumber.has(flightNumber)) byFlightNumber.set(flightNumber, aircraft);
   }
 
-  return departures.map(item => {
-    if (item?.flight?.time?.real?.departure) return item;
+  /* The registration fallback hands us the airframe that will OPERATE the
+     departure, which is often still flying in (downwind, go-around, holding)
+     with a track pointing away from the field. A departure cannot happen long
+     before its scheduled/estimated time, and one airframe takes off once per
+     rotation: keep only the departure whose time is closest to that airframe's
+     takeoff. */
+  const bestByAircraft = new Map<AdsbAircraft, { index: number; departedAt: number; deviation: number }>();
+  departures.forEach((item, index) => {
+    if (item?.flight?.time?.real?.departure) return;
 
     const reg = readFlightRegistration(item);
     const aircraft = byFlightNumber.get(readFlightNumberIdentity(item))
       || (reg ? byRegistration.get(reg) : undefined);
-    if (!aircraft) return item;
+    if (!aircraft) return;
 
     const elapsed = estimateSecondsSinceDeparture(aircraft, airportLat, airportLon);
-    if (elapsed == null) return item;
+    if (elapsed == null) return;
 
     const departedAt = nowSeconds - elapsed;
     const scheduled = item?.flight?.time?.scheduled?.departure;
-    if (typeof scheduled === 'number' && Math.abs(departedAt - scheduled) > MAX_SCHEDULE_DEVIATION_SECONDS) {
-      return item;   // another rotation / wrong match
+    const estimated = item?.flight?.time?.estimated?.departure;
+    const reference = typeof estimated === 'number' ? estimated : scheduled;
+    if (typeof reference === 'number') {
+      if (departedAt < reference - MAX_EARLY_DEPARTURE_SECONDS) return;   // still inbound / not yet boarded
+      if (Math.abs(departedAt - reference) > MAX_SCHEDULE_DEVIATION_SECONDS) return;   // another rotation
     }
+
+    const deviation = typeof reference === 'number' ? Math.abs(departedAt - reference) : Number.POSITIVE_INFINITY;
+    const current = bestByAircraft.get(aircraft);
+    if (!current || deviation < current.deviation) bestByAircraft.set(aircraft, { index, departedAt, deviation });
+  });
+
+  const departedAtByIndex = new Map<number, number>();
+  for (const candidate of bestByAircraft.values()) departedAtByIndex.set(candidate.index, candidate.departedAt);
+
+  return departures.map((item, index) => {
+    const departedAt = departedAtByIndex.get(index);
+    if (departedAt == null) return item;
 
     return {
       ...item,

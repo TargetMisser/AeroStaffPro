@@ -25,6 +25,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import DrawerMenu from './src/components/DrawerMenu';
 import AppTabBar, { type AppTabBarItem, type AppTabId } from './src/components/AppTabBar';
 import ProfileSwitcherModal from './src/components/ProfileSwitcherModal';
+import AppErrorBoundary from './src/components/AppErrorBoundary';
 import BoardReveal from './src/components/motion/BoardReveal';
 import TactilePressable from './src/components/motion/TactilePressable';
 import {
@@ -399,13 +400,15 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.gestureRoot}>
       <SafeAreaProvider>
-        <ThemeProvider>
-          <AirportProvider>
-            <LanguageProvider>
-              <ThemedAppGate />
-            </LanguageProvider>
-          </AirportProvider>
-        </ThemeProvider>
+        <AppErrorBoundary>
+          <ThemeProvider>
+            <AirportProvider>
+              <LanguageProvider>
+                <ThemedAppGate />
+              </LanguageProvider>
+            </AirportProvider>
+          </ThemeProvider>
+        </AppErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
