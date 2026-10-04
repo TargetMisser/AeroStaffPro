@@ -3,6 +3,7 @@ import { AIRLINE_DISPLAY_NAMES } from '../airlineOps';
 import { getErrorMessage } from '../errorUtils';
 import { devLog } from '../devLog';
 import type { FlightScheduleProvider } from './types';
+import { pruneTimedCache } from './timedCache';
 
 const AIRLABS_API_BASE = 'https://airlabs.co/api/v9/schedules';
 const AIRLABS_ROUTES_API_BASE = 'https://airlabs.co/api/v9/routes';
@@ -12,6 +13,7 @@ const AIRLABS_LIVE_CACHE_TTL_MS = 10 * 60 * 1000;
 const AIRLABS_ROUTES_CACHE_KEY = 'aerostaff_airlabs_routes_cache_v1';
 const AIRLABS_ROUTES_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const AIRLABS_EMPTY_ROUTES_CACHE_TTL_MS = 60 * 60 * 1000;
+const AIRLABS_MAX_CACHE_AGE_MS = 24 * 60 * 60 * 1000;
 const DAYS_OF_WEEK = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 type AirLabsScheduleItem = Record<string, any>;
@@ -513,7 +515,8 @@ async function saveCachedFlights(storageKey: string, cacheKey: string, flights: 
     const raw = await AsyncStorage.getItem(storageKey);
     const cache = raw ? JSON.parse(raw) : {};
     cache[cacheKey] = { savedAt: Date.now(), ttlMs, flights };
-    await AsyncStorage.setItem(storageKey, JSON.stringify(cache));
+    // Keep anything the relaxed 24 h quota fallback may still read.
+    await AsyncStorage.setItem(storageKey, JSON.stringify(pruneTimedCache(cache, AIRLABS_MAX_CACHE_AGE_MS)));
   } catch {}
 }
 

@@ -923,6 +923,20 @@ async function testDevLog() {
   assert(calls.length === 3, 'development log helpers should emit all diagnostics when __DEV__ is true');
 }
 
+function testTimedCachePrune() {
+  const { pruneTimedCache } = loadTsModule('src/utils/flightProviders/timedCache.ts', {});
+  const now = 1_800_000_000_000;
+  const day = 24 * 60 * 60 * 1000;
+  const cache = {
+    'PSA:today': { savedAt: now - 5 * 60 * 1000, flights: [] },
+    'PSA:last-week': { savedAt: now - 7 * day, flights: [] },
+    broken: null,
+    'no-timestamp': { flights: [] },
+  };
+  const pruned = pruneTimedCache(cache, day, now);
+  assert(Object.keys(pruned).join() === 'PSA:today', 'provider caches keep fresh windows and drop old days instead of growing forever');
+}
+
 async function testShiftCalendarOwnershipAndPartialImport() {
   const storedEvents = [
     { id: 'legacy-10', title: 'Lavoro', startDate: new Date(2026, 5, 10, 8, 0).toISOString(), endDate: new Date(2026, 5, 10, 16, 0).toISOString() },
@@ -1250,6 +1264,7 @@ async function main() {
   await testErrorUtils();
   await testDevLog();
   await testShiftCalendarOwnershipAndPartialImport();
+  testTimedCachePrune();
   await testWidgetRefreshAfterImportRollback();
   await testWidgetShiftSelfHeal();
   await testWidgetKeepsPreviousDayNightShiftAfterMidnight();

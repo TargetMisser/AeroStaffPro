@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import { getAirlineOps } from './airlineOps';
-import { getFlightAirportLabel } from './flightScheduleAdapter';
+import { getFlightAirportLabel, isFlightCancelled } from './flightScheduleAdapter';
 import { getBestArrivalTs, getBestDepartureTs, getScheduledFlightTs } from './flightTimes';
 import { shouldNotifyAirline, type FlightNotificationSettings } from './flightNotificationSettings';
 import { isFlightEasyJet } from './easyjetOverlapMode';
@@ -72,7 +72,7 @@ export async function scheduleShiftNotifications(
     if (!isCurrent()) return 0;
     const now = Date.now() / 1000;
     const newIds: string[] = [];
-    const canNotify = (item: any) => shouldNotifyAirline(item, settings, selectedAirlines);
+    const canNotify = (item: any) => !isFlightCancelled(item) && shouldNotifyAirline(item, settings, selectedAirlines);
 
     if (settings.includeArrivals) {
       for (const item of shiftArrivals) {
@@ -246,6 +246,9 @@ export async function schedulePinnedNotifications(
     if (!isCurrent()) return;
     await cancelPinnedNotifications('pinned flight reschedule', false, isCurrent);
     if (!isCurrent()) return;
+    // A cancelled flight keeps its pin (so the user sees the status) but must
+    // not ring "check-in opens / departs in N min".
+    if (isFlightCancelled(item)) return;
     const now = Date.now() / 1000;
     const ids: string[] = [];
 

@@ -1,5 +1,5 @@
 import { getBestArrivalTs, getBestDepartureTs } from './flightTimes';
-import { isFlightServiceMatch, type FlightDirection } from './flightScheduleAdapter';
+import { DEFAULT_FLIGHT_RETENTION_SECONDS, isFlightServiceMatch, type FlightDirection } from './flightScheduleAdapter';
 
 export type PinnedFlightTab = 'arrivals' | 'departures';
 
@@ -56,4 +56,33 @@ export function reconcilePinnedFlight(
     tab,
     flightId: typeof refreshedFlightId === 'string' && refreshedFlightId ? refreshedFlightId : flightId,
   };
+}
+
+/**
+ * Whether a 'clear' reconciliation is conclusive enough to drop the pin (and
+ * its notifications). A provider gap ('missing') or a best time in the past
+ * that is only the STD (no ETD published for a delayed flight) is not: release
+ * only on a real completion time, or once the best time is older than the
+ * board's own retention window — the same policy HomeScreen applies.
+ */
+export function shouldReleasePinnedFlight(
+  reconciliation: PinnedFlightReconciliation,
+  pinned: any,
+  nowSec: number,
+  graceSeconds = DEFAULT_FLIGHT_RETENTION_SECONDS,
+): boolean {
+  if (reconciliation.kind !== 'clear') return false;
+  if (reconciliation.reason === 'invalid') return true;
+
+  const item = reconciliation.reason === 'expired' ? reconciliation.item : pinned;
+  const tab: PinnedFlightTab = reconciliation.reason === 'expired'
+    ? reconciliation.tab
+    : pinned?._pinTab === 'arrivals' ? 'arrivals' : 'departures';
+  const realCompletion = tab === 'arrivals'
+    ? item?.flight?.time?.real?.arrival
+    : item?.flight?.time?.real?.departure;
+  if (typeof realCompletion === 'number' && realCompletion < nowSec) return true;
+
+  const bestTs = tab === 'arrivals' ? getBestArrivalTs(item) : getBestDepartureTs(item);
+  return bestTs != null && bestTs + graceSeconds < nowSec;
 }

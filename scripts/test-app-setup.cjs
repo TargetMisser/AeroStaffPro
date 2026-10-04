@@ -396,8 +396,9 @@ assert(
   'flight gate windows must not move with inbound-aircraft delays',
 );
 assert(
-  flightScreenSource.includes('const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);'),
-  'FlightScreen must reconcile the fresh pin before evaluating expiry',
+  flightScreenSource.includes('const rawReconciliation = reconcilePinnedFlight(pinned, pool, nowSecForPin);')
+    && flightScreenSource.includes('shouldReleasePinnedFlight(rawReconciliation, pinned, nowSecForPin)'),
+  'FlightScreen must reconcile the fresh pin before evaluating expiry, and release it only on conclusive evidence',
 );
 assert(
   flightScreenSource.includes('updateStorageForCurrentRequest('),
@@ -453,6 +454,21 @@ assert(
   pinnedFlightLifecycle.reconcilePinnedFlight(stalePinnedFlight, [refreshedFlight], pinnedEtd + 1).kind === 'clear',
   'a pinned flight must expire after its live departure time',
 );
+{
+  const release = pinnedFlightLifecycle.shouldReleasePinnedFlight;
+  const noEtd = { flight: { ...stalePinnedFlight.flight } };
+  const pastStd = pinnedFlightLifecycle.reconcilePinnedFlight(stalePinnedFlight, [noEtd], pinnedStd + 10 * 60);
+  assert(pastStd.kind === 'clear' && !release(pastStd, stalePinnedFlight, pinnedStd + 10 * 60),
+    'a delayed flight with no published ETD must stay pinned just after its STD');
+  assert(release(pastStd, stalePinnedFlight, pinnedStd + 61 * 60),
+    'the pin is released once the STD is older than the board retention window');
+  const departed = { flight: { ...noEtd.flight, time: { ...noEtd.flight.time, real: { departure: pinnedStd + 5 * 60 } } } };
+  const realDeparture = pinnedFlightLifecycle.reconcilePinnedFlight(stalePinnedFlight, [departed], pinnedStd + 10 * 60);
+  assert(release(realDeparture, stalePinnedFlight, pinnedStd + 10 * 60), 'a real departure time releases the pin immediately');
+  const missing = pinnedFlightLifecycle.reconcilePinnedFlight(stalePinnedFlight, [], pinnedStd - 30 * 60);
+  assert(missing.kind === 'clear' && !release(missing, stalePinnedFlight, pinnedStd - 30 * 60),
+    'a provider gap (flight missing from the pool) must not drop an upcoming pin');
+}
 
 const pinnedServiceTs = Math.floor(new Date(2026, 6, 10, 10, 0, 0).getTime() / 1000);
 const nextDayServiceTs = Math.floor(new Date(2026, 6, 11, 10, 0, 0).getTime() / 1000);

@@ -210,6 +210,15 @@ const FLIGHT_NUMBER_PREFIX_ALIASES: Record<string, string> = {
   DLH: 'LH',
 };
 
+const CANCELLED_STATUS = /cancel|annull/i;
+
+/** One shared rule for "this service will not operate" (provider status text). */
+export function isFlightCancelled(item: any): boolean {
+  const flight = item?.flight;
+  const status = `${flight?.status?.text ?? ''} ${flight?.status?.generic?.status?.text ?? ''}`;
+  return CANCELLED_STATUS.test(status);
+}
+
 export function getCanonicalFlightNumberIdentity(value: unknown): string {
   const normalized = normalizeFlightIdentityPart(value);
   const match = normalized.match(/^([A-Z0-9]{2,3}?)(\d+)$/);

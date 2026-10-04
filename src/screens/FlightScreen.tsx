@@ -105,7 +105,11 @@ import {
   schedulePinnedNotifications,
   scheduleShiftNotifications,
 } from '../utils/flightNotificationScheduler';
-import { reconcilePinnedFlight } from '../utils/pinnedFlightLifecycle';
+import {
+  reconcilePinnedFlight,
+  shouldReleasePinnedFlight,
+  type PinnedFlightReconciliation,
+} from '../utils/pinnedFlightLifecycle';
 import {
   restoreStorageValueIfUnchanged,
   runEffectsForCurrentRequest,
@@ -951,7 +955,14 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       && flightRequestIdRef.current === requestId
     );
 
-    const isCurrentNotificationRequest = createNotificationScheduleCheck(isCurrentRequest);
+    // Scheduling cancels the previous set before creating the new one, so it
+    // must not be aborted by a tab switch (that left the shift with no
+    // notifications at all). Only a newer request or an airport change
+    // supersedes it.
+    const isCurrentNotificationRequest = createNotificationScheduleCheck(() => (
+      airportCodeRef.current === requestAirportCode
+      && flightRequestIdRef.current === requestId
+    ));
     fetchInFlightRef.current = { airportCode: requestAirportCode, requestId };
     liveEtaAbortRef.current?.abort();
     lastFlightRefreshAttemptAtRef.current = Date.now();
@@ -1183,9 +1194,20 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
           // Keep the pin alive through a temporary provider gap and include the
           // live ADS-B overlay when it is available.
           const pool = pinTab === 'arrivals' ? mergedArrs : mergedDeps;
-          const reconciliation = reconcilePinnedFlight(pinned, pool, Date.now() / 1000);
+          const nowSecForPin = Date.now() / 1000;
+          const rawReconciliation = reconcilePinnedFlight(pinned, pool, nowSecForPin);
+          const releasePin = shouldReleasePinnedFlight(rawReconciliation, pinned, nowSecForPin);
+          // A past STD without an ETD is not proof of departure: keep the pin
+          // (with its refreshed snapshot) until a real time or the board's
+          // retention window says the flight is gone.
+          const reconciliation: PinnedFlightReconciliation = rawReconciliation.kind === 'clear'
+            && rawReconciliation.reason === 'expired' && !releasePin
+            ? { kind: 'keep', item: rawReconciliation.item, tab: rawReconciliation.tab, flightId: String(pinned?.flight?.identification?.number?.default ?? '') }
+            : rawReconciliation;
 
-          if (reconciliation.kind === 'clear') {
+          if (reconciliation.kind === 'clear' && !releasePin) {
+            // Provider gap: leave the stored pin and its notifications untouched.
+          } else if (reconciliation.kind === 'clear') {
             const pinCleared = await updateStorageForCurrentRequest(
               AsyncStorage,
               PINNED_FLIGHT_KEY,
@@ -1270,7 +1292,9 @@ export default function FlightScreen({ isFocused = true }: { isFocused?: boolean
       const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
       const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1);
       const tomorrowEnd = new Date(tomorrowStart); tomorrowEnd.setHours(23, 59, 59, 999);
-      const { status } = await Calendar.requestCalendarPermissionsAsync();
+      // Read-only check: this runs on silent 2-minute refreshes, which must
+      // never pop the system permission dialog (Onboarding/Calendar ask for it).
+      const { status } = await Calendar.getCalendarPermissionsAsync();
       if (status === 'granted') {
         const cals = await Calendar.getCalendarsAsync(Calendar.EntityTypes.EVENT);
         const cal = cals.find(c => c.allowsModifications && c.isPrimary) || cals.find(c => c.allowsModifications);

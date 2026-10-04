@@ -621,6 +621,34 @@ async function main() {
       'a stale schedule must not persist its notification IDs');
   })();
 
+  // ─── cancelled flights never notify ───
+  await (async () => {
+    const notifMock = makeNotificationsMock();
+    const scheduler = loadTsModule('src/utils/flightNotificationScheduler.ts', {
+      '@react-native-async-storage/async-storage': makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' }),
+      'expo-notifications': notifMock,
+    });
+    const nowSec = Math.floor(Date.now() / 1000);
+    const flight = (number, statusText) => ({
+      flight: {
+        identification: { number: { default: number } },
+        airline: { name: 'Ryanair', code: { iata: 'FR' } },
+        airport: { destination: { code: { iata: 'STN' } } },
+        status: { text: statusText },
+        time: { scheduled: { departure: nowSec + 3600 }, estimated: {}, real: {} },
+      },
+    });
+    await scheduler.scheduleShiftNotifications(
+      [], [flight('FR7002', 'Cancellato'), flight('FR7003', 'Scheduled')], nowSec + 7200, 'it-IT',
+      { onlyTrackedAirlines: false, includeArrivals: false, includeDepartures: true, includeShiftEnd: false,
+        sticky: false, arrivalLeadMinutes: 15, departureLeadMinutes: 10 },
+      [],
+    );
+    const titles = notifMock._scheduled.map(entry => entry.content?.title || '');
+    assert(!titles.some(title => title.includes('FR7002')), 'a cancelled flight must not schedule a departure notification');
+    assert(titles.some(title => title.includes('FR7003')), 'operating flights in the same shift still notify');
+  })();
+
   // ─── schedulePinnedNotifications: multi-phase departures via airline ops ───
   await (async () => {
     const asyncStorage = makeAsyncStorageMock({ aerostaff_notif_enabled: 'true' });

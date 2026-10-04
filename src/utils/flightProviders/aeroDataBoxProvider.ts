@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AirportInfo } from '../airportSettings';
 import { getAirlineDisplayName } from '../airlineOps';
 import type { FlightScheduleProvider } from './types';
+import { pruneTimedCache } from './timedCache';
 
 const AERODATABOX_API_MARKET_BASE = 'https://prod.api.market/api/v1/aedbx/aerodatabox';
 const AERODATABOX_RAPIDAPI_BASE = 'https://aerodatabox.p.rapidapi.com';
@@ -258,7 +259,7 @@ async function saveCachedWindow(cacheKey: string, arrivals: any[], departures: a
     const raw = await AsyncStorage.getItem(AERODATABOX_CACHE_KEY);
     const cache = raw ? JSON.parse(raw) : {};
     cache[cacheKey] = { savedAt: Date.now(), arrivals, departures };
-    await AsyncStorage.setItem(AERODATABOX_CACHE_KEY, JSON.stringify(cache));
+    await AsyncStorage.setItem(AERODATABOX_CACHE_KEY, JSON.stringify(pruneTimedCache(cache, AERODATABOX_CACHE_TTL_MS)));
   } catch {}
 }
 
