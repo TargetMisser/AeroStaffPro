@@ -320,7 +320,7 @@ function getRemoteAirport(item: any, direction: FlightDirection): any {
     : item?.flight?.airport?.destination;
 }
 
-function getFlightRemoteAirportIdentity(item: any, direction: FlightDirection): {
+export function getFlightRemoteAirportIdentity(item: any, direction: FlightDirection): {
   key: string;
   confidence: AirportIdentityConfidence;
 } {

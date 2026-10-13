@@ -416,6 +416,40 @@ assert(
   noBacktrackingRows[0].linkedArrival === latestArrival && noBacktrackingRows[1].linkedArrival === undefined,
   'after consuming the latest inbound, a later departure must not backtrack to an older arrival of the same aircraft',
 );
+const routeArrival = makeUnifiedFlight('FR8868', 'arrival', unifiedTs(9, 55), unifiedTs(9, 55));
+const routeDeparture = makeUnifiedFlight('FR8869', 'departure', unifiedTs(10, 20), unifiedTs(10, 20));
+const routeRows = unifiedFlightList.buildUnifiedFlightList([routeArrival], [routeDeparture], unifiedDay);
+assert(
+  routeRows[0].linkedArrival === routeArrival,
+  'without registrations, a consecutive flight number on the same route should link the inbound leg',
+);
+const otherRouteArrival = makeUnifiedFlight('FR8868', 'arrival', unifiedTs(9, 55), unifiedTs(9, 55));
+otherRouteArrival.flight.airport.origin = { code: { iata: 'RAK' }, name: 'Marrakech' };
+assert(
+  unifiedFlightList.buildUnifiedFlightList([otherRouteArrival], [routeDeparture], unifiedDay)[0].linkedArrival === undefined,
+  'route pairing must reject an inbound from a different airport',
+);
+const conflictingRegArrival = makeUnifiedFlight('FR8868', 'arrival', unifiedTs(9, 55), unifiedTs(9, 55), '9H-AAA');
+const conflictingRegDeparture = makeUnifiedFlight('FR8869', 'departure', unifiedTs(10, 20), unifiedTs(10, 20), '9H-BBB');
+assert(
+  unifiedFlightList.buildUnifiedFlightList([conflictingRegArrival], [conflictingRegDeparture], unifiedDay)[0].linkedArrival === undefined,
+  'route pairing must not override two different known registrations',
+);
+const ambiguousRows = unifiedFlightList.buildUnifiedFlightList(
+  [makeUnifiedFlight('FR584', 'arrival', unifiedTs(12, 0), unifiedTs(12, 0)), makeUnifiedFlight('FR586', 'arrival', unifiedTs(12, 30), unifiedTs(12, 30))],
+  [makeUnifiedFlight('FR585', 'departure', unifiedTs(13, 0), unifiedTs(13, 0))],
+  unifiedDay,
+);
+assert(ambiguousRows[0].linkedArrival === undefined, 'route pairing must skip a departure with two plausible inbounds');
+assert(
+  unifiedFlightList.buildUnifiedFlightList(
+    [makeUnifiedFlight('FR8868', 'arrival', unifiedTs(6, 0), unifiedTs(6, 0))],
+    [makeUnifiedFlight('FR8869', 'departure', unifiedTs(10, 20), unifiedTs(10, 20))],
+    unifiedDay,
+  )[0].linkedArrival === undefined,
+  'route pairing must reject a turnaround longer than the short route window',
+);
+
 const activeNoBacktrackingRows = unifiedFlightList.filterActiveUnifiedFlights(
   noBacktrackingRows,
   unifiedTs(11, 0),
@@ -472,10 +506,10 @@ assert(
 );
 
 const noRegistrationArrival = makeUnifiedFlight('FR4000', 'arrival', unifiedTs(14, 0));
-const noRegistrationDeparture = makeUnifiedFlight('FR4001', 'departure', unifiedTs(14, 40));
+const noRegistrationDeparture = makeUnifiedFlight('FR4003', 'departure', unifiedTs(14, 40));
 assert(
   unifiedFlightList.buildUnifiedFlightList([noRegistrationArrival], [noRegistrationDeparture], unifiedDay)[0].linkedArrival === undefined,
-  'missing registrations must not trigger a guessed turnaround match',
+  'missing registrations must not trigger a guessed turnaround match beyond consecutive same-route numbers',
 );
 
 const hintedArrival = makeUnifiedFlight('FR5000', 'arrival', unifiedTs(15, 0));
