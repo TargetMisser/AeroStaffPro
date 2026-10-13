@@ -3,6 +3,7 @@ import {
   getCanonicalFlightNumberIdentity,
   getFlightBestTs,
   getFlightMergeKey,
+  getFlightRemoteAirportIdentity,
   getFlightScheduledTs,
   isFlightAirlineMatch,
   type FlightDirection,
@@ -29,6 +30,9 @@ type ArrivalCandidate = {
 };
 
 export const TURNAROUND_MATCH_WINDOW_SECONDS = 8 * 60 * 60;
+// Route pairing has no aircraft identity, so it only accepts a short
+// turnaround: outstation rotations at PSA land 25-75 min before departing.
+export const ROUTE_TURNAROUND_MATCH_WINDOW_SECONDS = 3 * 60 * 60;
 const STAFF_MONITOR_CLOCK_TOLERANCE_MINUTES = 120;
 
 function isSameLocalDay(timestamp: number, day: Date): boolean {
@@ -101,6 +105,29 @@ function findHintRegistration(
       .map(candidate => candidate.registration),
   );
   return equallyCloseRegistrations.size === 1 ? closest.registration : '';
+}
+
+function splitFlightNumber(item: any): { prefix: string; digits: number } | null {
+  const identity = getCanonicalFlightNumberIdentity(item?.flight?.identification?.number?.default);
+  const match = identity.match(/^([A-Z0-9]{2,3}?)(\d+)$/);
+  return match ? { prefix: match[1], digits: Number(match[2]) } : null;
+}
+
+/**
+ * Inbound/outbound legs of one rotation usually carry consecutive numbers on
+ * the same route (FR 8868 RAK→PSA, FR 8869 PSA→RAK). Used only when the
+ * registration is unknown, e.g. AeroDataBox publishes it hours late.
+ */
+function isRouteTurnaroundPair(arrival: any, departure: any): boolean {
+  const inbound = splitFlightNumber(arrival);
+  const outbound = splitFlightNumber(departure);
+  if (!inbound || !outbound || inbound.prefix !== outbound.prefix) return false;
+  if (Math.abs(inbound.digits - outbound.digits) !== 1) return false;
+  const origin = getFlightRemoteAirportIdentity(arrival, 'arrival');
+  const destination = getFlightRemoteAirportIdentity(departure, 'departure');
+  return origin.confidence === 'code'
+    && destination.confidence === 'code'
+    && origin.key === destination.key;
 }
 
 function getFlightRegistration(
@@ -188,6 +215,36 @@ export function buildUnifiedFlightList(
     usedArrivals.add(match.key);
     consumedArrivalWatermarkByRegistration.set(registration, match.scheduledTs);
     entry.linkedArrival = match.item;
+  }
+
+  // Fallback without a shared registration: pair by consecutive flight number
+  // and route, only when exactly one unused arrival fits and no known
+  // registration contradicts it.
+  const routeArrivals: ArrivalCandidate[] = [];
+  const seenRouteArrivals = new Set<string>();
+  for (const item of arrivals) {
+    const scheduledTs = getFlightScheduledTs(item, 'arrival');
+    const key = `arrival:${getFlightMergeKey(item, 'arrival')}`;
+    if (!scheduledTs || item?.flight?._scheduledSynthetic === true || usedArrivals.has(key) || seenRouteArrivals.has(key)) continue;
+    seenRouteArrivals.add(key);
+    routeArrivals.push({ item, key, registration: getFlightRegistration(item, 'arrival', arrivalRegistrationHints), scheduledTs });
+  }
+  for (const entry of entries) {
+    if (entry.linkedArrival) continue;
+    const departureTs = getFlightScheduledTs(entry.item, 'departure');
+    if (!departureTs) continue;
+    const registration = getFlightRegistration(entry.item, 'departure', departureRegistrationHints);
+    const matches = routeArrivals.filter(candidate => {
+      if (usedArrivals.has(candidate.key)) return false;
+      if (registration && candidate.registration && registration !== candidate.registration) return false;
+      const turnaroundSeconds = departureTs - candidate.scheduledTs;
+      return turnaroundSeconds >= 0
+        && turnaroundSeconds <= ROUTE_TURNAROUND_MATCH_WINDOW_SECONDS
+        && isRouteTurnaroundPair(candidate.item, entry.item);
+    });
+    if (matches.length !== 1) continue;
+    usedArrivals.add(matches[0].key);
+    entry.linkedArrival = matches[0].item;
   }
 
   return entries.filter(entry => {
